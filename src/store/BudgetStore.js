@@ -121,7 +121,8 @@ export class BudgetStore {
     }
     this.state.settings = {
       ...this.state.settings,
-      ...partial
+      ...partial,
+      updatedAt: Date.now()
     };
     this.notify();
   }
@@ -420,7 +421,23 @@ export class BudgetStore {
     if (!this.state.settings) {
       this.state.settings = { ...DEFAULT_SETTINGS };
     }
-    this.state.settings.presets = newPresets;
+    const timestamp = Date.now();
+    const currentPresets = this.state.settings.presets || [];
+    const currentMap = new Map(currentPresets.map(p => [p.id, p]));
+
+    this.state.settings.presets = newPresets.map(p => {
+      const old = currentMap.get(p.id);
+      const isChanged = !old || Number(old.amount) !== Number(p.amount) || old.name !== p.name || old.emoji !== p.emoji;
+      let updatedAt = p.updatedAt;
+      if (isChanged && (!p.updatedAt || (old && p.updatedAt === old.updatedAt))) {
+        updatedAt = timestamp;
+      }
+      return {
+        ...p,
+        updatedAt: updatedAt || timestamp
+      };
+    });
+    this.state.settings.presetsUpdatedAt = timestamp;
     this.saveToStorage();
     this.notify();
   }

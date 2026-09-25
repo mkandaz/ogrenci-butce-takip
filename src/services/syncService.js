@@ -8,8 +8,9 @@ const PRE_CLOUD_BACKUP_KEY = 'student_budget_pre_cloud_backup';
 const DELETED_QUEUE_KEY = 'student_budget_deleted_queue';
 
 export class SyncService {
-  constructor(store) {
+  constructor(store, customClient = null) {
     this.store = store;
+    this.client = customClient;
     this.syncStatus = 'idle'; // 'idle' | 'syncing' | 'synced' | 'offline' | 'error'
     this.statusListeners = [];
     this.isSyncing = false;
@@ -70,7 +71,7 @@ export class SyncService {
   trackDeletedTransaction(txId) {
     try {
       const queue = JSON.parse(SafeStorage.getItem(DELETED_QUEUE_KEY) || '[]');
-      if (!queue.includes(txId)) {
+      if (!queue.some(item => item.id === txId)) {
         queue.push({
           id: txId,
           deletedAt: new Date().toISOString()
@@ -114,9 +115,14 @@ export class SyncService {
     }
   }
 
+  getClient() {
+    return this.client || supabase;
+  }
+
   // 2. Ana Senkronizasyon Akışı
   async sync(passedUser = null) {
-    if (!isSupabaseConfigured() || !supabase) {
+    const client = this.getClient();
+    if ((!this.client && !isSupabaseConfigured()) || !client) {
       this.setStatus('offline', 'Supabase yapılandırılmamış');
       return { success: false, reason: 'unconfigured' };
     }
@@ -127,7 +133,7 @@ export class SyncService {
       return { success: false, reason: 'not_authenticated' };
     }
 
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
       this.setStatus('offline', 'İnternet bağlantısı yok');
       return { success: false, reason: 'offline' };
     }
@@ -141,7 +147,7 @@ export class SyncService {
 
     try {
       // Adım 1: user_sync_metadata kontrolü
-      const { data: meta, error: metaErr } = await supabase
+      const { data: meta, error: metaErr } = await client
         .from('user_sync_metadata')
         .select('*')
         .eq('user_id', user.id)
@@ -176,6 +182,7 @@ export class SyncService {
 
   // 3. İlk Migration (Kural 6, 7, 8)
   async runInitialMigration(user) {
+    const client = this.getClient();
     // KURAL 7: Mevcut veriyi silme, yedek oluştur
     this.createPreCloudBackup();
 
@@ -203,7 +210,7 @@ export class SyncService {
       updated_at: new Date().toISOString()
     };
 
-    const { error: settingsErr } = await supabase
+    const { error: settingsErr } = await client
       .from('user_settings')
       .upsert(userSettingsPayload);
 
@@ -224,7 +231,7 @@ export class SyncService {
         updated_at: new Date().toISOString()
       }));
 
-      const { error: presetsErr } = await supabase
+      const { error: presetsErr } = await client
         .from('presets')
         .upsert(presetsPayload, { onConflict: 'user_id,preset_key' });
 
@@ -250,7 +257,7 @@ export class SyncService {
         updated_at: t.updatedAt ? new Date(t.updatedAt).toISOString() : new Date().toISOString()
       }));
 
-      const { error: txErr } = await supabase
+      const { error: txErr } = await client
         .from('transactions')
         .upsert(txPayload);
 
@@ -260,7 +267,7 @@ export class SyncService {
     }
 
     // ADIM 4: EN SON user_sync_metadata (Öncekiler başarılıysa)
-    const { error: finalMetaErr } = await supabase
+    const { error: finalMetaErr } = await client
       .from('user_sync_metadata')
       .insert({
         user_id: user.id,
@@ -278,17 +285,27 @@ export class SyncService {
 
   // 4. İki Yönlü Delta Senkronizasyonu (Pull + Push)
   async runDeltaSync(user, cloudMeta) {
-    const lastSyncedAt = this.getLastSyncedAt() || cloudMeta.last_synced_at;
+    const client = this.getClient();
+    const lastSyncedAt = this.getLastSyncedAt() || cloudMeta?.last_synced_at || null;
+    const lastSyncedTime = lastSyncedAt ? (new Date(lastSyncedAt).getTime() || 0) : 0;
 
-    // --- PULL: Buluttaki güncellemeleri çek ---
-    // A) user_settings
-    const { data: cloudSettings } = await supabase
+    // --- PULL & SYNC: user_settings (Çift yönlü senkronizasyon & Last-Write-Wins) ---
+    const { data: cloudSettings, error: settingsErr } = await client
       .from('user_settings')
       .select('*')
       .eq('user_id', user.id)
       .maybeSingle();
 
-    if (cloudSettings) {
+    if (settingsErr) {
+      throw new Error(`user_settings okunamadı: ${settingsErr.message}`);
+    }
+
+    const localSettings = this.store.state.settings || {};
+    const localSettingsUpdated = localSettings.updatedAt ? new Date(localSettings.updatedAt).getTime() : 0;
+    const cloudSettingsUpdated = cloudSettings?.updated_at ? new Date(cloudSettings.updated_at).getTime() : 0;
+
+    if (cloudSettings && cloudSettingsUpdated > localSettingsUpdated) {
+      // Buluttaki ayarlar daha güncel -> Yereli güncelle
       this.store.state.settings = {
         ...this.store.state.settings,
         currency: cloudSettings.currency || this.store.state.settings.currency,
@@ -303,35 +320,135 @@ export class SyncService {
           targetMonth: cloudSettings.target_month,
           initialBalanceTxId: cloudSettings.initial_balance_tx_id,
           monthlyIncomeTxId: cloudSettings.monthly_income_tx_id
-        }
+        },
+        updatedAt: cloudSettingsUpdated
       };
       this.store.state.onboarded = Boolean(cloudSettings.onboarded);
+    } else if (!cloudSettings || localSettingsUpdated > cloudSettingsUpdated) {
+      // Yerel ayarlar daha güncel veya bulutta henüz yok -> Buluta gönder
+      const initBudget = localSettings.initialBudget || {};
+      const userSettingsPayload = {
+        user_id: user.id,
+        currency: localSettings.currency || 'TRY',
+        language: localSettings.language || 'tr',
+        target_month: localSettings.targetMonth || getCurrentYearMonth(),
+        month_start_day: localSettings.monthStartDay || 1,
+        warning_threshold_percent: localSettings.warningThresholdPercent || 15,
+        theme: localSettings.theme || 'light',
+        onboarded: Boolean(this.store.state.onboarded),
+        initial_balance: Number(initBudget.initialBalance) || 0,
+        monthly_income: Number(initBudget.monthlyIncome) || 0,
+        initial_balance_tx_id: isValidUUID(initBudget.initialBalanceTxId) ? initBudget.initialBalanceTxId : null,
+        monthly_income_tx_id: isValidUUID(initBudget.monthlyIncomeTxId) ? initBudget.monthlyIncomeTxId : null,
+        updated_at: new Date(localSettingsUpdated || Date.now()).toISOString()
+      };
+
+      const { error: pushSettingsErr } = await client
+        .from('user_settings')
+        .upsert(userSettingsPayload);
+
+      if (pushSettingsErr) {
+        throw new Error(`user_settings gönderilemedi: ${pushSettingsErr.message}`);
+      }
     }
 
-    // B) presets
-    const { data: cloudPresets } = await supabase
+    // --- PULL & SYNC: presets (Çift yönlü senkronizasyon & Last-Write-Wins) ---
+    const { data: cloudPresets, error: presetsErr } = await client
       .from('presets')
       .select('*')
       .eq('user_id', user.id);
 
-    if (cloudPresets && cloudPresets.length > 0) {
-      const mergedPresets = cloudPresets.map(cp => ({
-        id: cp.preset_key,
-        name: cp.name,
-        emoji: cp.emoji,
-        amount: Number(cp.amount),
-        categoryId: cp.category_id
-      }));
-      this.store.state.settings.presets = mergedPresets;
+    if (presetsErr) {
+      throw new Error(`presets okunamadı: ${presetsErr.message}`);
     }
 
-    // C) transactions (Buluttan tüm kayıtları veya lastSyncedAt'ten sonrakileri al)
-    const { data: cloudTxs, error: cloudTxsErr } = await supabase
+    const localPresets = this.store.getPresets();
+    const cloudPresetMap = new Map((cloudPresets || []).map(cp => [cp.preset_key, cp]));
+    const presetsToPush = [];
+    const mergedPresets = [];
+
+    for (const lp of localPresets) {
+      const cp = cloudPresetMap.get(lp.id);
+      const localUpdated = lp.updatedAt ? new Date(lp.updatedAt).getTime() : (this.store.state.settings?.presetsUpdatedAt || 0);
+      const cloudUpdated = cp?.updated_at ? new Date(cp.updated_at).getTime() : 0;
+
+      if (cp && cloudUpdated > localUpdated) {
+        // Buluttaki preset daha yeni
+        mergedPresets.push({
+          id: cp.preset_key,
+          name: cp.name,
+          emoji: cp.emoji,
+          amount: Number(cp.amount),
+          categoryId: cp.category_id,
+          updatedAt: cloudUpdated
+        });
+      } else {
+        // Yereldeki preset daha yeni veya eşit
+        mergedPresets.push({
+          ...lp,
+          updatedAt: localUpdated || Date.now()
+        });
+
+        if (!cp || localUpdated > cloudUpdated) {
+          presetsToPush.push({
+            user_id: user.id,
+            preset_key: lp.id,
+            name: lp.name,
+            emoji: lp.emoji,
+            amount: Math.round(Number(lp.amount) * 100) / 100,
+            category_id: lp.categoryId,
+            updated_at: new Date(localUpdated || Date.now()).toISOString()
+          });
+        }
+      }
+    }
+
+    // Bulutta olup yerelde bulunmayan preset'leri de içeri al
+    if (cloudPresets && cloudPresets.length > 0) {
+      const localKeySet = new Set(localPresets.map(lp => lp.id));
+      for (const cp of cloudPresets) {
+        if (!localKeySet.has(cp.preset_key)) {
+          mergedPresets.push({
+            id: cp.preset_key,
+            name: cp.name,
+            emoji: cp.emoji,
+            amount: Number(cp.amount),
+            categoryId: cp.category_id,
+            updatedAt: new Date(cp.updated_at).getTime()
+          });
+        }
+      }
+    }
+
+    if (presetsToPush.length > 0) {
+      const { error: pushPresetsErr } = await client
+        .from('presets')
+        .upsert(presetsToPush, { onConflict: 'user_id,preset_key' });
+
+      if (pushPresetsErr) {
+        throw new Error(`presets gönderilemedi: ${pushPresetsErr.message}`);
+      }
+    }
+
+    this.store.state.settings.presets = mergedPresets;
+
+    // --- PULL: transactions (Delta: Sadece updated_at > lastSyncedAt olanlar veya tümü) ---
+    let txQuery = client
       .from('transactions')
       .select('*')
       .eq('user_id', user.id);
 
-    if (!cloudTxsErr && cloudTxs) {
+    if (lastSyncedAt) {
+      txQuery = txQuery.gt('updated_at', lastSyncedAt);
+    }
+
+    const { data: cloudTxs, error: cloudTxsErr } = await txQuery;
+
+    if (cloudTxsErr) {
+      throw new Error(`transactions çekilemedi: ${cloudTxsErr.message}`);
+    }
+
+    if (cloudTxs && cloudTxs.length > 0) {
       const localMap = new Map((this.store.state.transactions || []).map(t => [t.id, t]));
 
       cloudTxs.forEach(ctx => {
@@ -363,31 +480,43 @@ export class SyncService {
       this.store.state.transactions = Array.from(localMap.values());
     }
 
-    // --- PUSH: Yerelde değişen veya silinenleri buluta gönder ---
-    // A) Soft-delete kuyruğundakileri bulutta is_deleted = TRUE yap
+    // --- PUSH: Soft-delete kuyruğundakileri bulutta UPDATE et (Asla INSERT/UPSERT değil) ---
     const deletedQueue = this.getDeletedQueue();
     if (deletedQueue.length > 0) {
-      const deletePayload = deletedQueue.map(item => ({
-        id: item.id,
-        user_id: user.id,
-        is_deleted: true,
-        deleted_at: item.deletedAt,
-        updated_at: new Date().toISOString()
-      }));
+      const successfullyDeletedIds = [];
+      for (const item of deletedQueue) {
+        const { error: delErr } = await client
+          .from('transactions')
+          .update({
+            is_deleted: true,
+            deleted_at: item.deletedAt || new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', item.id)
+          .eq('user_id', user.id);
 
-      const { error: delErr } = await supabase
-        .from('transactions')
-        .upsert(deletePayload);
+        if (delErr) {
+          if (successfullyDeletedIds.length > 0) {
+            this.clearDeletedQueue(successfullyDeletedIds);
+          }
+          throw new Error(`Soft-delete güncellenemedi (${item.id}): ${delErr.message}`);
+        }
+        successfullyDeletedIds.push(item.id);
+      }
 
-      if (!delErr) {
-        this.clearDeletedQueue(deletedQueue.map(i => i.id));
+      if (successfullyDeletedIds.length > 0) {
+        this.clearDeletedQueue(successfullyDeletedIds);
       }
     }
 
-    // B) Yerel güncel işlemleri buluta gönder (updatedAt > lastSyncedAt olanlar veya tümü)
+    // --- PUSH: Yerel güncel işlemleri buluta gönder (Delta: updatedAt > lastSyncedTime olanlar) ---
     const localTxs = this.store.getTransactions();
-    if (localTxs.length > 0) {
-      const txToPush = localTxs.map(t => ({
+    const txToPush = lastSyncedTime > 0
+      ? localTxs.filter(t => !t.updatedAt || new Date(t.updatedAt).getTime() > lastSyncedTime)
+      : localTxs;
+
+    if (txToPush.length > 0) {
+      const txPayload = txToPush.map(t => ({
         id: t.id,
         user_id: user.id,
         title: t.title,
@@ -401,16 +530,27 @@ export class SyncService {
         updated_at: t.updatedAt ? new Date(t.updatedAt).toISOString() : new Date().toISOString()
       }));
 
-      await supabase.from('transactions').upsert(txToPush);
+      const { error: pushTxErr } = await client
+        .from('transactions')
+        .upsert(txPayload);
+
+      if (pushTxErr) {
+        throw new Error(`transactions gönderilemedi: ${pushTxErr.message}`);
+      }
     }
 
-    // C) user_sync_metadata last_synced_at güncelle
-    await supabase
+    // --- METADATA: user_sync_metadata last_synced_at güncelle ---
+    const syncTimestamp = new Date().toISOString();
+    const { error: metaUpdateErr } = await client
       .from('user_sync_metadata')
       .update({
-        last_synced_at: new Date().toISOString()
+        last_synced_at: syncTimestamp
       })
       .eq('user_id', user.id);
+
+    if (metaUpdateErr) {
+      throw new Error(`user_sync_metadata güncellenemedi: ${metaUpdateErr.message}`);
+    }
 
     // Yerel store'u kaydet ve UI'ı güncelle
     this.store.notify();

@@ -588,6 +588,376 @@ console.log('\n--- 7. FAZ 3: SUPABASE AUTH & SENKRONİZASYON ALTYAPISI ---');
   assert(sync.getStatus() !== 'error', 'TC-22 Offline işlem hatasız çalıştı');
 }
 
+// --------------------------------------------------------------------------
+// 8. FAZ 3 REGRESYON TESTLERİ: SOFT-DELETE, PRESETS/SETTINGS ÇİFT YÖNLÜ SYNC & GÜVENLİK (TC-23 - TC-28)
+// --------------------------------------------------------------------------
+console.log('\n--- 8. FAZ 3 REGRESYON: SOFT-DELETE, PRESET/SETTINGS BİDIRECTIONAL & ERROR HANDLING ---');
+
+function createMockClient(handlers = {}) {
+  return {
+    from: (table) => {
+      const state = {
+        table,
+        eqs: {},
+        gtFilter: null
+      };
+
+      const queryBuilder = {
+        select: (cols) => {
+          state.action = 'select';
+          state.cols = cols;
+          return queryBuilder;
+        },
+        eq: (col, val) => {
+          state.eqs[col] = val;
+          return queryBuilder;
+        },
+        gt: (col, val) => {
+          state.gtFilter = { col, val };
+          return queryBuilder;
+        },
+        maybeSingle: async () => {
+          if (handlers[table]?.maybeSingle) {
+            return handlers[table].maybeSingle(state);
+          }
+          if (handlers[table]?.select) {
+            const res = await handlers[table].select(state);
+            return { data: Array.isArray(res.data) ? res.data[0] || null : res.data, error: res.error || null };
+          }
+          return { data: null, error: null };
+        },
+        upsert: async (payload, options) => {
+          state.action = 'upsert';
+          state.payload = payload;
+          state.options = options;
+          if (handlers[table]?.upsert) {
+            return handlers[table].upsert(payload, options, state);
+          }
+          return { data: payload, error: null };
+        },
+        insert: async (payload, options) => {
+          state.action = 'insert';
+          state.payload = payload;
+          state.options = options;
+          if (handlers[table]?.insert) {
+            return handlers[table].insert(payload, options, state);
+          }
+          return { data: payload, error: null };
+        },
+        update: (payload) => {
+          state.action = 'update';
+          state.payload = payload;
+          const updateBuilder = {
+            eq: (col1, val1) => {
+              state.eqs[col1] = val1;
+              return {
+                eq: async (col2, val2) => {
+                  state.eqs[col2] = val2;
+                  if (handlers[table]?.update) {
+                    return handlers[table].update(payload, state.eqs, state);
+                  }
+                  return { data: [payload], error: null };
+                }
+              };
+            }
+          };
+          return updateBuilder;
+        },
+        then: (resolve, reject) => {
+          if (handlers[table]?.select) {
+            Promise.resolve(handlers[table].select(state)).then(resolve, reject);
+          } else {
+            Promise.resolve({ data: [], error: null }).then(resolve, reject);
+          }
+        }
+      };
+
+      return queryBuilder;
+    }
+  };
+}
+
+// TC-23: Soft-delete için upsert yerine UPDATE çağrılması ve PostgreSQL NOT NULL güvenliği
+{
+  const store = new BudgetStore();
+  const deletedTxId = generateUUID();
+  const fakeUser = { id: generateUUID() };
+  let updateCalledWith = null;
+  let upsertCalledOnTx = false;
+
+  const mockClient = createMockClient({
+    user_settings: {
+      select: () => ({ data: null, error: null })
+    },
+    presets: {
+      select: () => ({ data: [], error: null })
+    },
+    transactions: {
+      select: () => ({ data: [], error: null }),
+      update: (payload, eqs) => {
+        updateCalledWith = { payload, eqs };
+        return { data: [payload], error: null };
+      },
+      upsert: (payload) => {
+        if (Array.isArray(payload) && payload.some(p => p.is_deleted)) {
+          upsertCalledOnTx = true;
+        }
+        return { data: payload, error: null };
+      }
+    },
+    user_sync_metadata: {
+      update: () => ({ data: [], error: null })
+    }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  sync.clearDeletedQueue();
+  sync.trackDeletedTransaction(deletedTxId);
+
+  await sync.runDeltaSync(fakeUser, { last_synced_at: new Date().toISOString() });
+
+  assert(updateCalledWith !== null, 'TC-23 Soft-delete için UPDATE metodu çağrıldı');
+  assert(updateCalledWith.payload.is_deleted === true, 'TC-23 is_deleted = true gönderildi');
+  assert(Boolean(updateCalledWith.payload.deleted_at), 'TC-23 deleted_at zaman damgası gönderildi');
+  assert(updateCalledWith.eqs.id === deletedTxId, 'TC-23 Doğru işlem ID için eq() çağrıldı');
+  assert(updateCalledWith.eqs.user_id === fakeUser.id, 'TC-23 Doğru user_id için eq() çağrıldı');
+  assert(upsertCalledOnTx === false, 'TC-23 transactions soft-delete için ASLA upsert kullanılmadı (NOT NULL ihlali önlendi)');
+}
+
+// TC-24: Deleted queue'ya mükerrer kayıt girmemesi (some vs includes)
+{
+  const store = new BudgetStore();
+  const sync = new SyncService(store);
+  const testTxId = generateUUID();
+
+  sync.clearDeletedQueue();
+  sync.trackDeletedTransaction(testTxId);
+  sync.trackDeletedTransaction(testTxId);
+  sync.trackDeletedTransaction(testTxId);
+
+  const queue = sync.getDeletedQueue();
+  assert(queue.length === 1, 'TC-24 trackDeletedTransaction aynı ID 3 kez eklenince tek kayıt tuttu');
+  assert(queue[0].id === testTxId, 'TC-24 Kuyruktaki ID eşleşti');
+
+  // BudgetStore.deleteTransaction mükerrer takibi
+  store.state.transactions = [{ id: testTxId, title: 'Test', amount: 10, type: 'expense', categoryId: 'exp_food', date: '2026-09-26' }];
+  store.deleteTransaction(testTxId);
+  store.trackDeleted(testTxId);
+  assert(sync.getDeletedQueue().length === 1, 'TC-24 store.trackDeleted mükerrer ID eklemedi');
+}
+
+// TC-25: Presets çift yönlü senkronizasyon (Local -> Cloud PUSH & Cloud -> Local PULL)
+{
+  const store = new BudgetStore();
+  const fakeUser = { id: generateUUID() };
+  let presetsUpsertPayload = null;
+
+  // 1. Durum: Yerelde Kahve preset 70 TL'den 120 TL'ye güncellenir
+  const initialPresets = store.getPresets();
+  const updatedPresets = initialPresets.map(p => p.id === 'preset_coffee' ? { ...p, amount: 120 } : p);
+  store.updatePresets(updatedPresets);
+
+  const mockClient = createMockClient({
+    user_settings: {
+      select: () => ({ data: null, error: null }),
+      upsert: () => ({ data: {}, error: null })
+    },
+    presets: {
+      select: () => ({
+        data: [
+          { preset_key: 'preset_coffee', name: 'Kahve', emoji: '☕', amount: 70, category_id: 'exp_social', updated_at: '2026-09-20T10:00:00Z' }
+        ],
+        error: null
+      }),
+      upsert: (payload) => {
+        presetsUpsertPayload = payload;
+        return { data: payload, error: null };
+      }
+    },
+    transactions: {
+      select: () => ({ data: [], error: null }),
+      upsert: () => ({ data: [], error: null })
+    },
+    user_sync_metadata: {
+      update: () => ({ data: [], error: null })
+    }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  await sync.runDeltaSync(fakeUser, { last_synced_at: '2026-09-20T10:00:00Z' });
+
+  assert(presetsUpsertPayload !== null, 'TC-25 Yerel preset değişikliği buluta PUSH edildi');
+  const coffeePushed = presetsUpsertPayload.find(p => p.preset_key === 'preset_coffee');
+  assert(coffeePushed && coffeePushed.amount === 120, 'TC-25 Buluta gönderilen Kahve tutarı 120 TL');
+
+  // 2. Durum: Bulutta daha yeni bir preset var (Yemekhane 65 TL yapılmış)
+  const newerCloudPresets = [
+    { preset_key: 'preset_food', name: 'Yemekhane', emoji: '🍱', amount: 65, category_id: 'exp_food', updated_at: '2030-01-01T00:00:00Z' }
+  ];
+  const pullMockClient = createMockClient({
+    user_settings: { select: () => ({ data: null, error: null }), upsert: () => ({ data: {}, error: null }) },
+    presets: {
+      select: () => ({ data: newerCloudPresets, error: null }),
+      upsert: () => ({ data: [], error: null })
+    },
+    transactions: { select: () => ({ data: [], error: null }) },
+    user_sync_metadata: { update: () => ({ data: [], error: null }) }
+  });
+
+  const pullSync = new SyncService(store, pullMockClient);
+  await pullSync.runDeltaSync(fakeUser, { last_synced_at: '2026-09-20T10:00:00Z' });
+  const foodPreset = store.getPresets().find(p => p.id === 'preset_food');
+  assert(foodPreset && foodPreset.amount === 65, 'TC-25 Buluttaki daha yeni preset yerel store\'a aktarıldı (PULL: 65 TL)');
+}
+
+// TC-26: Settings çift yönlü senkronizasyon (Local -> Cloud PUSH & Cloud -> Local PULL)
+{
+  const store = new BudgetStore();
+  const fakeUser = { id: generateUUID() };
+  let settingsUpsertPayload = null;
+
+  // Yerelde para birimi ve uyarı eşiği güncellendi
+  store.updateSettings({ currency: 'EUR', warningThresholdPercent: 25 });
+
+  const mockClient = createMockClient({
+    user_settings: {
+      select: () => ({
+        data: {
+          currency: 'TRY',
+          warning_threshold_percent: 15,
+          updated_at: '2026-09-20T10:00:00Z'
+        },
+        error: null
+      }),
+      upsert: (payload) => {
+        settingsUpsertPayload = payload;
+        return { data: payload, error: null };
+      }
+    },
+    presets: {
+      select: () => ({ data: [], error: null })
+    },
+    transactions: {
+      select: () => ({ data: [], error: null })
+    },
+    user_sync_metadata: {
+      update: () => ({ data: [], error: null })
+    }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  await sync.runDeltaSync(fakeUser, { last_synced_at: '2026-09-20T10:00:00Z' });
+
+  assert(settingsUpsertPayload !== null, 'TC-26 Yerel ayar değişikliği buluta PUSH edildi');
+  assert(settingsUpsertPayload.currency === 'EUR', 'TC-26 Gönderilen para birimi EUR');
+  assert(settingsUpsertPayload.warning_threshold_percent === 25, 'TC-26 Gönderilen uyarı eşiği %25');
+
+  // Bulutta daha yeni ayar varsa PULL doğrulaması
+  const cloudSettingsNewer = {
+    currency: 'USD',
+    theme: 'dark',
+    warning_threshold_percent: 30,
+    updated_at: '2030-01-01T00:00:00Z'
+  };
+
+  const pullMockClient = createMockClient({
+    user_settings: { select: () => ({ data: cloudSettingsNewer, error: null }) },
+    presets: { select: () => ({ data: [], error: null }) },
+    transactions: { select: () => ({ data: [], error: null }) },
+    user_sync_metadata: { update: () => ({ data: [], error: null }) }
+  });
+
+  const pullSync = new SyncService(store, pullMockClient);
+  await pullSync.runDeltaSync(fakeUser, { last_synced_at: '2026-09-20T10:00:00Z' });
+  assert(store.state.settings.currency === 'USD', 'TC-26 Buluttaki yeni para birimi (USD) yerel store\'a yansıtıldı');
+  assert(store.state.settings.theme === 'dark', 'TC-26 Buluttaki yeni tema (dark) yerel store\'a yansıtıldı');
+}
+
+// TC-27: Cloud işlemi fail ederse last_synced_at'in ilerlemediğini ve status'un error olduğunu doğrula
+{
+  const store = new BudgetStore();
+  const fakeUser = { id: generateUUID() };
+  const initialSyncTime = '2026-09-20T10:00:00.000Z';
+
+  const mockFailingClient = createMockClient({
+    user_sync_metadata: {
+      maybeSingle: () => ({
+        data: { user_id: fakeUser.id, schema_version: '1.1.0', last_synced_at: initialSyncTime },
+        error: null
+      })
+    },
+    user_settings: {
+      select: () => ({ data: null, error: null }),
+      upsert: () => ({ data: null, error: new Error('Postgres Network Timeout / RLS Denied') })
+    }
+  });
+
+  const sync = new SyncService(store, mockFailingClient);
+  sync.setLastSyncedAt(initialSyncTime);
+
+  const res = await sync.sync(fakeUser);
+
+  assert(res.success === false, 'TC-27 Hata durumunda sync.sync() başarısız döndü');
+  assert(sync.getStatus() === 'error', 'TC-27 syncStatus "error" olarak işaretlendi');
+  assert(sync.getLastSyncedAt() === initialSyncTime, 'TC-27 Hata durumunda last_synced_at İLERLEMEDİ (korundu)');
+}
+
+// TC-28: Başarılı soft-delete'in queue'dan temizlenmesi ve kısmi hata güvenliği
+{
+  const store = new BudgetStore();
+  const fakeUser = { id: generateUUID() };
+  const idSuccess = generateUUID();
+  const idFail = generateUUID();
+
+  // Kuyruğa 2 silinmiş ID ekle
+  const sync = new SyncService(store);
+  sync.clearDeletedQueue();
+  sync.trackDeletedTransaction(idSuccess);
+  sync.trackDeletedTransaction(idFail);
+  assert(sync.getDeletedQueue().length === 2, 'TC-28 Başlangıçta kuyrukta 2 silinmiş kayıt var');
+
+  // idSuccess başarılı olurken, idFail hata verecek
+  const partialFailClient = createMockClient({
+    user_settings: { select: () => ({ data: null, error: null }) },
+    presets: { select: () => ({ data: [], error: null }) },
+    transactions: {
+      select: () => ({ data: [], error: null }),
+      update: (payload, eqs) => {
+        if (eqs.id === idFail) {
+          return { data: null, error: { message: 'Database lock timeout' } };
+        }
+        return { data: [payload], error: null };
+      }
+    }
+  });
+
+  const partialSync = new SyncService(store, partialFailClient);
+  try {
+    await partialSync.runDeltaSync(fakeUser, { last_synced_at: '2026-09-20T10:00:00Z' });
+  } catch (e) {
+    // Beklenen hata yakalandı
+  }
+
+  const remainingQueue = partialSync.getDeletedQueue();
+  assert(remainingQueue.length === 1, 'TC-28 Başarılı olan idSuccess kuyruktan temizlendi');
+  assert(remainingQueue[0].id === idFail, 'TC-28 Hata alan idFail kuyrukta tutulmaya devam etti');
+
+  // Şimdi idFail için de başarılı çalışan client ile tekrar sync et
+  const fullSuccessClient = createMockClient({
+    user_settings: { select: () => ({ data: null, error: null }) },
+    presets: { select: () => ({ data: [], error: null }) },
+    transactions: {
+      select: () => ({ data: [], error: null }),
+      update: (payload) => ({ data: [payload], error: null })
+    },
+    user_sync_metadata: { update: () => ({ data: [], error: null }) }
+  });
+
+  const fullSync = new SyncService(store, fullSuccessClient);
+  await fullSync.runDeltaSync(fakeUser, { last_synced_at: '2026-09-20T10:00:00Z' });
+  assert(fullSync.getDeletedQueue().length === 0, 'TC-28 İkinci denemede başarılı olunca tüm kuyruk temizlendi');
+}
+
 console.log('\n====================================================');
 console.log(`🏁 ENTEGRE TEST SONUCU: ${passed} PASSED, ${failed} FAILED`);
 console.log('====================================================');
