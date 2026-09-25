@@ -183,10 +183,24 @@ export class BudgetStore {
     const prevLen = this.state.transactions.length;
     this.state.transactions = this.state.transactions.filter(t => t.id !== id);
     if (this.state.transactions.length !== prevLen) {
+      this.trackDeleted(id);
       this.notify();
       return true;
     }
     return false;
+  }
+
+  trackDeleted(id) {
+    try {
+      const DELETED_QUEUE_KEY = 'student_budget_deleted_queue';
+      const queue = JSON.parse(SafeStorage.getItem(DELETED_QUEUE_KEY) || '[]');
+      if (!queue.some(item => item.id === id)) {
+        queue.push({ id, deletedAt: new Date().toISOString() });
+        SafeStorage.setItem(DELETED_QUEUE_KEY, JSON.stringify(queue));
+      }
+    } catch (e) {
+      // sessizce geç
+    }
   }
 
   startWithDemo() {

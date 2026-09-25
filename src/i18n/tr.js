@@ -181,5 +181,26 @@ export default {
     exp_health: 'Sağlık & Kişisel Bakım',
     exp_tech: 'Teknoloji & Donanım',
     exp_other: 'Diğer Giderler'
+  },
+  auth: {
+    cloudSync: 'Bulut ile Eşitle',
+    login: 'Giriş Yap',
+    signOut: 'Çıkış Yap',
+    modalTitle: 'Bulut Bütçe Senkronizasyonu',
+    modalDesc: 'Bütçe verilerinizi tüm cihazlarınız arasında güvenle senkronize edin.',
+    emailLabel: 'Öğrenci / Kişisel E-posta',
+    emailPlaceholder: 'ornek@universite.edu.tr',
+    sendMagicLink: 'Giriş Bağlantısı Gönder',
+    sending: 'Gönderiliyor...',
+    magicLinkSent: 'Giriş bağlantısı e-posta adresinize gönderildi! Lütfen gelen kutunuzu (ve spam klasörünü) kontrol edin.',
+    resend: 'Tekrar Gönder',
+    secureNote: 'Şifresiz, güvenli giriş. E-posta adresinize tek kullanımlık bir sihirli bağlantı (Magic Link) iletilir.',
+    cancel: 'Vazgeç',
+    loggedInAs: 'Giriş yapıldı:',
+    syncNow: 'Şimdi Eşitle',
+    statusSynced: 'Bulut Eşitlendi',
+    statusSyncing: 'Eşitleniyor...',
+    statusOffline: 'Çevrimdışı Mod',
+    statusError: 'Eşitleme Hatası'
   }
 };

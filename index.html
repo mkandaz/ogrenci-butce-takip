@@ -105,6 +105,12 @@
               <span data-i18n="menu.editInitialBudget">Başlangıç Bütçesini Düzenle</span>
             </button>
             <div class="h-px bg-slate-200 dark:bg-slate-800 my-1"></div>
+            <div class="px-3 py-1.5 text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 tracking-wider">Bulut & Hesap</div>
+            <button id="btn-manual-sync" class="w-full text-left px-4 py-2.5 min-h-[44px] flex items-center space-x-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition">
+              <i data-lucide="refresh-cw" class="w-4 h-4 text-indigo-500"></i>
+              <span data-i18n="auth.syncNow">Şimdi Eşitle</span>
+            </button>
+            <div class="h-px bg-slate-200 dark:bg-slate-800 my-1"></div>
             <div class="px-3 py-1.5 text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 tracking-wider" data-i18n="menu.resetAndRestart">Sıfırlama & Yeniden Başlat</div>
             <button id="btn-reset-data" class="w-full text-left px-4 py-2.5 min-h-[44px] flex items-center space-x-2.5 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition">
               <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
@@ -112,6 +118,28 @@
                 <span class="font-bold block" data-i18n="menu.resetData">Verileri Sıfırla / Yeni Başlangıç</span>
                 <span class="text-[10px] text-slate-400 font-normal" data-i18n="menu.resetDataDesc">Onboarding ekranına döner</span>
               </div>
+            </button>
+          </div>
+        </div>
+
+        <!-- Cloud Sync & Auth Container -->
+        <div id="cloud-sync-container" class="flex items-center">
+          <!-- Logged Out State: "Bulut ile Eşitle" Button -->
+          <button id="btn-open-auth" type="button" class="min-h-[44px] px-3 py-2 rounded-xl flex items-center space-x-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition">
+            <i data-lucide="cloud" class="w-4 h-4 text-indigo-500"></i>
+            <span data-i18n="auth.cloudSync">Bulut ile Eşitle</span>
+          </button>
+
+          <!-- Logged In State: User Badge & Sync Indicator -->
+          <div id="user-auth-badge" class="hidden flex items-center space-x-1.5 text-xs bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5">
+            <span id="sync-status-indicator" title="Senkronizasyon Durumu" class="flex items-center space-x-1 text-slate-600 dark:text-slate-300 cursor-pointer">
+              <i data-lucide="cloud" id="icon-sync-cloud" class="w-4 h-4 text-emerald-500"></i>
+              <span id="sync-status-text" class="hidden sm:inline font-medium text-[11px]" data-i18n="auth.statusSynced">Bulut Eşitlendi</span>
+            </span>
+            <span class="text-slate-300 dark:text-slate-600">|</span>
+            <span id="user-email-text" class="font-bold text-slate-700 dark:text-slate-200 max-w-[100px] truncate" title=""></span>
+            <button id="btn-sign-out" type="button" title="Çıkış Yap" class="min-w-[28px] min-h-[28px] p-1 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition flex items-center justify-center">
+              <i data-lucide="log-out" class="w-3.5 h-3.5"></i>
             </button>
           </div>
         </div>
@@ -842,6 +870,73 @@
           <span data-i18n="onboarding.privacyNote">Tüm verileriniz yalnızca tarayıcınızın yerel hafızasında (LocalStorage) saklanır. Hesap açma veya giriş gerekmez.</span>
         </p>
       </div>
+
+    </div>
+  </div>
+
+  <!-- ================= SUPABASE AUTH / MAGIC LINK MODAL ================= -->
+  <div id="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs transition-opacity duration-200">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full border border-slate-200 dark:border-slate-800 shadow-2xl p-5 space-y-4">
+      
+      <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-2.5">
+          <div class="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+            <i data-lucide="cloud" class="w-4 h-4"></i>
+          </div>
+          <div>
+            <h3 id="auth-modal-title" class="text-sm font-bold text-slate-800 dark:text-slate-100" data-i18n="auth.modalTitle">
+              Bulut Bütçe Senkronizasyonu
+            </h3>
+            <p class="text-[11px] text-slate-400 dark:text-slate-500" data-i18n="auth.modalDesc">
+              Bütçe verilerinizi tüm cihazlarınız arasında güvenle senkronize edin.
+            </p>
+          </div>
+        </div>
+        <button id="auth-modal-close" type="button" aria-label="Kapat" class="min-w-[44px] min-h-[44px] p-2.5 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <!-- Auth Form Container -->
+      <form id="auth-form" class="space-y-3 pt-1">
+        <div>
+          <label for="auth-email-input" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1" data-i18n="auth.emailLabel">
+            Öğrenci / Kişisel E-posta
+          </label>
+          <div class="relative">
+            <input type="email" id="auth-email-input" required placeholder="ornek@universite.edu.tr" class="w-full px-3 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition" />
+            <span class="absolute right-3 top-2.5 text-slate-400">
+              <i data-lucide="mail" class="w-4 h-4"></i>
+            </span>
+          </div>
+          <p id="auth-error-msg" class="text-[11px] text-rose-500 font-medium mt-1 hidden"></p>
+        </div>
+
+        <div id="auth-success-box" class="hidden p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs">
+          <p class="font-bold flex items-center gap-1.5">
+            <i data-lucide="check-circle" class="w-4 h-4 text-emerald-500"></i>
+            <span>Bağlantı Gönderildi!</span>
+          </p>
+          <p class="text-[11px] mt-1" data-i18n="auth.magicLinkSent">
+            Giriş bağlantısı e-posta adresinize gönderildi! Lütfen gelen kutunuzu (ve spam klasörünü) kontrol edin.
+          </p>
+        </div>
+
+        <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400 flex items-start gap-2">
+          <i data-lucide="shield-check" class="w-4 h-4 text-indigo-500 shrink-0 mt-0.5"></i>
+          <span data-i18n="auth.secureNote">Şifresiz, güvenli giriş. E-posta adresinize tek kullanımlık bir sihirli bağlantı (Magic Link) iletilir.</span>
+        </div>
+
+        <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end space-x-2">
+          <button type="button" id="auth-modal-cancel" class="min-h-[44px] px-4 py-2.5 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition" data-i18n="auth.cancel">
+            Vazgeç
+          </button>
+          <button type="submit" id="auth-btn-submit" class="min-h-[44px] px-5 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white shadow-sm shadow-indigo-500/30 transition flex items-center space-x-1.5">
+            <span id="auth-btn-text" data-i18n="auth.sendMagicLink">Giriş Bağlantısı Gönder</span>
+            <i data-lucide="arrow-up-right" class="w-3.5 h-3.5"></i>
+          </button>
+        </div>
+      </form>
 
     </div>
   </div>

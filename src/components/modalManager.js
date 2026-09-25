@@ -4,6 +4,7 @@ import { getCurrentYearMonth } from '../utils/helpers.js';
 import { t } from '../i18n/index.js';
 import { showToast } from './toastManager.js';
 import { DEFAULT_PRESETS } from '../config/defaultData.js';
+import { authService } from '../services/authService.js';
 
 export class ModalManager {
   constructor(store, uiManager) {
@@ -78,6 +79,17 @@ export class ModalManager {
     this.editInitialBalance = document.getElementById('edit-initial-balance');
     this.editMonthlyIncome = document.getElementById('edit-monthly-income');
     this.editTargetMonth = document.getElementById('edit-target-month');
+
+    // Auth Modal
+    this.authModal = document.getElementById('auth-modal');
+    this.authModalClose = document.getElementById('auth-modal-close');
+    this.authModalCancel = document.getElementById('auth-modal-cancel');
+    this.authForm = document.getElementById('auth-form');
+    this.authEmailInput = document.getElementById('auth-email-input');
+    this.authErrorMsg = document.getElementById('auth-error-msg');
+    this.authSuccessBox = document.getElementById('auth-success-box');
+    this.authBtnSubmit = document.getElementById('auth-btn-submit');
+    this.authBtnText = document.getElementById('auth-btn-text');
   }
 
   bindEvents() {
@@ -156,6 +168,16 @@ export class ModalManager {
       });
     }
 
+    // Auth Modal
+    if (this.authModalClose) this.authModalClose.addEventListener('click', () => this.closeAuthModal());
+    if (this.authModalCancel) this.authModalCancel.addEventListener('click', () => this.closeAuthModal());
+    if (this.authForm) {
+      this.authForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        this.handleAuthFormSubmit();
+      });
+    }
+
     // Modal dışına tıklayınca kapatma & ESC tuşu
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
@@ -169,11 +191,13 @@ export class ModalManager {
           this.closePresetModal();
         } else if (this.initialBudgetModal && !this.initialBudgetModal.classList.contains('hidden')) {
           this.closeInitialBudgetModal();
+        } else if (this.authModal && !this.authModal.classList.contains('hidden')) {
+          this.closeAuthModal();
         }
       }
     });
 
-    [this.txModal, this.importModal, this.confirmModal, this.presetModal, this.initialBudgetModal].forEach(modal => {
+    [this.txModal, this.importModal, this.confirmModal, this.presetModal, this.initialBudgetModal, this.authModal].forEach(modal => {
       if (modal) {
         modal.addEventListener('click', (e) => {
           if (e.target === modal) {
@@ -182,6 +206,7 @@ export class ModalManager {
             else if (modal === this.confirmModal) this.closeConfirmModal();
             else if (modal === this.presetModal) this.closePresetModal();
             else if (modal === this.initialBudgetModal) this.closeInitialBudgetModal();
+            else if (modal === this.authModal) this.closeAuthModal();
           }
         });
       }
@@ -598,4 +623,56 @@ export class ModalManager {
     this.closeInitialBudgetModal();
     showToast(t('initialBudgetModal.success'), 'success');
   }
+
+  // --- Auth Modal Methods ---
+  openAuthModal() {
+    this.lastFocusedElement = document.activeElement;
+    if (!this.authModal) return;
+
+    if (this.authEmailInput) this.authEmailInput.value = '';
+    if (this.authErrorMsg) {
+      this.authErrorMsg.textContent = '';
+      this.authErrorMsg.classList.add('hidden');
+    }
+    if (this.authSuccessBox) this.authSuccessBox.classList.add('hidden');
+    if (this.authBtnSubmit) this.authBtnSubmit.disabled = false;
+    if (this.authBtnText) this.authBtnText.textContent = t('auth.sendMagicLink');
+
+    this.authModal.classList.remove('hidden');
+    if (this.authEmailInput) setTimeout(() => this.authEmailInput.focus(), 50);
+  }
+
+  closeAuthModal() {
+    if (this.authModal) this.authModal.classList.add('hidden');
+    if (this.lastFocusedElement && typeof this.lastFocusedElement.focus === 'function') {
+      this.lastFocusedElement.focus();
+    }
+  }
+
+  async handleAuthFormSubmit() {
+    const email = this.authEmailInput?.value?.trim();
+    if (!email) return;
+
+    try {
+      if (this.authBtnSubmit) this.authBtnSubmit.disabled = true;
+      if (this.authBtnText) this.authBtnText.textContent = t('auth.sending');
+      if (this.authErrorMsg) this.authErrorMsg.classList.add('hidden');
+
+      await authService.signInWithMagicLink(email);
+
+      if (this.authSuccessBox) this.authSuccessBox.classList.remove('hidden');
+      if (this.authBtnText) this.authBtnText.textContent = t('auth.resend');
+      if (this.authBtnSubmit) this.authBtnSubmit.disabled = false;
+      showToast(t('auth.magicLinkSent'), 'success');
+    } catch (err) {
+      if (this.authErrorMsg) {
+        this.authErrorMsg.textContent = err.message || 'Giriş bağlantısı gönderilemedi.';
+        this.authErrorMsg.classList.remove('hidden');
+      }
+      if (this.authBtnSubmit) this.authBtnSubmit.disabled = false;
+      if (this.authBtnText) this.authBtnText.textContent = t('auth.sendMagicLink');
+      showToast(err.message, 'error');
+    }
+  }
 }
+

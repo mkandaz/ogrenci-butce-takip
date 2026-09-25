@@ -181,5 +181,26 @@ export default {
     exp_health: 'Health & Personal Care',
     exp_tech: 'Technology & Hardware',
     exp_other: 'Other Expenses'
+  },
+  auth: {
+    cloudSync: 'Cloud Sync',
+    login: 'Log In',
+    signOut: 'Sign Out',
+    modalTitle: 'Cloud Budget Sync',
+    modalDesc: 'Securely sync your budget data across all your devices.',
+    emailLabel: 'Student / Personal Email',
+    emailPlaceholder: 'example@university.edu',
+    sendMagicLink: 'Send Magic Link',
+    sending: 'Sending...',
+    magicLinkSent: 'A login link has been sent to your email! Please check your inbox (and spam folder).',
+    resend: 'Send Again',
+    secureNote: 'Passwordless, secure login. A one-time magic link will be sent to your email.',
+    cancel: 'Cancel',
+    loggedInAs: 'Signed in as:',
+    syncNow: 'Sync Now',
+    statusSynced: 'Cloud Synced',
+    statusSyncing: 'Syncing...',
+    statusOffline: 'Offline Mode',
+    statusError: 'Sync Error'
   }
 };

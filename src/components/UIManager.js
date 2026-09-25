@@ -31,7 +31,13 @@ import {
   CheckCircle,
   Edit3,
   Trash2,
-  Info
+  Info,
+  Cloud,
+  CloudOff,
+  RefreshCw,
+  LogOut,
+  User,
+  Mail
 } from 'lucide';
 
 const appIcons = {
@@ -66,7 +72,13 @@ const appIcons = {
   CheckCircle,
   Edit3,
   Trash2,
-  Info
+  Info,
+  Cloud,
+  CloudOff,
+  RefreshCw,
+  LogOut,
+  User,
+  Mail
 };
 import { calculateSummary } from '../store/calculations.js';
 import { formatCurrency, formatNumber, formatDate, formatMonthTitle, getCurrencySymbol } from '../utils/formatters.js';
@@ -78,6 +90,8 @@ import { ChartManager } from '../charts/chartManager.js';
 import { ModalManager } from './modalManager.js';
 import { SUPPORTED_CURRENCIES, THEME_KEY } from '../config/constants.js';
 import { SafeStorage } from '../utils/storage.js';
+import { authService } from '../services/authService.js';
+import { SyncService } from '../services/syncService.js';
 
 export class UIManager {
   constructor(store) {
@@ -100,6 +114,16 @@ export class UIManager {
     this.initTheme();
     this.bindEvents();
 
+    this.syncService = new SyncService(this.store);
+
+    authService.onAuthStateChange((user) => {
+      this.renderAuthBadge(user);
+    });
+
+    this.syncService.onStatusChange((status, message) => {
+      this.renderSyncStatus(status, message);
+    });
+
     this.store.subscribe(() => {
       this.render();
     });
@@ -114,6 +138,8 @@ export class UIManager {
     }
 
     this.render();
+    this.renderAuthBadge(authService.getUser());
+    this.renderSyncStatus(this.syncService.getStatus());
   }
 
   cacheElements() {
@@ -133,6 +159,16 @@ export class UIManager {
     this.btnEditInitialBudget = document.getElementById('btn-edit-initial-budget');
     this.btnResetData = document.getElementById('btn-reset-data');
     this.btnOpenAddModal = document.getElementById('btn-open-add-modal');
+
+    // Cloud Sync & Auth
+    this.btnOpenAuth = document.getElementById('btn-open-auth');
+    this.userAuthBadge = document.getElementById('user-auth-badge');
+    this.syncStatusIndicator = document.getElementById('sync-status-indicator');
+    this.iconSyncCloud = document.getElementById('icon-sync-cloud');
+    this.syncStatusText = document.getElementById('sync-status-text');
+    this.userEmailText = document.getElementById('user-email-text');
+    this.btnSignOut = document.getElementById('btn-sign-out');
+    this.btnManualSync = document.getElementById('btn-manual-sync');
 
     // Language & Currency Selector (Header'a eklenecek)
     this.currencySelect = document.getElementById('currency-select');
@@ -273,6 +309,56 @@ export class UIManager {
       this.btnEditInitialBudget.addEventListener('click', () => {
         this.backupDropdown?.classList.add('hidden');
         this.modalManager.openInitialBudgetModal();
+      });
+    }
+
+    // Bulut ile Eşitle / Giriş Yap
+    if (this.btnOpenAuth) {
+      this.btnOpenAuth.addEventListener('click', () => {
+        this.modalManager.openAuthModal();
+      });
+    }
+
+    // Çıkış Yap
+    if (this.btnSignOut) {
+      this.btnSignOut.addEventListener('click', () => {
+        this.modalManager.openConfirmModal({
+          title: t('auth.signOut'),
+          desc: 'Bulut oturumunuz kapatılacak. Bütçe verileriniz cihazınızda güvenle saklanmaya devam eder.',
+          actionText: t('auth.signOut'),
+          onConfirm: async () => {
+            await authService.signOut();
+            showToast('Oturum kapatıldı.', 'info');
+          }
+        });
+      });
+    }
+
+    // Manuel Şimdi Eşitle Butonu
+    if (this.btnManualSync) {
+      this.btnManualSync.addEventListener('click', async () => {
+        this.backupDropdown?.classList.add('hidden');
+        if (!authService.isLoggedIn()) {
+          this.modalManager.openAuthModal();
+        } else {
+          showToast('Bulut senkronizasyonu başlatılıyor...', 'info');
+          const res = await this.syncService.sync();
+          if (res.success) {
+            showToast('Verileriniz bulut ile başarıyla eşitlendi.', 'success');
+          } else {
+            showToast(res.error?.message || 'Senkronizasyon hatası.', 'error');
+          }
+        }
+      });
+    }
+
+    // Durum Göstergesine Tıklayınca Senkronizasyonu Tetikle
+    if (this.syncStatusIndicator) {
+      this.syncStatusIndicator.addEventListener('click', async () => {
+        if (authService.isLoggedIn()) {
+          showToast('Bulut senkronizasyonu tetiklendi...', 'info');
+          await this.syncService.sync();
+        }
       });
     }
 
@@ -749,6 +835,43 @@ export class UIManager {
     } catch (err) {
       showToast('Yedek dışa aktarma hatası: ' + err.message, 'error');
     }
+  }
+
+  renderAuthBadge(user) {
+    if (user) {
+      this.btnOpenAuth?.classList.add('hidden');
+      this.userAuthBadge?.classList.remove('hidden');
+      if (this.userEmailText) {
+        this.userEmailText.textContent = user.email || 'Kullanıcı';
+        this.userEmailText.title = user.email || '';
+      }
+    } else {
+      this.btnOpenAuth?.classList.remove('hidden');
+      this.userAuthBadge?.classList.add('hidden');
+    }
+    this.refreshIcons();
+  }
+
+  renderSyncStatus(status, message = null) {
+    if (!this.iconSyncCloud) return;
+
+    if (status === 'syncing') {
+      this.iconSyncCloud.className = 'w-4 h-4 text-amber-500 animate-spin';
+      if (this.syncStatusText) this.syncStatusText.textContent = t('auth.statusSyncing');
+    } else if (status === 'synced') {
+      this.iconSyncCloud.className = 'w-4 h-4 text-emerald-500';
+      if (this.syncStatusText) this.syncStatusText.textContent = t('auth.statusSynced');
+    } else if (status === 'offline') {
+      this.iconSyncCloud.className = 'w-4 h-4 text-slate-400';
+      if (this.syncStatusText) this.syncStatusText.textContent = t('auth.statusOffline');
+    } else if (status === 'error') {
+      this.iconSyncCloud.className = 'w-4 h-4 text-rose-500';
+      if (this.syncStatusText) this.syncStatusText.textContent = t('auth.statusError');
+    } else {
+      this.iconSyncCloud.className = 'w-4 h-4 text-slate-400';
+      if (this.syncStatusText) this.syncStatusText.textContent = t('auth.statusSynced');
+    }
+    this.refreshIcons();
   }
 
   refreshIcons() {
