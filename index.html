@@ -5,47 +5,26 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Öğrenci Bütçem - Akıllı & Güvenli Bütçe Takip Sistemi</title>
   <meta name="description" content="Üniversite öğrencileri için günlük güvenli harcama limitli, modern ve çevrimdışı bütçe takip uygulaması." />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234F46E5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M22 10v6M2 10l10-5 10 5-10 5z'/><path d='M6 12v5c3 3 9 3 12 0v-5'/></svg>" />
+  <meta name="theme-color" content="#4f46e5" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
 
-  <!-- Tailwind CSS CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Render-Blocking CSS (FOUC Önleme) -->
+  <link rel="stylesheet" href="/src/styles/main.css" />
+
+  <!-- Inline Theme Script (Theme Flash Önleme) -->
   <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            brand: {
-              50: '#eef2ff',
-              100: '#e0e7ff',
-              200: '#c7d2fe',
-              300: '#a5b4fc',
-              400: '#818cf8',
-              500: '#6366f1',
-              600: '#4f46e5',
-              700: '#4338ca',
-              800: '#3730a3',
-              900: '#312e81',
-            }
-          }
+    (function () {
+      try {
+        const theme = localStorage.getItem('student_budget_theme');
+        if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
         }
-      }
-    }
+      } catch (e) {}
+    })();
   </script>
-
-  <!-- Google Fonts: Plus Jakarta Sans -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-
-  <!-- Lucide Icons CDN -->
-  <script src="https://unpkg.com/lucide@latest"></script>
-
-  <!-- Chart.js CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-  <!-- Custom CSS -->
-  <link rel="stylesheet" href="styles.css" />
 </head>
 <body class="bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 min-h-screen antialiased flex flex-col transition-colors duration-200">
 
@@ -60,16 +39,16 @@
         </div>
         <div>
           <div class="flex items-center space-x-2">
-            <h1 class="text-lg font-bold tracking-tight text-slate-900 dark:text-white">Öğrenci Bütçem</h1>
-            <span class="text-[10px] uppercase font-extrabold px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300">v1.0</span>
+            <h1 class="text-lg font-bold tracking-tight text-slate-900 dark:text-white" data-i18n="brand.title">Öğrenci Bütçem</h1>
+            <span class="text-[10px] uppercase font-extrabold px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300">v1.1</span>
           </div>
-          <p class="text-xs text-slate-500 dark:text-slate-400 hidden sm:block">Akıllı & Güvenli Bütçe Takip Rehberi</p>
+          <p class="text-xs text-slate-500 dark:text-slate-400 hidden sm:block" data-i18n="brand.subtitle">Akıllı & Güvenli Bütçe Takip Rehberi</p>
         </div>
       </div>
 
       <!-- Header Actions -->
       <div class="flex items-center space-x-2 sm:space-x-3">
-        <!-- Month Navigator (Önceki Ay / Ay Seçici / Sonraki Ay) -->
+        <!-- Month Navigator -->
         <div id="month-navigator-container" class="flex items-center bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-0.5">
           <button id="btn-prev-month" type="button" title="Önceki Ay" aria-label="Önceki Ay" class="min-w-[36px] min-h-[36px] p-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 hover:shadow-xs transition flex items-center justify-center">
             <i data-lucide="chevron-left" class="w-4 h-4"></i>
@@ -88,6 +67,19 @@
           </button>
         </div>
 
+        <!-- Currency & Language Selectors -->
+        <div class="hidden md:flex items-center space-x-1.5">
+          <select id="currency-select" aria-label="Para Birimi" class="text-xs font-semibold px-2 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 focus:outline-hidden cursor-pointer">
+            <option value="TRY">₺ TRY</option>
+            <option value="USD">$ USD</option>
+            <option value="EUR">€ EUR</option>
+          </select>
+          <select id="lang-select" aria-label="Dil" class="text-xs font-semibold px-2 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 focus:outline-hidden cursor-pointer">
+            <option value="tr">🇹🇷 TR</option>
+            <option value="en">🇬🇧 EN</option>
+          </select>
+        </div>
+
         <!-- Data & Settings Dropdown -->
         <div class="relative inline-block text-left" id="backup-menu-container">
           <button id="btn-backup-menu" type="button" title="Ayarlar & Veri Yönetimi" aria-label="Ayarlar ve Veri Menüsü" class="min-w-[44px] min-h-[44px] p-2.5 rounded-xl flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition">
@@ -95,26 +87,30 @@
           </button>
           <!-- Backup dropdown menu -->
           <div id="backup-dropdown" class="hidden absolute right-0 mt-2 w-64 rounded-xl bg-white dark:bg-slate-900 shadow-xl border border-slate-200 dark:border-slate-800 py-1.5 z-50 text-xs">
-            <div class="px-3 py-1.5 text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 tracking-wider">Veri Yönetimi</div>
+            <div class="px-3 py-1.5 text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 tracking-wider" data-i18n="menu.dataManagement">Veri Yönetimi</div>
             <button id="btn-export-json" class="w-full text-left px-4 py-2.5 min-h-[44px] flex items-center space-x-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition">
               <i data-lucide="download" class="w-4 h-4 text-emerald-500"></i>
-              <span>Yedek İndir (JSON Export)</span>
+              <span data-i18n="menu.exportJson">Yedek İndir (JSON Export)</span>
             </button>
             <button id="btn-open-import" class="w-full text-left px-4 py-2.5 min-h-[44px] flex items-center space-x-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition">
               <i data-lucide="upload" class="w-4 h-4 text-indigo-500"></i>
-              <span>Yedek Yükle (JSON Import)</span>
+              <span data-i18n="menu.importJson">Yedek Yükle (JSON Import)</span>
             </button>
             <button id="btn-load-seed" class="w-full text-left px-4 py-2.5 min-h-[44px] flex items-center space-x-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition">
               <i data-lucide="sparkles" class="w-4 h-4 text-amber-500"></i>
-              <span>Demo Verilerini Yükle</span>
+              <span data-i18n="menu.loadDemo">Demo Verilerini Yükle</span>
+            </button>
+            <button id="btn-edit-initial-budget" class="w-full text-left px-4 py-2.5 min-h-[44px] flex items-center space-x-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition">
+              <i data-lucide="wallet" class="w-4 h-4 text-indigo-500"></i>
+              <span data-i18n="menu.editInitialBudget">Başlangıç Bütçesini Düzenle</span>
             </button>
             <div class="h-px bg-slate-200 dark:bg-slate-800 my-1"></div>
-            <div class="px-3 py-1.5 text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 tracking-wider">Sıfırlama & Yeniden Başlat</div>
+            <div class="px-3 py-1.5 text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 tracking-wider" data-i18n="menu.resetAndRestart">Sıfırlama & Yeniden Başlat</div>
             <button id="btn-reset-data" class="w-full text-left px-4 py-2.5 min-h-[44px] flex items-center space-x-2.5 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition">
               <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
               <div>
-                <span class="font-bold block">Verileri Sıfırla / Yeni Başlangıç</span>
-                <span class="text-[10px] text-slate-400 font-normal">Onboarding ekranına döner</span>
+                <span class="font-bold block" data-i18n="menu.resetData">Verileri Sıfırla / Yeni Başlangıç</span>
+                <span class="text-[10px] text-slate-400 font-normal" data-i18n="menu.resetDataDesc">Onboarding ekranına döner</span>
               </div>
             </button>
           </div>
@@ -129,7 +125,7 @@
         <!-- New Transaction CTA Button -->
         <button id="btn-open-add-modal" type="button" class="min-h-[44px] inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-medium text-xs sm:text-sm shadow-sm shadow-indigo-500/30 transition">
           <i data-lucide="plus-circle" class="w-4 h-4"></i>
-          <span>İşlem Ekle</span>
+          <span data-i18n="nav.addTransaction">İşlem Ekle</span>
         </button>
       </div>
     </div>
@@ -161,7 +157,7 @@
       <div class="transition-card bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
         <div>
           <div class="flex items-center justify-between">
-            <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Kalan Net Bütçe</span>
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400" data-i18n="cards.netBalance">Kalan Net Bütçe</span>
             <span id="badge-health-status" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
               Sağlıklı
             </span>
@@ -174,11 +170,11 @@
         </div>
         <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
           <div class="flex items-center space-x-1">
-            <span>Devreden:</span>
+            <span data-i18n="cards.carriedOver">Devreden:</span>
             <span id="badge-carried-balance" class="font-bold text-slate-700 dark:text-slate-300">0,00 ₺</span>
           </div>
           <div class="flex items-center space-x-1">
-            <span>Harcama:</span>
+            <span data-i18n="cards.spentRatio">Harcama:</span>
             <span id="metric-spent-percent" class="font-bold text-slate-700 dark:text-slate-200">%0</span>
           </div>
         </div>
@@ -186,14 +182,13 @@
 
       <!-- 2. GÜNLÜK GÜVENLİ HARCAMA LİMİTİ (STAR CARD) -->
       <div id="star-card-container" class="transition-card bg-gradient-to-br from-indigo-600 via-indigo-700 to-violet-800 text-white p-5 rounded-2xl shadow-lg shadow-indigo-500/20 flex flex-col justify-between relative overflow-hidden">
-        <!-- Subtle background accent circle -->
         <div class="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-white/10 pointer-events-none blur-xl"></div>
 
         <div>
           <div class="flex items-center justify-between">
             <span class="text-xs font-semibold uppercase tracking-wider text-indigo-100 flex items-center space-x-1.5">
               <i data-lucide="shield-check" class="w-4 h-4 text-emerald-300"></i>
-              <span>Günlük Güvenli Limit</span>
+              <span data-i18n="cards.dailyLimit">Günlük Güvenli Limit</span>
             </span>
             <span id="badge-days-left" class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-white/20 text-white backdrop-blur">
               18 Gün Kaldı
@@ -204,13 +199,13 @@
               <span id="metric-daily-limit" class="text-3xl sm:text-4xl font-extrabold tracking-tight">
                 0,00 ₺
               </span>
-              <span class="text-xs font-medium text-indigo-200">/ gün</span>
+              <span class="text-xs font-medium text-indigo-200" data-i18n="cards.perDay">/ gün</span>
             </div>
           </div>
         </div>
 
         <div class="mt-4 pt-3 border-t border-white/20 flex items-center justify-between text-xs text-indigo-100">
-          <span id="metric-daily-tip" class="truncate">Bugün için önerilen harcama limiti</span>
+          <span id="metric-daily-tip" class="truncate" data-i18n="cards.dailyTipNormal">Bugün için önerilen harcama limiti</span>
           <i data-lucide="sparkles" class="w-4 h-4 text-amber-300 shrink-0 ml-1"></i>
         </div>
       </div>
@@ -219,7 +214,7 @@
       <div class="transition-card bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
         <div>
           <div class="flex items-center justify-between">
-            <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Bu Ay Gelir</span>
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400" data-i18n="cards.thisMonthIncome">Bu Ay Gelir</span>
             <div class="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
               <i data-lucide="arrow-down-left" class="w-4 h-4"></i>
             </div>
@@ -231,7 +226,7 @@
           </div>
         </div>
         <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-          <span>İşlem Sayısı:</span>
+          <span data-i18n="cards.txCount">İşlem Sayısı:</span>
           <span id="metric-income-count" class="font-bold text-slate-700 dark:text-slate-200">0 adet</span>
         </div>
       </div>
@@ -240,7 +235,7 @@
       <div class="transition-card bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
         <div>
           <div class="flex items-center justify-between">
-            <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Bu Ay Gider</span>
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400" data-i18n="cards.thisMonthExpense">Bu Ay Gider</span>
             <div class="w-8 h-8 rounded-xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center">
               <i data-lucide="arrow-up-right" class="w-4 h-4"></i>
             </div>
@@ -252,42 +247,28 @@
           </div>
         </div>
         <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-          <span>Gider Adedi:</span>
+          <span data-i18n="cards.expenseCount">Gider Adedi:</span>
           <span id="metric-expense-count" class="font-bold text-slate-700 dark:text-slate-200">0 adet</span>
         </div>
       </div>
 
     </section>
 
-    <!-- QUICK PRESET SHORTCUTS (Öğrenci Hızlı Ekleme Butonları) -->
+    <!-- QUICK PRESET SHORTCUTS -->
     <section class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm" aria-label="Hızlı Harcama Kısayolları">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div class="flex items-center justify-between w-full sm:w-auto sm:space-x-3">
           <div class="flex items-center space-x-2 text-xs font-bold text-slate-700 dark:text-slate-300">
             <i data-lucide="zap" class="w-4 h-4 text-amber-500"></i>
-            <span>Hızlı Harcamalar:</span>
+            <span data-i18n="presets.title">Hızlı Harcamalar:</span>
           </div>
           <button id="btn-edit-presets" type="button" title="Preset Tutarlarını Düzenle" aria-label="Hızlı Harcama Tutarlarını Düzenle" class="min-h-[36px] px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-[11px] font-semibold transition flex items-center space-x-1.5 border border-slate-200 dark:border-slate-700">
             <i data-lucide="sliders-horizontal" class="w-3.5 h-3.5 text-indigo-500"></i>
-            <span>Tutarları Düzenle</span>
+            <span data-i18n="presets.editAmounts">Tutarları Düzenle</span>
           </button>
         </div>
         <div class="flex flex-wrap items-center gap-2" id="quick-presets-container">
-          <button type="button" data-preset-id="preset_food" data-preset-title="Yemekhane Fişi" data-preset-amount="40" data-preset-cat="exp_food" class="quick-preset-btn min-h-[44px] text-xs font-medium px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition active:scale-95 flex items-center space-x-1.5">
-            <span>🍱 Yemekhane (40 ₺)</span>
-          </button>
-          <button type="button" data-preset-id="preset_coffee" data-preset-title="Kampüs Kahve" data-preset-amount="70" data-preset-cat="exp_social" class="quick-preset-btn min-h-[44px] text-xs font-medium px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition active:scale-95 flex items-center space-x-1.5">
-            <span>☕ Kahve (70 ₺)</span>
-          </button>
-          <button type="button" data-preset-id="preset_market" data-preset-title="Haftalık Market" data-preset-amount="200" data-preset-cat="exp_food" class="quick-preset-btn min-h-[44px] text-xs font-medium px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition active:scale-95 flex items-center space-x-1.5">
-            <span>🛒 Market (200 ₺)</span>
-          </button>
-          <button type="button" data-preset-id="preset_transit" data-preset-title="Ulaşım / Dolmuş" data-preset-amount="30" data-preset-cat="exp_transport" class="quick-preset-btn min-h-[44px] text-xs font-medium px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition active:scale-95 flex items-center space-x-1.5">
-            <span>🚌 Dolmuş (30 ₺)</span>
-          </button>
-          <button type="button" data-preset-id="preset_print" data-preset-title="Fotokopi & Ders Notu" data-preset-amount="50" data-preset-cat="exp_education" class="quick-preset-btn min-h-[44px] text-xs font-medium px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition active:scale-95 flex items-center space-x-1.5">
-            <span>📄 Fotokopi (50 ₺)</span>
-          </button>
+          <!-- Dynamic presets injected here -->
         </div>
       </div>
     </section>
@@ -301,9 +282,9 @@
           <div>
             <h2 class="text-sm font-bold tracking-tight text-slate-900 dark:text-white flex items-center space-x-2">
               <i data-lucide="pie-chart" class="w-4 h-4 text-indigo-500"></i>
-              <span>Kategori Bazlı Gider Dağılımı</span>
+              <span data-i18n="charts.categoryExpense">Kategori Bazlı Gider Dağılımı</span>
             </h2>
-            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Paranız en çok nereye gidiyor?</p>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5" data-i18n="charts.categorySubtitle">Paranız en çok nereye gidiyor?</p>
           </div>
         </div>
 
@@ -311,7 +292,7 @@
           <canvas id="categoryExpenseChart"></canvas>
           <div id="chart-empty-state" class="hidden absolute inset-0 flex flex-col items-center justify-center text-center p-4">
             <i data-lucide="inbox" class="w-10 h-10 text-slate-300 dark:text-slate-600 mb-2"></i>
-            <p class="text-xs font-medium text-slate-500 dark:text-slate-400">Henüz kaydedilmiş gider bulunmuyor.</p>
+            <p class="text-xs font-medium text-slate-500 dark:text-slate-400" data-i18n="charts.emptyExpenses">Henüz kaydedilmiş gider bulunmuyor.</p>
           </div>
         </div>
       </div>
@@ -322,9 +303,9 @@
           <div>
             <h2 class="text-sm font-bold tracking-tight text-slate-900 dark:text-white flex items-center space-x-2">
               <i data-lucide="bar-chart-3" class="w-4 h-4 text-emerald-500"></i>
-              <span>Aylık Bütçe Dengesi</span>
+              <span data-i18n="charts.budgetBalance">Aylık Bütçe Dengesi</span>
             </h2>
-            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Toplam Gelir ve Harcama Oranınız</p>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5" data-i18n="charts.balanceSubtitle">Toplam Gelir ve Harcama Oranınız</p>
           </div>
         </div>
 
@@ -332,7 +313,7 @@
           <canvas id="flowChart"></canvas>
           <div id="flow-chart-empty-state" class="hidden absolute inset-0 flex flex-col items-center justify-center text-center p-4">
             <i data-lucide="bar-chart-3" class="w-10 h-10 text-slate-300 dark:text-slate-600 mb-2"></i>
-            <p class="text-xs font-medium text-slate-500 dark:text-slate-400">Henüz finansal işlem kaydı bulunmuyor.</p>
+            <p class="text-xs font-medium text-slate-500 dark:text-slate-400" data-i18n="charts.emptyFlow">Henüz finansal işlem kaydı bulunmuyor.</p>
           </div>
         </div>
       </div>
@@ -347,7 +328,7 @@
         
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div class="flex items-center space-x-2 sm:space-x-3">
-            <h2 class="text-base font-bold text-slate-900 dark:text-white">İşlem Geçmişi</h2>
+            <h2 class="text-base font-bold text-slate-900 dark:text-white" data-i18n="history.title">İşlem Geçmişi</h2>
             <span id="tx-count-badge" class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
               0 İşlem
             </span>
@@ -358,13 +339,13 @@
 
           <!-- Type filter tabs -->
           <div class="inline-flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 text-xs font-semibold">
-            <button id="filter-type-all" type="button" class="filter-type-btn px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs transition">
+            <button id="filter-type-all" type="button" class="filter-type-btn px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs transition" data-i18n="history.filterAll">
               Tümü
             </button>
-            <button id="filter-type-income" type="button" class="filter-type-btn px-3 py-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition">
+            <button id="filter-type-income" type="button" class="filter-type-btn px-3 py-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition" data-i18n="history.filterIncome">
               Gelirler
             </button>
-            <button id="filter-type-expense" type="button" class="filter-type-btn px-3 py-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition">
+            <button id="filter-type-expense" type="button" class="filter-type-btn px-3 py-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition" data-i18n="history.filterExpense">
               Giderler
             </button>
           </div>
@@ -413,15 +394,15 @@
         <div class="w-12 h-12 mx-auto rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mb-3">
           <i data-lucide="receipt" class="w-6 h-6"></i>
         </div>
-        <h3 id="tx-empty-title" class="text-sm font-bold text-slate-900 dark:text-white">Hiç İşlem Bulunamadı</h3>
-        <p id="tx-empty-desc" class="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
+        <h3 id="tx-empty-title" class="text-sm font-bold text-slate-900 dark:text-white" data-i18n="history.emptyTitle">Hiç İşlem Bulunamadı</h3>
+        <p id="tx-empty-desc" class="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto" data-i18n="history.emptyDesc">
           Arama kriterlerinize uyan bir işlem kaydı yok veya henüz bütçenize işlem eklemediniz.
         </p>
         <div class="mt-4 flex flex-wrap items-center justify-center gap-2" id="tx-empty-actions">
-          <button id="btn-empty-add-tx" type="button" class="min-h-[44px] px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm transition">
+          <button id="btn-empty-add-tx" type="button" class="min-h-[44px] px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm transition" data-i18n="history.newTxBtn">
             + Yeni İşlem Ekle
           </button>
-          <button id="btn-empty-reset-seed" type="button" class="min-h-[44px] px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold transition">
+          <button id="btn-empty-reset-seed" type="button" class="min-h-[44px] px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold transition" data-i18n="history.loadSeedBtn">
             Örnek Verileri Yükle
           </button>
         </div>
@@ -436,10 +417,10 @@
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
       <div class="flex items-center space-x-2">
         <i data-lucide="shield" class="w-4 h-4 text-indigo-500"></i>
-        <span>Gizlilik Odaklı: Verileriniz sunucuya gitmez, yalnızca cihazınızda (LocalStorage) saklanır.</span>
+        <span data-i18n="footer.privacy">Gizlilik Odaklı: Verileriniz sunucuya gitmez, yalnızca cihazınızda (LocalStorage) saklanır.</span>
       </div>
       <div>
-        <span>Öğrenci Bütçe Takip Sistemi &copy; 2026</span>
+        <span data-i18n="footer.copyright">Öğrenci Bütçe Takip Sistemi &copy; 2026</span>
       </div>
     </div>
   </footer>
@@ -454,7 +435,7 @@
           <div id="modal-header-icon" class="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
             <i data-lucide="plus" class="w-4 h-4"></i>
           </div>
-          <h3 id="modal-title-text" class="text-sm font-bold text-slate-900 dark:text-white">Yeni İşlem Ekle</h3>
+          <h3 id="modal-title-text" class="text-sm font-bold text-slate-900 dark:text-white" data-i18n="modal.addTitle">Yeni İşlem Ekle</h3>
         </div>
         <button id="modal-btn-close" type="button" aria-label="Pencereyi Kapat" class="min-w-[44px] min-h-[44px] p-2.5 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition">
           <i data-lucide="x" class="w-4 h-4"></i>
@@ -467,15 +448,15 @@
 
         <!-- Transaction Type Switcher -->
         <div>
-          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">İşlem Türü</label>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5" data-i18n="modal.txType">İşlem Türü</label>
           <div class="grid grid-cols-2 gap-2 p-1 rounded-xl bg-slate-100 dark:bg-slate-800">
             <button type="button" id="tx-type-expense-btn" class="type-toggle-btn min-h-[44px] py-2 text-xs font-bold rounded-lg bg-rose-500 text-white shadow-xs transition flex items-center justify-center space-x-1.5">
               <i data-lucide="arrow-up-right" class="w-3.5 h-3.5"></i>
-              <span>Gider</span>
+              <span data-i18n="modal.expense">Gider</span>
             </button>
             <button type="button" id="tx-type-income-btn" class="type-toggle-btn min-h-[44px] py-2 text-xs font-bold rounded-lg text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition flex items-center justify-center space-x-1.5">
               <i data-lucide="arrow-down-left" class="w-3.5 h-3.5"></i>
-              <span>Gelir</span>
+              <span data-i18n="modal.income">Gelir</span>
             </button>
           </div>
           <input type="hidden" id="tx-field-type" value="expense" />
@@ -484,7 +465,7 @@
         <!-- Title -->
         <div>
           <label for="tx-field-title" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-            İşlem Başlığı <span class="text-rose-500">*</span>
+            <span data-i18n="modal.titleField">İşlem Başlığı</span> <span class="text-rose-500">*</span>
           </label>
           <input type="text" id="tx-field-title" maxlength="80" placeholder="Örn: Yemekhane Fişi, KYK Bursu" class="w-full px-3 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition" />
           <p id="tx-err-title" class="text-[11px] text-rose-500 font-medium mt-1 hidden flex items-center gap-1">
@@ -497,7 +478,7 @@
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label for="tx-field-amount" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Tutar (₺) <span class="text-rose-500">*</span>
+              <span data-i18n="modal.amountField">Tutar</span> <span class="text-rose-500">*</span>
             </label>
             <input type="number" id="tx-field-amount" step="0.01" min="0.01" max="10000000" placeholder="0,00" class="w-full px-3 py-2.5 text-xs font-bold rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition" />
             <p id="tx-err-amount" class="text-[11px] text-rose-500 font-medium mt-1 hidden flex items-center gap-1">
@@ -507,7 +488,7 @@
           </div>
           <div>
             <label for="tx-field-date" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Tarih <span class="text-rose-500">*</span>
+              <span data-i18n="modal.dateField">Tarih</span> <span class="text-rose-500">*</span>
             </label>
             <input type="date" id="tx-field-date" class="w-full px-3 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition" />
             <p id="tx-err-date" class="text-[11px] text-rose-500 font-medium mt-1 hidden flex items-center gap-1">
@@ -520,7 +501,7 @@
         <!-- Category Selector -->
         <div>
           <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-            Kategori <span class="text-rose-500">*</span>
+            <span data-i18n="modal.categoryField">Kategori</span> <span class="text-rose-500">*</span>
           </label>
           <div id="tx-category-picker" class="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-44 overflow-y-auto p-1 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
             <!-- Category pills dynamically injected here -->
@@ -535,7 +516,7 @@
         <!-- Notes (Optional) -->
         <div>
           <label for="tx-field-notes" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-            Ek Notlar <span class="text-slate-500 dark:text-slate-400 font-normal">(İsteğe Bağlı)</span>
+            <span data-i18n="modal.notesField">Ek Notlar (İsteğe Bağlı)</span>
           </label>
           <textarea id="tx-field-notes" rows="2" maxlength="300" placeholder="Fatura numarası, arkadaşla bölüşülen harcama detayı vb." class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition resize-none"></textarea>
           <p id="tx-err-notes" class="text-[11px] text-rose-500 font-medium mt-1 hidden flex items-center gap-1">
@@ -546,10 +527,10 @@
 
         <!-- Modal Footer Actions -->
         <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end space-x-2">
-          <button type="button" id="modal-btn-cancel" class="min-h-[44px] px-4 py-2.5 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+          <button type="button" id="modal-btn-cancel" class="min-h-[44px] px-4 py-2.5 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition" data-i18n="modal.cancel">
             Vazgeç
           </button>
-          <button type="submit" id="modal-btn-submit" class="min-h-[44px] px-5 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white shadow-sm shadow-indigo-500/30 transition">
+          <button type="submit" id="modal-btn-submit" class="min-h-[44px] px-5 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white shadow-sm shadow-indigo-500/30 transition" data-i18n="modal.save">
             Kaydet
           </button>
         </div>
@@ -567,19 +548,19 @@
           <div class="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
             <i data-lucide="upload" class="w-4 h-4"></i>
           </div>
-          <h3 id="import-modal-title" class="text-sm font-bold text-slate-900 dark:text-white">Bütçe Yedeği Yükle (Import)</h3>
+          <h3 id="import-modal-title" class="text-sm font-bold text-slate-900 dark:text-white" data-i18n="importModal.title">Bütçe Yedeği Yükle (Import)</h3>
         </div>
         <button id="import-modal-close" type="button" aria-label="Pencereyi Kapat" class="min-w-[44px] min-h-[44px] p-2.5 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition">
           <i data-lucide="x" class="w-4 h-4"></i>
         </button>
       </div>
 
-      <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+      <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed" data-i18n="importModal.desc">
         Daha önce dışa aktardığınız geçerli bir <code class="text-indigo-600 dark:text-indigo-400">student_budget_*.json</code> dosyasını seçin.
       </p>
 
       <div>
-        <label for="import-file-input" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">JSON Dosyası</label>
+        <label for="import-file-input" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1" data-i18n="importModal.fileLabel">JSON Dosyası</label>
         <input type="file" id="import-file-input" accept=".json,application/json" class="w-full text-xs text-slate-500 file:mr-3 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 dark:file:bg-slate-800 dark:file:text-indigo-300 cursor-pointer" />
         <p id="import-file-error" class="text-[11px] text-rose-500 font-medium mt-1.5 hidden flex items-center gap-1">
           <i data-lucide="alert-circle" class="w-3 h-3 shrink-0"></i>
@@ -588,30 +569,30 @@
       </div>
 
       <div>
-        <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">İçe Aktarım Yöntemi</label>
+        <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2" data-i18n="importModal.methodLabel">İçe Aktarım Yöntemi</label>
         <div class="space-y-2">
           <label class="flex items-start space-x-2 text-xs p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50">
             <input type="radio" name="import-mode" value="merge" checked class="mt-0.5 text-indigo-600 focus:ring-indigo-500" />
             <div>
-              <span class="font-bold text-slate-800 dark:text-slate-200 block">Mevcut Verilerle Birleştir (Merge)</span>
-              <span class="text-slate-500 dark:text-slate-400 text-[11px]">Yeni işlemleri mevcut listenize ekler, aynı ID'ye sahip olanları günceller.</span>
+              <span class="font-bold text-slate-800 dark:text-slate-200 block" data-i18n="importModal.mergeOption">Mevcut Verilerle Birleştir (Merge)</span>
+              <span class="text-slate-500 dark:text-slate-400 text-[11px]" data-i18n="importModal.mergeDesc">Yeni işlemleri mevcut listenize ekler, aynı ID'ye sahip olanları günceller.</span>
             </div>
           </label>
           <label class="flex items-start space-x-2 text-xs p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50">
             <input type="radio" name="import-mode" value="replace" class="mt-0.5 text-indigo-600 focus:ring-indigo-500" />
             <div>
-              <span class="font-bold text-rose-600 dark:text-rose-400 block">Mevcut Verilerin Üzerine Yaz (Replace)</span>
-              <span class="text-slate-500 dark:text-slate-400 text-[11px]">Mevcut tüm işlemleri siler ve yedekteki verileri sıfırdan yükler.</span>
+              <span class="font-bold text-rose-600 dark:text-rose-400 block" data-i18n="importModal.replaceOption">Mevcut Verilerin Üzerine Yaz (Replace)</span>
+              <span class="text-slate-500 dark:text-slate-400 text-[11px]" data-i18n="importModal.replaceDesc">Mevcut tüm işlemleri siler ve yedekteki verileri sıfırdan yükler.</span>
             </div>
           </label>
         </div>
       </div>
 
       <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end space-x-2">
-        <button type="button" id="import-modal-cancel" class="min-h-[44px] px-4 py-2.5 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+        <button type="button" id="import-modal-cancel" class="min-h-[44px] px-4 py-2.5 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition" data-i18n="importModal.cancel">
           Vazgeç
         </button>
-        <button type="button" id="import-modal-confirm" class="min-h-[44px] px-5 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white shadow-sm shadow-indigo-500/30 transition">
+        <button type="button" id="import-modal-confirm" class="min-h-[44px] px-5 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white shadow-sm shadow-indigo-500/30 transition" data-i18n="importModal.confirm">
           Yükle ve Uygula
         </button>
       </div>
@@ -626,16 +607,16 @@
         <i id="confirm-modal-icon" data-lucide="alert-triangle" class="w-6 h-6"></i>
       </div>
       <div>
-        <h3 id="confirm-modal-title" class="text-sm font-bold text-slate-900 dark:text-white">İşlemi Onaylayın</h3>
-        <p id="confirm-modal-desc" class="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+        <h3 id="confirm-modal-title" class="text-sm font-bold text-slate-900 dark:text-white" data-i18n="confirmModal.title">İşlemi Onaylayın</h3>
+        <p id="confirm-modal-desc" class="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed" data-i18n="confirmModal.desc">
           Bu işlem geri alınamaz. Devam etmek istediğinize emin misiniz?
         </p>
       </div>
       <div class="pt-2 flex items-center justify-center space-x-2">
-        <button type="button" id="confirm-modal-cancel" class="min-h-[44px] px-4 py-2.5 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+        <button type="button" id="confirm-modal-cancel" class="min-h-[44px] px-4 py-2.5 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition" data-i18n="confirmModal.cancel">
           Vazgeç
         </button>
-        <button type="button" id="confirm-modal-action" class="min-h-[44px] px-5 py-2.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 active:scale-95 text-white shadow-sm shadow-rose-500/30 transition">
+        <button type="button" id="confirm-modal-action" class="min-h-[44px] px-5 py-2.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 active:scale-95 text-white shadow-sm shadow-rose-500/30 transition" data-i18n="confirmModal.confirm">
           Evet, Onaylıyorum
         </button>
       </div>
@@ -652,8 +633,8 @@
             <i data-lucide="sliders-horizontal" class="w-4 h-4"></i>
           </div>
           <div>
-            <h3 id="preset-modal-title" class="text-sm font-bold text-slate-900 dark:text-white">Hızlı Harcamaları Düzenle</h3>
-            <p class="text-[11px] text-slate-500 dark:text-slate-400">Sık kullandığınız harcama tutarlarını özelleştirin.</p>
+            <h3 id="preset-modal-title" class="text-sm font-bold text-slate-900 dark:text-white" data-i18n="presets.modalTitle">Hızlı Harcamaları Düzenle</h3>
+            <p class="text-[11px] text-slate-500 dark:text-slate-400" data-i18n="presets.modalDesc">Sık kullandığınız harcama tutarlarını özelleştirin.</p>
           </div>
         </div>
         <button id="preset-modal-close" type="button" aria-label="Pencereyi Kapat" class="min-w-[44px] min-h-[44px] p-2.5 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition">
@@ -667,14 +648,14 @@
         </div>
 
         <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-          <button type="button" id="preset-modal-reset-default" class="text-[11px] font-semibold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition">
+          <button type="button" id="preset-modal-reset-default" class="text-[11px] font-semibold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition" data-i18n="presets.resetDefault">
             Varsayılanlara Dön
           </button>
           <div class="flex items-center space-x-2">
-            <button type="button" id="preset-modal-cancel" class="min-h-[44px] px-4 py-2.5 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+            <button type="button" id="preset-modal-cancel" class="min-h-[44px] px-4 py-2.5 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition" data-i18n="presets.cancel">
               Vazgeç
             </button>
-            <button type="submit" id="preset-modal-save" class="min-h-[44px] px-5 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white shadow-sm shadow-indigo-500/30 transition">
+            <button type="submit" id="preset-modal-save" class="min-h-[44px] px-5 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white shadow-sm shadow-indigo-500/30 transition" data-i18n="presets.save">
               Kaydet
             </button>
           </div>
@@ -684,7 +665,67 @@
     </div>
   </div>
 
-  <!-- ================= ONBOARDING MODAL (DEMO VS KENDİ BÜTÇEMLE BAŞLA) ================= -->
+  <!-- ================= INITIAL BUDGET EDIT MODAL ================= -->
+  <div id="initial-budget-modal" role="dialog" aria-modal="true" aria-labelledby="initial-budget-modal-title" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs transition-opacity duration-200">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full border border-slate-200 dark:border-slate-800 shadow-2xl p-5 sm:p-6 space-y-4">
+      
+      <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-2.5">
+          <div class="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+            <i data-lucide="wallet" class="w-4 h-4"></i>
+          </div>
+          <div>
+            <h3 id="initial-budget-modal-title" class="text-sm font-bold text-slate-900 dark:text-white" data-i18n="initialBudgetModal.title">Başlangıç Bütçesini Düzenle</h3>
+            <p class="text-[11px] text-slate-500 dark:text-slate-400" data-i18n="initialBudgetModal.desc">Başlangıç nakit bakiyenizi, düzenli aylık gelirinizi ve takip başlangıç ayınızı güncelleyin.</p>
+          </div>
+        </div>
+        <button id="initial-budget-modal-close" type="button" aria-label="Pencereyi Kapat" class="min-w-[44px] min-h-[44px] p-2.5 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <form id="initial-budget-form" class="space-y-3 pt-1">
+        <div>
+          <label for="edit-initial-balance" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1" data-i18n="initialBudgetModal.initialBalance">
+            Başlangıç Bakiyesi
+          </label>
+          <div class="relative">
+            <input type="number" id="edit-initial-balance" min="0" step="any" placeholder="Örn: 1500" class="w-full px-3 py-2.5 text-xs font-bold rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition" />
+            <span class="currency-symbol absolute right-3 top-2.5 text-xs font-bold text-slate-400">₺</span>
+          </div>
+        </div>
+
+        <div>
+          <label for="edit-monthly-income" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1" data-i18n="initialBudgetModal.monthlyIncome">
+            Aylık Düzenli Gelir (Burs/Harçlık)
+          </label>
+          <div class="relative">
+            <input type="number" id="edit-monthly-income" min="0" step="any" placeholder="Örn: 4000" class="w-full px-3 py-2.5 text-xs font-bold rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition" />
+            <span class="currency-symbol absolute right-3 top-2.5 text-xs font-bold text-slate-400">₺</span>
+          </div>
+        </div>
+
+        <div>
+          <label for="edit-target-month" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1" data-i18n="initialBudgetModal.targetMonth">
+            Takip Başlangıç Ayı
+          </label>
+          <input type="month" id="edit-target-month" class="w-full px-3 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition" />
+        </div>
+
+        <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end space-x-2">
+          <button type="button" id="initial-budget-modal-cancel" class="min-h-[44px] px-4 py-2.5 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition" data-i18n="initialBudgetModal.cancel">
+            Vazgeç
+          </button>
+          <button type="submit" id="initial-budget-modal-save" class="min-h-[44px] px-5 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white shadow-sm shadow-indigo-500/30 transition" data-i18n="initialBudgetModal.save">
+            Güncelle ve Kaydet
+          </button>
+        </div>
+      </form>
+
+    </div>
+  </div>
+
+  <!-- ================= ONBOARDING MODAL ================= -->
   <div id="onboarding-modal" role="dialog" aria-modal="true" aria-labelledby="onboard-modal-title" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md transition-opacity duration-300">
     <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-2xl w-full border border-slate-200 dark:border-slate-800 shadow-2xl p-6 sm:p-8 space-y-6 max-h-[95vh] overflow-y-auto">
       
@@ -693,10 +734,10 @@
         <div class="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-500 mx-auto flex items-center justify-center text-white shadow-lg shadow-indigo-500/30">
           <i data-lucide="graduation-cap" class="w-8 h-8"></i>
         </div>
-        <h2 id="onboard-modal-title" class="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+        <h2 id="onboard-modal-title" class="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white" data-i18n="onboarding.title">
           Öğrenci Bütçem'e Hoş Geldin!
         </h2>
-        <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto leading-relaxed">
+        <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto leading-relaxed" data-i18n="onboarding.desc">
           Bütçeni kontrol altına alıp harcamalarını akıllıca yönetmeye hazır mısın? Nasıl başlamak istediğini seç:
         </p>
       </div>
@@ -711,15 +752,15 @@
               <div class="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-950/80 text-amber-600 dark:text-amber-400 flex items-center justify-center shadow-xs">
                 <i data-lucide="sparkles" class="w-5 h-5"></i>
               </div>
-              <span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300">
+              <span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300" data-i18n="onboarding.demoCardBadge">
                 Hızlı Keşif
               </span>
             </div>
             <div>
-              <h3 class="text-sm font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition">
+              <h3 class="text-sm font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition" data-i18n="onboarding.demoCardTitle">
                 Demo Verilerle Dene
               </h3>
-              <p class="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+              <p class="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed" data-i18n="onboarding.demoCardDesc">
                 KYK bursu, yurt kirası, yemekhane ve market gibi gerçekçi öğrenci verileriyle tüm grafikleri ve günlük limit hesaplamalarını hemen gör.
               </p>
             </div>
@@ -727,7 +768,7 @@
 
           <div class="pt-5 mt-4 border-t border-slate-200/60 dark:border-slate-700/60">
             <button type="button" id="btn-onboard-demo" class="w-full min-h-[44px] px-4 py-2.5 rounded-xl text-xs font-bold bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 shadow-xs active:scale-95 transition flex items-center justify-center space-x-1.5">
-              <span>Demo ile Başla</span>
+              <span data-i18n="onboarding.demoCardBtn">Demo ile Başla</span>
               <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
             </button>
           </div>
@@ -740,15 +781,15 @@
               <div class="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs">
                 <i data-lucide="wallet" class="w-5 h-5"></i>
               </div>
-              <span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-900/80 dark:text-indigo-200">
+              <span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-900/80 dark:text-indigo-200" data-i18n="onboarding.customCardBadge">
                 Kişisel Başlangıç
               </span>
             </div>
             <div>
-              <h3 class="text-sm font-bold text-slate-900 dark:text-white">
+              <h3 class="text-sm font-bold text-slate-900 dark:text-white" data-i18n="onboarding.customCardTitle">
                 Kendi Bütçemle Başla
               </h3>
-              <p class="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+              <p class="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed" data-i18n="onboarding.customCardDesc">
                 Mevcut nakit/banka bakiyeni ve bu ayki gelirlerini tanımlayarak tertemiz ve kişisel bir panelle başla.
               </p>
             </div>
@@ -756,27 +797,27 @@
             <!-- Custom Budget Inputs Form -->
             <form id="onboard-custom-form" class="space-y-2.5 pt-2">
               <div>
-                <label for="onboard-initial-balance" class="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Mevcut Başlangıç Bakiyesi (₺) <span class="text-slate-400 font-normal">(İsteğe Bağlı)</span>
+                <label for="onboard-initial-balance" class="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1" data-i18n="onboarding.initialBalanceLabel">
+                  Mevcut Başlangıç Bakiyesi
                 </label>
                 <div class="relative">
                   <input type="number" id="onboard-initial-balance" min="0" step="any" placeholder="Örn: 1500 (Cüzdan/Banka)" class="w-full px-3 py-2 text-xs rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition" />
-                  <span class="absolute right-3 top-2 text-xs font-bold text-slate-400">₺</span>
+                  <span class="currency-symbol absolute right-3 top-2 text-xs font-bold text-slate-400">₺</span>
                 </div>
               </div>
 
               <div>
-                <label for="onboard-monthly-income" class="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Aylık Düzenli Gelir (₺) <span class="text-slate-400 font-normal">(Burs/Harçlık)</span>
+                <label for="onboard-monthly-income" class="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1" data-i18n="onboarding.monthlyIncomeLabel">
+                  Aylık Düzenli Gelir (Burs/Harçlık)
                 </label>
                 <div class="relative">
                   <input type="number" id="onboard-monthly-income" min="0" step="any" placeholder="Örn: 4000 (KYK/Aile)" class="w-full px-3 py-2 text-xs rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition" />
-                  <span class="absolute right-3 top-2 text-xs font-bold text-slate-400">₺</span>
+                  <span class="currency-symbol absolute right-3 top-2 text-xs font-bold text-slate-400">₺</span>
                 </div>
               </div>
 
               <div>
-                <label for="onboard-target-month" class="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                <label for="onboard-target-month" class="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1" data-i18n="onboarding.targetMonthLabel">
                   Takip Edilecek Ay
                 </label>
                 <input type="month" id="onboard-target-month" class="w-full px-3 py-2 text-xs rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition" />
@@ -784,7 +825,7 @@
 
               <div class="pt-3">
                 <button type="submit" id="btn-onboard-custom-submit" class="w-full min-h-[44px] px-4 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white shadow-md shadow-indigo-500/30 transition flex items-center justify-center space-x-1.5">
-                  <span>Kişisel Bütçemi Başlat</span>
+                  <span data-i18n="onboarding.customSubmitBtn">Kişisel Bütçemi Başlat</span>
                   <i data-lucide="check-circle" class="w-3.5 h-3.5"></i>
                 </button>
               </div>
@@ -798,7 +839,7 @@
       <div class="text-center pt-2">
         <p class="text-[11px] text-slate-400 dark:text-slate-500 flex items-center justify-center gap-1.5">
           <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-500"></i>
-          <span>Tüm verileriniz yalnızca tarayıcınızın yerel hafızasında (LocalStorage) saklanır. Hesap açma veya giriş gerekmez.</span>
+          <span data-i18n="onboarding.privacyNote">Tüm verileriniz yalnızca tarayıcınızın yerel hafızasında (LocalStorage) saklanır. Hesap açma veya giriş gerekmez.</span>
         </p>
       </div>
 
@@ -810,7 +851,7 @@
     <!-- Toasts dynamically appended here -->
   </div>
 
-  <!-- Main JavaScript App -->
-  <script src="app.js" defer></script>
+  <!-- Main Vite Application Entry -->
+  <script type="module" src="/src/main.js"></script>
 </body>
 </html>
