@@ -137,6 +137,91 @@ console.log('\n--- 2. STORE, ONBOARDING VE PRESETLER ---');
   assert(store.getTransactions().length === 0, 'TC-08 İşlemler sıfırlandı');
 }
 
+// TC-09: Başlangıç Bütçesi Bilgilerini Okuma (getInitialBudget)
+{
+  const store = new BudgetStore();
+  store.startWithCustomBudget({
+    initialBalance: 2000,
+    monthlyIncome: 5000,
+    targetMonth: '2026-09'
+  });
+  const init = store.getInitialBudget();
+  assert(init.initialBalance === 2000, 'TC-09 getInitialBudget: initialBalance 2000');
+  assert(init.monthlyIncome === 5000, 'TC-09 getInitialBudget: monthlyIncome 5000');
+  assert(init.targetMonth === '2026-09', 'TC-09 getInitialBudget: targetMonth 2026-09');
+  assert(Boolean(init.initialBalanceTxId), 'TC-09 getInitialBudget: initialBalanceTxId mevcut');
+  assert(Boolean(init.monthlyIncomeTxId), 'TC-09 getInitialBudget: monthlyIncomeTxId mevcut');
+}
+
+// TC-10: Başlangıç Bütçesi Güncelleme (updateInitialBudget) - Duplication Önleme
+{
+  const store = new BudgetStore();
+  store.startWithCustomBudget({
+    initialBalance: 1000,
+    monthlyIncome: 3000,
+    targetMonth: '2026-09'
+  });
+  // Ekstra bir kullanıcı harcaması ekleyelim
+  store.addTransaction({
+    title: 'Kitap Alımı',
+    amount: 150,
+    type: 'expense',
+    categoryId: 'exp_edu',
+    date: '2026-09-05'
+  });
+
+  const beforeTxs = store.getTransactions();
+  assert(beforeTxs.length === 3, 'TC-10 Güncelleme öncesi 3 işlem (2 bütçe + 1 harcama)');
+
+  // Bütçeyi güncelle: 1000 -> 2500, 3000 -> 4500, ay -> 2026-10
+  store.updateInitialBudget({
+    initialBalance: 2500,
+    monthlyIncome: 4500,
+    targetMonth: '2026-10'
+  });
+
+  const afterTxs = store.getTransactions();
+  assert(afterTxs.length === 3, 'TC-10 Güncelleme sonrası işlem sayısı DEĞİŞMEDİ (duplication engellendi)');
+  
+  const updatedInit = store.getInitialBudget();
+  assert(updatedInit.initialBalance === 2500, 'TC-10 Güncellenen bakiye 2500');
+  assert(updatedInit.monthlyIncome === 4500, 'TC-10 Güncellenen gelir 4500');
+  assert(updatedInit.targetMonth === '2026-10', 'TC-10 Güncellenen ay 2026-10');
+
+  // Kullanıcı harcamasının korunduğunu doğrula
+  const bookTx = afterTxs.find(t => t.title === 'Kitap Alımı');
+  assert(bookTx && bookTx.amount === 150, 'TC-10 Kullanıcı harcaması KORUNDU');
+}
+
+// TC-11: Başlangıç Bütçesinde Tutarı Sıfıra Çekme / Sıfırdan Arttırma
+{
+  const store = new BudgetStore();
+  store.startWithCustomBudget({
+    initialBalance: 1000,
+    monthlyIncome: 3000,
+    targetMonth: '2026-09'
+  });
+
+  // initialBalance'ı 0 yapalım
+  store.updateInitialBudget({
+    initialBalance: 0,
+    monthlyIncome: 3000,
+    targetMonth: '2026-09'
+  });
+  let txs = store.getTransactions();
+  assert(txs.length === 1, 'TC-11 initialBalance 0 yapılınca ilgili işlem güvenle silindi');
+  assert(txs[0].amount === 3000, 'TC-11 Kalan işlem aylık gelir (3000)');
+
+  // Tekrar initialBalance ekleyelim (0'dan 1200'e)
+  store.updateInitialBudget({
+    initialBalance: 1200,
+    monthlyIncome: 3000,
+    targetMonth: '2026-09'
+  });
+  txs = store.getTransactions();
+  assert(txs.length === 2, 'TC-11 Bakiye sıfırdan 1200 olunca yeni işlem başarıyla eklendi');
+}
+
 // --------------------------------------------------------------------------
 // 3. PARA BİRİMİ VE ISO 4217 NORMALİZASYON TESTLERİ (KURAL 2)
 // --------------------------------------------------------------------------
@@ -231,6 +316,10 @@ console.log('\n--- 5. i18n ÇOKLU DİL (TR / EN) DOĞRULAMASI ---');
   const trKeys = Object.keys(tr);
   const enKeys = Object.keys(en);
   assert(trKeys.length === enKeys.length, `Sözlük kök anahtarları eşit: TR (${trKeys.length}) == EN (${enKeys.length})`);
+
+  const trModalKeys = Object.keys(tr.initialBudgetModal || {});
+  const enModalKeys = Object.keys(en.initialBudgetModal || {});
+  assert(trModalKeys.length > 0 && trModalKeys.length === enModalKeys.length, `initialBudgetModal anahtarları eşit: TR (${trModalKeys.length}) == EN (${enModalKeys.length})`);
 }
 
 // --------------------------------------------------------------------------

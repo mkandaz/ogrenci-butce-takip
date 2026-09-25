@@ -69,6 +69,15 @@ export class ModalManager {
     this.onboardInitialBalance = document.getElementById('onboard-initial-balance');
     this.onboardMonthlyIncome = document.getElementById('onboard-monthly-income');
     this.onboardTargetMonth = document.getElementById('onboard-target-month');
+
+    // Initial Budget Edit Modal
+    this.initialBudgetModal = document.getElementById('initial-budget-modal');
+    this.initialBudgetModalClose = document.getElementById('initial-budget-modal-close');
+    this.initialBudgetModalCancel = document.getElementById('initial-budget-modal-cancel');
+    this.initialBudgetForm = document.getElementById('initial-budget-form');
+    this.editInitialBalance = document.getElementById('edit-initial-balance');
+    this.editMonthlyIncome = document.getElementById('edit-monthly-income');
+    this.editTargetMonth = document.getElementById('edit-target-month');
   }
 
   bindEvents() {
@@ -87,6 +96,16 @@ export class ModalManager {
       e.preventDefault();
       this.handlePresetFormSubmit();
     });
+
+    // Initial Budget Edit Modal
+    if (this.initialBudgetModalClose) this.initialBudgetModalClose.addEventListener('click', () => this.closeInitialBudgetModal());
+    if (this.initialBudgetModalCancel) this.initialBudgetModalCancel.addEventListener('click', () => this.closeInitialBudgetModal());
+    if (this.initialBudgetForm) {
+      this.initialBudgetForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        this.handleInitialBudgetFormSubmit();
+      });
+    }
 
     // Import Modal
     if (this.importModalClose) this.importModalClose.addEventListener('click', () => this.closeImportModal());
@@ -148,11 +167,13 @@ export class ModalManager {
           this.closeConfirmModal();
         } else if (this.presetModal && !this.presetModal.classList.contains('hidden')) {
           this.closePresetModal();
+        } else if (this.initialBudgetModal && !this.initialBudgetModal.classList.contains('hidden')) {
+          this.closeInitialBudgetModal();
         }
       }
     });
 
-    [this.txModal, this.importModal, this.confirmModal, this.presetModal].forEach(modal => {
+    [this.txModal, this.importModal, this.confirmModal, this.presetModal, this.initialBudgetModal].forEach(modal => {
       if (modal) {
         modal.addEventListener('click', (e) => {
           if (e.target === modal) {
@@ -160,6 +181,7 @@ export class ModalManager {
             else if (modal === this.importModal) this.closeImportModal();
             else if (modal === this.confirmModal) this.closeConfirmModal();
             else if (modal === this.presetModal) this.closePresetModal();
+            else if (modal === this.initialBudgetModal) this.closeInitialBudgetModal();
           }
         });
       }
@@ -530,5 +552,50 @@ export class ModalManager {
     if (this.onboardingModal) {
       this.onboardingModal.classList.add('hidden');
     }
+  }
+
+  // --- Initial Budget Edit Modal Methods ---
+  openInitialBudgetModal() {
+    this.lastFocusedElement = document.activeElement;
+    if (!this.initialBudgetModal) return;
+
+    const data = this.store.getInitialBudget();
+    if (this.editInitialBalance) this.editInitialBalance.value = data.initialBalance > 0 ? data.initialBalance : '';
+    if (this.editMonthlyIncome) this.editMonthlyIncome.value = data.monthlyIncome > 0 ? data.monthlyIncome : '';
+    if (this.editTargetMonth) this.editTargetMonth.value = data.targetMonth || getCurrentYearMonth();
+
+    this.initialBudgetModal.classList.remove('hidden');
+    if (this.editInitialBalance) setTimeout(() => this.editInitialBalance.focus(), 50);
+  }
+
+  closeInitialBudgetModal() {
+    if (this.initialBudgetModal) this.initialBudgetModal.classList.add('hidden');
+    if (this.lastFocusedElement && typeof this.lastFocusedElement.focus === 'function') {
+      this.lastFocusedElement.focus();
+    }
+  }
+
+  handleInitialBudgetFormSubmit() {
+    const initBal = this.editInitialBalance?.value ? Number(this.editInitialBalance.value) : 0;
+    const monInc = this.editMonthlyIncome?.value ? Number(this.editMonthlyIncome.value) : 0;
+    const targetM = this.editTargetMonth?.value || getCurrentYearMonth();
+
+    if (initBal < 0 || isNaN(initBal)) {
+      showToast('Başlangıç bakiyesi negatif olamaz.', 'error');
+      return;
+    }
+    if (monInc < 0 || isNaN(monInc)) {
+      showToast('Aylık gelir negatif olamaz.', 'error');
+      return;
+    }
+
+    this.store.updateInitialBudget({
+      initialBalance: initBal,
+      monthlyIncome: monInc,
+      targetMonth: targetM
+    });
+
+    this.closeInitialBudgetModal();
+    showToast(t('initialBudgetModal.success'), 'success');
   }
 }

@@ -200,11 +200,14 @@ export class BudgetStore {
     const monthStr = targetMonth || getCurrentYearMonth();
     const txDate = `${monthStr}-01`;
     const newTxs = [];
+    let initBalId = null;
+    let monIncId = null;
 
     const initBal = Number(initialBalance);
     if (!isNaN(initBal) && initBal > 0) {
+      initBalId = generateUUID();
       newTxs.push({
-        id: generateUUID(),
+        id: initBalId,
         title: 'Mevcut Nakit / Başlangıç Bakiyesi',
         amount: Math.round(initBal * 100) / 100,
         type: 'income',
@@ -218,8 +221,9 @@ export class BudgetStore {
 
     const inc = Number(monthlyIncome);
     if (!isNaN(inc) && inc > 0) {
+      monIncId = generateUUID();
       newTxs.push({
-        id: generateUUID(),
+        id: monIncId,
         title: 'Aylık Düzenli Gelir (Burs / Harçlık / Maaş)',
         amount: Math.round(inc * 100) / 100,
         type: 'income',
@@ -234,8 +238,123 @@ export class BudgetStore {
     this.state.transactions = newTxs;
     this.state.categories = [...DEFAULT_CATEGORIES];
     this.state.settings.targetMonth = monthStr;
+    this.state.settings.initialBudget = {
+      initialBalance: initBal > 0 ? initBal : 0,
+      monthlyIncome: inc > 0 ? inc : 0,
+      targetMonth: monthStr,
+      initialBalanceTxId: initBalId,
+      monthlyIncomeTxId: monIncId
+    };
     this.state.onboarded = true;
     this.notify();
+  }
+
+  getInitialBudget() {
+    const targetMonth = this.state.settings.targetMonth || getCurrentYearMonth();
+    let initTx = null;
+    let incTx = null;
+
+    if (this.state.settings.initialBudget) {
+      const { initialBalanceTxId, monthlyIncomeTxId } = this.state.settings.initialBudget;
+      if (initialBalanceTxId) {
+        initTx = this.state.transactions.find(t => t.id === initialBalanceTxId);
+      }
+      if (monthlyIncomeTxId) {
+        incTx = this.state.transactions.find(t => t.id === monthlyIncomeTxId);
+      }
+    }
+
+    // Fallback arama (eski sürümler veya ID eşleşmeme durumu için)
+    if (!initTx) {
+      initTx = this.state.transactions.find(t =>
+        t.title === 'Mevcut Nakit / Başlangıç Bakiyesi' || (t.notes && t.notes.includes('başlangıç devir bakiyesi'))
+      );
+    }
+    if (!incTx) {
+      incTx = this.state.transactions.find(t =>
+        t.title === 'Aylık Düzenli Gelir (Burs / Harçlık / Maaş)' || (t.notes && t.notes.includes('düzenli bütçe geliri'))
+      );
+    }
+
+    return {
+      initialBalance: initTx ? initTx.amount : (this.state.settings.initialBudget?.initialBalance || 0),
+      monthlyIncome: incTx ? incTx.amount : (this.state.settings.initialBudget?.monthlyIncome || 0),
+      targetMonth: (initTx?.date ? String(initTx.date).slice(0, 7) : null) || (incTx?.date ? String(incTx.date).slice(0, 7) : null) || targetMonth,
+      initialBalanceTxId: initTx ? initTx.id : null,
+      monthlyIncomeTxId: incTx ? incTx.id : null
+    };
+  }
+
+  updateInitialBudget({ initialBalance = 0, monthlyIncome = 0, targetMonth = '' }) {
+    const current = this.getInitialBudget();
+    const monthStr = targetMonth || current.targetMonth || this.state.settings.targetMonth || getCurrentYearMonth();
+    const txDate = `${monthStr}-01`;
+
+    const newInitBal = Number(initialBalance) || 0;
+    const newMonthlyInc = Number(monthlyIncome) || 0;
+
+    let initBalId = current.initialBalanceTxId;
+    let monIncId = current.monthlyIncomeTxId;
+
+    // 1. Başlangıç Bakiyesi Güncelle / Ekle / Sil
+    if (newInitBal > 0) {
+      if (initBalId && this.state.transactions.some(t => t.id === initBalId)) {
+        this.updateTransaction(initBalId, {
+          amount: Math.round(newInitBal * 100) / 100,
+          date: txDate
+        });
+      } else {
+        initBalId = generateUUID();
+        this.addTransaction({
+          id: initBalId,
+          title: 'Mevcut Nakit / Başlangıç Bakiyesi',
+          amount: Math.round(newInitBal * 100) / 100,
+          type: 'income',
+          categoryId: 'inc_other',
+          date: txDate,
+          notes: 'Bütçe başlangıç devir bakiyesi'
+        });
+      }
+    } else if (initBalId) {
+      this.deleteTransaction(initBalId);
+      initBalId = null;
+    }
+
+    // 2. Aylık Düzenli Gelir Güncelle / Ekle / Sil
+    if (newMonthlyInc > 0) {
+      if (monIncId && this.state.transactions.some(t => t.id === monIncId)) {
+        this.updateTransaction(monIncId, {
+          amount: Math.round(newMonthlyInc * 100) / 100,
+          date: txDate
+        });
+      } else {
+        monIncId = generateUUID();
+        this.addTransaction({
+          id: monIncId,
+          title: 'Aylık Düzenli Gelir (Burs / Harçlık / Maaş)',
+          amount: Math.round(newMonthlyInc * 100) / 100,
+          type: 'income',
+          categoryId: 'inc_kyk',
+          date: txDate,
+          notes: 'Aylık düzenli bütçe geliri'
+        });
+      }
+    } else if (monIncId) {
+      this.deleteTransaction(monIncId);
+      monIncId = null;
+    }
+
+    this.state.settings.targetMonth = monthStr;
+    this.state.settings.initialBudget = {
+      initialBalance: newInitBal,
+      monthlyIncome: newMonthlyInc,
+      targetMonth: monthStr,
+      initialBalanceTxId: initBalId,
+      monthlyIncomeTxId: monIncId
+    };
+
+    this.notify();
+    return true;
   }
 
   resetAndRestartOnboarding() {

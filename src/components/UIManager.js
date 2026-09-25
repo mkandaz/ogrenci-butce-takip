@@ -130,6 +130,7 @@ export class UIManager {
     this.btnExportJson = document.getElementById('btn-export-json');
     this.btnOpenImport = document.getElementById('btn-open-import');
     this.btnLoadSeed = document.getElementById('btn-load-seed');
+    this.btnEditInitialBudget = document.getElementById('btn-edit-initial-budget');
     this.btnResetData = document.getElementById('btn-reset-data');
     this.btnOpenAddModal = document.getElementById('btn-open-add-modal');
 
@@ -264,6 +265,14 @@ export class UIManager {
         this.backupDropdown?.classList.add('hidden');
         this.store.loadDemoSeedData();
         showToast('Demo veriler başarıyla yüklendi.', 'success');
+      });
+    }
+
+    // Başlangıç Bütçesini Düzenle
+    if (this.btnEditInitialBudget) {
+      this.btnEditInitialBudget.addEventListener('click', () => {
+        this.backupDropdown?.classList.add('hidden');
+        this.modalManager.openInitialBudgetModal();
       });
     }
 
@@ -414,6 +423,13 @@ export class UIManager {
     const currency = settings.currency || 'TRY';
     const lang = getLanguage();
 
+    if (this.currencySelect && this.currencySelect.value !== currency) {
+      this.currencySelect.value = currency;
+    }
+    if (this.langSelect && this.langSelect.value !== lang) {
+      this.langSelect.value = lang;
+    }
+
     this.renderHeaderDate(lang);
     this.renderDashboardCards(summary, currency, lang);
     this.renderAlertBanner(summary);
@@ -421,8 +437,16 @@ export class UIManager {
     this.renderCategoryFilterDropdown(lang);
     this.renderTransactions(currency, lang);
     this.renderCharts(transactions, summary, currency, lang);
+    this.updateCurrencySymbols(currency);
     this.updateStaticTranslations();
     this.refreshIcons();
+  }
+
+  updateCurrencySymbols(currency) {
+    const symbol = getCurrencySymbol(currency);
+    document.querySelectorAll('.currency-symbol').forEach(el => {
+      el.textContent = symbol;
+    });
   }
 
   renderHeaderDate(lang) {

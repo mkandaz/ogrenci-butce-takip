@@ -19,9 +19,22 @@ export default {
     exportJson: 'Yedek İndir (JSON Export)',
     importJson: 'Yedek Yükle (JSON Import)',
     loadDemo: 'Demo Verilerini Yükle',
+    editInitialBudget: 'Başlangıç Bütçesini Düzenle',
     resetAndRestart: 'Sıfırlama & Yeniden Başlat',
     resetData: 'Verileri Sıfırla / Yeni Başlangıç',
     resetDataDesc: 'Onboarding ekranına döner'
+  },
+  initialBudgetModal: {
+    title: 'Başlangıç Bütçesini Düzenle',
+    desc: 'Başlangıç nakit bakiyenizi, düzenli aylık gelirinizi ve takip başlangıç ayınızı güncelleyin.',
+    initialBalance: 'Başlangıç Bakiyesi',
+    initialBalancePlaceholder: 'Örn: 1500 (Cüzdan/Banka)',
+    monthlyIncome: 'Aylık Düzenli Gelir (Burs/Harçlık)',
+    monthlyIncomePlaceholder: 'Örn: 4000 (KYK/Aile)',
+    targetMonth: 'Takip Başlangıç Ayı',
+    cancel: 'Vazgeç',
+    save: 'Güncelle ve Kaydet',
+    success: 'Başlangıç bütçeniz başarıyla güncellendi!'
   },
   cards: {
     netBalance: 'Kalan Net Bütçe',

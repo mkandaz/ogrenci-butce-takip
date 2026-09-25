@@ -19,9 +19,22 @@ export default {
     exportJson: 'Export Backup (JSON Export)',
     importJson: 'Import Backup (JSON Import)',
     loadDemo: 'Load Demo Data',
+    editInitialBudget: 'Edit Initial Budget',
     resetAndRestart: 'Reset & Restart',
     resetData: 'Reset Data / Fresh Start',
     resetDataDesc: 'Returns to Onboarding screen'
+  },
+  initialBudgetModal: {
+    title: 'Edit Initial Budget',
+    desc: 'Update your starting cash balance, regular monthly income, and target month.',
+    initialBalance: 'Starting Balance',
+    initialBalancePlaceholder: 'e.g. 1500 (Cash/Bank)',
+    monthlyIncome: 'Monthly Regular Income (Scholarship/Family)',
+    monthlyIncomePlaceholder: 'e.g. 4000 (Scholarship/Family)',
+    targetMonth: 'Target Month',
+    cancel: 'Cancel',
+    save: 'Update & Save',
+    success: 'Initial budget updated successfully!'
   },
   cards: {
     netBalance: 'Remaining Net Budget',
