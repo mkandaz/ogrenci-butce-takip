@@ -9,6 +9,8 @@ export class BudgetStore {
     this.listeners = [];
     this.localChangeListeners = [];
     this.hasUnsyncedChanges = false;
+    this.dirtySettings = false;
+    this.dirtyPresets = false;
     this.isApplyingRemote = false;
     this.state = this.loadState();
   }
@@ -124,6 +126,8 @@ export class BudgetStore {
 
   markSynced() {
     this.hasUnsyncedChanges = false;
+    this.dirtySettings = false;
+    this.dirtyPresets = false;
   }
 
   withRemoteUpdate(fn) {
@@ -162,6 +166,9 @@ export class BudgetStore {
       ...partial,
       updatedAt: Date.now()
     };
+    if (!this.isApplyingRemote) {
+      this.dirtySettings = true;
+    }
     this.emitLocalChange('settings:update', partial);
     this.notify();
   }
@@ -414,6 +421,9 @@ export class BudgetStore {
       monthlyIncomeTxId: monIncId
     };
     this.state.settings.updatedAt = Date.now();
+    if (!this.isApplyingRemote) {
+      this.dirtySettings = true;
+    }
     this.emitLocalChange('settings:initialBudget', this.state.settings.initialBudget);
     this.notify();
     return true;
@@ -485,6 +495,9 @@ export class BudgetStore {
       };
     });
     this.state.settings.presetsUpdatedAt = timestamp;
+    if (!this.isApplyingRemote) {
+      this.dirtyPresets = true;
+    }
     this.saveToStorage();
     this.emitLocalChange('presets:update', newPresets);
     this.notify();

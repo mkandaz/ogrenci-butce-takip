@@ -649,21 +649,33 @@ function createMockClient(handlers = {}) {
         update: (payload) => {
           state.action = 'update';
           state.payload = payload;
-          const updateBuilder = {
+          const createEqResult = () => {
+            const resultObj = {
+              eq: (colNext, valNext) => {
+                state.eqs[colNext] = valNext;
+                return createEqResult();
+              },
+              then: (resolve, reject) => {
+                try {
+                  if (handlers[table]?.update) {
+                    Promise.resolve(handlers[table].update(payload, state.eqs, state)).then(resolve, reject);
+                  } else {
+                    resolve({ data: [payload], error: null });
+                  }
+                } catch (e) {
+                  reject(e);
+                }
+              }
+            };
+            return resultObj;
+          };
+
+          return {
             eq: (col1, val1) => {
               state.eqs[col1] = val1;
-              return {
-                eq: async (col2, val2) => {
-                  state.eqs[col2] = val2;
-                  if (handlers[table]?.update) {
-                    return handlers[table].update(payload, state.eqs, state);
-                  }
-                  return { data: [payload], error: null };
-                }
-              };
+              return createEqResult();
             }
           };
-          return updateBuilder;
         },
         then: (resolve, reject) => {
           if (handlers[table]?.select) {
@@ -1932,6 +1944,433 @@ console.log('\n--- 11. FAZ 3 YEREL TARİH (LOCAL TIMEZONE), DATE-ONLY VE UTC AYR
   });
 
   assert(prefillPassed && prefillPassed.date === getLocalDateString(), 'TC-52 Quick preset işlem tarihi için getDefaultTransactionDate() yerel tarih sağladı');
+}
+
+// --------------------------------------------------------------------------
+// 12. FAZ 3 REALTIME DÖNGÜ ÖNLEME (ANTI-LOOP), PULL-ONLY VE SELF-ECHO ENGELLEME TESTLERİ
+// --------------------------------------------------------------------------
+console.log('\n--- 12. FAZ 3 REALTIME DÖNGÜ ÖNLEME (ANTI-LOOP), PULL-ONLY VE SELF-ECHO ENGELLEME TESTLERİ ---');
+
+// TC-53: Realtime Eventi Geldiğinde pullOnly: true ile Çalışma ve Sıfır Cloud Write (Zero Write Guarantee)
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+
+  const store = new BudgetStore();
+  const fakeUser = { id: generateUUID() };
+  let cloudWriteCount = 0;
+  const writtenTables = [];
+
+  const mockClient = createMockClient({
+    user_sync_metadata: {
+      maybeSingle: () => ({
+        data: { user_id: fakeUser.id, schema_version: '1.1.0', last_synced_at: new Date().toISOString() },
+        error: null
+      }),
+      update: () => {
+        cloudWriteCount++;
+        writtenTables.push('user_sync_metadata');
+        return { error: null };
+      }
+    },
+    user_settings: {
+      maybeSingle: () => ({
+        data: {
+          currency: 'TRY',
+          language: 'tr',
+          onboarded: true,
+          updated_at: '2026-09-20T10:00:00.000Z'
+        },
+        error: null
+      }),
+      upsert: () => {
+        cloudWriteCount++;
+        writtenTables.push('user_settings');
+        return { data: {}, error: null };
+      }
+    },
+    presets: {
+      select: () => ({
+        data: [{
+          preset_key: 'food',
+          title: 'Yemek',
+          amount: 50,
+          type: 'expense',
+          category_id: 'exp_food',
+          icon: 'utensils',
+          sort_order: 1,
+          updated_at: '2026-09-20T10:00:00.000Z'
+        }],
+        error: null
+      }),
+      upsert: () => {
+        cloudWriteCount++;
+        writtenTables.push('presets');
+        return { data: [], error: null };
+      }
+    },
+    transactions: {
+      select: () => ({
+        data: [{
+          id: generateUUID(),
+          user_id: fakeUser.id,
+          title: 'Diğer Cihazın Eklediği Harcama',
+          amount: 45,
+          type: 'expense',
+          category_id: 'exp_food',
+          date: '2026-09-27',
+          is_deleted: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }],
+        error: null
+      }),
+      upsert: () => {
+        cloudWriteCount++;
+        writtenTables.push('transactions:upsert');
+        return { data: [], error: null };
+      },
+      update: () => {
+        cloudWriteCount++;
+        writtenTables.push('transactions:update');
+        return { data: [], error: null };
+      }
+    }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  sync.setLastSyncedAt(new Date(Date.now() - 60000).toISOString());
+  authService.currentUser = fakeUser;
+
+  // Realtime tetiklemesi pull-only olarak simüle ediliyor
+  const result = await sync.sync({ user: fakeUser, reason: 'realtime', pullOnly: true });
+
+  assert(result.success === true, 'TC-53 Realtime pull-only senkronizasyonu başarılı oldu');
+  assert(cloudWriteCount === 0, `TC-53 Realtime kaynaklı sync sırasında buluta SIFIR yazma yapıldı (Cloud Write Count: ${cloudWriteCount})`);
+  assert(writtenTables.length === 0, 'TC-53 Hiçbir tabloya (user_settings, presets, transactions, user_sync_metadata) PUSH yapılmadı');
+  assert(store.getTransactions().some(t => t.title === 'Diğer Cihazın Eklediği Harcama'), 'TC-53 Diğer cihazın işlemi yerel store\'a hatasız çekildi');
+}
+
+// TC-54: Self-Echo Tespiti ve Engellemesi (Self-Echo Prevention via recordLocalWrite & isSelfEcho)
+{
+  const store = new BudgetStore();
+  const fakeUser = { id: generateUUID() };
+
+  const mockClient = {
+    channel: (name) => {
+      let changeHandler = null;
+      const ch = {
+        name,
+        on: (type, filter, handler) => {
+          if (filter.table === 'transactions') changeHandler = handler;
+          return ch;
+        },
+        subscribe: (cb) => {
+          if (cb) cb('SUBSCRIBED');
+          return ch;
+        }
+      };
+      // Dispatch helper
+      ch._dispatch = (payload) => {
+        if (changeHandler) changeHandler(payload);
+      };
+      mockClient._lastChannel = ch;
+      return ch;
+    },
+    removeChannel: () => {},
+    from: () => ({ select: () => ({ data: [], error: null }) })
+  };
+
+  const sync = new SyncService(store, mockClient);
+  authService.currentUser = fakeUser;
+  sync.setupRealtimeSubscription(fakeUser);
+
+  const localTxId = generateUUID();
+  const localUpdatedAt = '2026-09-27T00:45:00.000Z';
+
+  // 1. Yerel istemci yazma yaptı ve bunu kaydetti
+  sync.recordLocalWrite(localTxId, localUpdatedAt);
+
+  // 2. Self-echo testi doğrudan fonksiyon üzerinden
+  const isEcho = sync.isSelfEcho('transactions', {
+    new: { id: localTxId, updated_at: localUpdatedAt }
+  });
+  assert(isEcho === true, 'TC-54 sync.isSelfEcho kendi yazdığımız ID ve timestamp için TRUE döndürdü');
+
+  // 3. Realtime event akışı üzerinden self-echo testi
+  mockClient._lastChannel._dispatch({
+    eventType: 'UPDATE',
+    table: 'transactions',
+    new: { id: localTxId, updated_at: localUpdatedAt }
+  });
+
+  assert(sync.remoteSyncTimer === null, 'TC-54 Self-echo Realtime event geldiğinde remoteSyncTimer PLANLANMADI (Echo engellendi)');
+
+  // 4. Farklı bir cihazdan gelen yabancı event testi
+  const foreignTxId = generateUUID();
+  const isForeignEcho = sync.isSelfEcho('transactions', {
+    new: { id: foreignTxId, updated_at: '2026-09-27T00:46:00.000Z' }
+  });
+  assert(isForeignEcho === false, 'TC-54 Başka cihazdan gelen işlem için isSelfEcho FALSE döndürdü');
+
+  mockClient._lastChannel._dispatch({
+    eventType: 'INSERT',
+    table: 'transactions',
+    new: { id: foreignTxId, updated_at: '2026-09-27T00:46:00.000Z' }
+  });
+
+  assert(Boolean(sync.remoteSyncTimer), 'TC-54 Başka cihazdan gelen işlem için remoteSyncTimer başarıyla PLANLANDI');
+  clearTimeout(sync.remoteSyncTimer);
+  sync.remoteSyncTimer = null;
+}
+
+// TC-55: Cloud Ayar/Preset Çekildiğinde updatedAt Korunması ve Dirty Flag Temizliği
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+
+  const store = new BudgetStore();
+  const fakeUser = { id: generateUUID() };
+  let pushedSettings = null;
+  let pushedPresets = null;
+
+  const cloudSettingsUpdatedAt = '2026-09-26T20:00:00.000Z';
+  const cloudPresetUpdatedAt = '2026-09-26T20:00:00.000Z';
+
+  const mockClient = createMockClient({
+    user_sync_metadata: {
+      maybeSingle: () => ({
+        data: { user_id: fakeUser.id, schema_version: '1.1.0', last_synced_at: '2026-09-26T20:00:00.000Z' },
+        error: null
+      }),
+      update: () => ({ error: null })
+    },
+    user_settings: {
+      maybeSingle: () => ({
+        data: {
+          currency: 'EUR',
+          language: 'en',
+          onboarded: true,
+          updated_at: cloudSettingsUpdatedAt
+        },
+        error: null
+      }),
+      upsert: (payload) => {
+        pushedSettings = payload;
+        return { data: payload, error: null };
+      }
+    },
+    presets: {
+      select: () => ({
+        data: [{
+          preset_key: 'coffee',
+          title: 'Kahve',
+          amount: 60,
+          type: 'expense',
+          category_id: 'exp_food',
+          icon: 'coffee',
+          sort_order: 1,
+          updated_at: cloudPresetUpdatedAt
+        }],
+        error: null
+      }),
+      upsert: (payload) => {
+        pushedPresets = payload;
+        return { data: payload, error: null };
+      }
+    },
+    transactions: {
+      select: () => ({ data: [], error: null })
+    }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  sync.setLastSyncedAt('2026-09-26T19:00:00.000Z');
+  authService.currentUser = fakeUser;
+
+  // 1. Delta pull çalıştırılıyor
+  await sync.sync({ user: fakeUser, reason: 'realtime', pullOnly: true });
+
+  assert(store.state.settings.currency === 'EUR', 'TC-55 Buluttan currency: EUR çekildi');
+  assert(store.state.settings.updatedAt === new Date(cloudSettingsUpdatedAt).getTime(), 'TC-55 Cloud settings updatedAt değeri yerelde birebir korundu (Date.now üretilmedi)');
+  assert(store.dirtySettings === false, 'TC-55 Remote çekim sonrası store.dirtySettings=false oldu');
+  assert(store.dirtyPresets === false, 'TC-55 Remote çekim sonrası store.dirtyPresets=false oldu');
+
+  // 2. Hemen ardından normal (pullOnly: false) sync çalıştırılıyor
+  pushedSettings = null;
+  pushedPresets = null;
+  await sync.sync({ user: fakeUser, reason: 'test', pullOnly: false });
+
+  assert(pushedSettings === null, 'TC-55 Temiz store ayarları buluta ASLA tekrar PUSH edilmedi (Self-echo loop önlendi)');
+  assert(pushedPresets === null, 'TC-55 Temiz store presetleri buluta ASLA tekrar PUSH edilmedi');
+}
+
+// TC-56: Seri Realtime Bildirimlerinin Birleştirilmesi (Debouncing / Coalescing)
+{
+  const store = new BudgetStore();
+  const fakeUser = { id: generateUUID() };
+
+  const mockClient = createMockClient({
+    user_sync_metadata: {
+      maybeSingle: () => ({ data: { user_id: fakeUser.id, last_synced_at: new Date().toISOString() }, error: null })
+    },
+    user_settings: { maybeSingle: () => ({ data: null, error: null }) },
+    presets: { select: () => ({ data: [], error: null }) },
+    transactions: { select: () => ({ data: [], error: null }) }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  sync.setLastSyncedAt(new Date().toISOString());
+  authService.currentUser = fakeUser;
+
+  // 3 adet hızlı realtime event tetiklemesi
+  sync.scheduleRemoteDeltaSync(50);
+  const firstTimer = sync.remoteSyncTimer;
+  sync.scheduleRemoteDeltaSync(50);
+  const secondTimer = sync.remoteSyncTimer;
+  sync.scheduleRemoteDeltaSync(50);
+  const thirdTimer = sync.remoteSyncTimer;
+
+  assert(firstTimer !== secondTimer, 'TC-56 Yeni realtime event geldiğinde önceki timer iptal edildi');
+  assert(secondTimer !== thirdTimer, 'TC-56 Üçüncü eventte timer tekrar yenilendi');
+
+  clearTimeout(thirdTimer);
+  sync.remoteSyncTimer = null;
+}
+
+// TC-57: Background / Realtime Pull Sırasında UI Sync Status Dalgalanmasının Önlenmesi (Silent Pull)
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+
+  const store = new BudgetStore();
+  const fakeUser = { id: generateUUID() };
+  const statusHistory = [];
+
+  const mockClient = createMockClient({
+    user_sync_metadata: {
+      maybeSingle: () => ({ data: { user_id: fakeUser.id, last_synced_at: new Date().toISOString() }, error: null })
+    },
+    user_settings: { maybeSingle: () => ({ data: null, error: null }) },
+    presets: { select: () => ({ data: [], error: null }) },
+    transactions: { select: () => ({ data: [], error: null }) }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  sync.setLastSyncedAt(new Date(Date.now() - 30000).toISOString());
+  authService.currentUser = fakeUser;
+
+  // Başlangıç durumu "synced"
+  sync.setStatus('synced', 'Bulut ile eşitlendi');
+
+  sync.onStatusChange((status) => {
+    statusHistory.push(status);
+  });
+
+  // pullOnly: true ve yerel store temiz
+  await sync.sync({ user: fakeUser, reason: 'realtime', pullOnly: true });
+
+  assert(!statusHistory.includes('syncing'), 'TC-57 Background pullOnly sync sırasında durum ASLA "syncing" olmadı (UI dalgalanması önlendi)');
+  assert(sync.getStatus() === 'synced', 'TC-57 Background pullOnly sync sonrası durum "synced" olarak kaldı');
+}
+
+// TC-58: Gerçek Yerel Değişiklik Olduğunda Normal Push Akışının Çalışması
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+
+  const store = new BudgetStore();
+  const fakeUser = { id: generateUUID() };
+  let pushedTransactions = null;
+  let metadataUpdated = false;
+  const statusHistory = [];
+
+  const mockClient = createMockClient({
+    user_sync_metadata: {
+      maybeSingle: () => ({
+        data: { user_id: fakeUser.id, schema_version: '1.1.0', last_synced_at: new Date(Date.now() - 60000).toISOString() },
+        error: null
+      }),
+      update: () => {
+        metadataUpdated = true;
+        return { error: null };
+      }
+    },
+    user_settings: { maybeSingle: () => ({ data: null, error: null }) },
+    presets: { select: () => ({ data: [], error: null }) },
+    transactions: {
+      select: () => ({ data: [], error: null }),
+      upsert: (payload) => {
+        pushedTransactions = payload;
+        return { data: payload, error: null };
+      }
+    }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  sync.setLastSyncedAt(new Date(Date.now() - 60000).toISOString());
+  authService.currentUser = fakeUser;
+
+  sync.onStatusChange((st) => statusHistory.push(st));
+
+  // Kullanıcı yerel işlem ekliyor
+  store.addTransaction({
+    title: 'Gerçek Kullanıcı Gideri',
+    amount: 85,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-27'
+  });
+
+  assert(store.hasUnsyncedChanges === true, 'TC-58 addTransaction sonrası store.hasUnsyncedChanges=true oldu');
+
+  // Normal kullanıcı sync tetiklemesi
+  await sync.sync({ user: fakeUser, reason: 'local-change', pullOnly: false });
+
+  assert(statusHistory.includes('syncing'), 'TC-58 Gerçek yerel değişiklikte durum "syncing" aşamasından geçti');
+  assert(Boolean(pushedTransactions), 'TC-58 Yerel işlem buluta push edildi');
+  assert(pushedTransactions[0].title === 'Gerçek Kullanıcı Gideri', 'TC-58 Doğru işlem verisi push edildi');
+  assert(metadataUpdated === true, 'TC-58 Gerçek veri gönderildiği için user_sync_metadata güncellendi');
+  assert(store.hasUnsyncedChanges === false, 'TC-58 Başarılı sync sonrası store.hasUnsyncedChanges=false oldu');
+  assert(sync.getStatus() === 'synced', 'TC-58 Son durum "synced" oldu');
+}
+
+// TC-59: user_sync_metadata Sadece Push Yapıldığında Güncellenir (Zero Write on Read/Pull)
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+
+  const store = new BudgetStore();
+  const fakeUser = { id: generateUUID() };
+  let metadataUpdateCalls = 0;
+
+  const mockClient = createMockClient({
+    user_sync_metadata: {
+      maybeSingle: () => ({
+        data: { user_id: fakeUser.id, schema_version: '1.1.0', last_synced_at: new Date(Date.now() - 60000).toISOString() },
+        error: null
+      }),
+      update: () => {
+        metadataUpdateCalls++;
+        return { error: null };
+      }
+    },
+    user_settings: { maybeSingle: () => ({ data: null, error: null }) },
+    presets: { select: () => ({ data: [], error: null }) },
+    transactions: { select: () => ({ data: [], error: null }) }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  sync.setLastSyncedAt(new Date(Date.now() - 60000).toISOString());
+  authService.currentUser = fakeUser;
+
+  // 1. pullOnly: true ile delta sync
+  await sync.sync({ user: fakeUser, reason: 'realtime', pullOnly: true });
+  assert(metadataUpdateCalls === 0, 'TC-59 pullOnly: true iken user_sync_metadata ASLA güncellenmedi');
+
+  // 2. pullOnly: false ama yerel değişiklik yok
+  await sync.sync({ user: fakeUser, reason: 'idle-check', pullOnly: false });
+  assert(metadataUpdateCalls === 0, 'TC-59 Değişiklik olmayan temiz sync sırasında user_sync_metadata ASLA güncellenmedi');
 }
 
 console.log('\n====================================================');

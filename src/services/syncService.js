@@ -17,6 +17,8 @@ export class SyncService {
     this.debounceTimer = null;
     this.remoteSyncTimer = null;
     this.pendingSyncRequested = false;
+    this.pendingRemotePullRequested = false;
+    this.recentLocalWrites = new Map();
     this.lastSyncAttemptTime = 0;
     this.realtimeChannel = null;
     this.realtimeStatus = 'DISCONNECTED';
@@ -71,7 +73,7 @@ export class SyncService {
         this.pendingSyncRequested = true;
         return;
       }
-      await this.sync();
+      await this.sync({ reason: 'local-change', pullOnly: false });
     }, delay);
   }
 
@@ -80,10 +82,36 @@ export class SyncService {
       clearTimeout(this.debounceTimer);
       this.debounceTimer = null;
     }
-    return this.sync();
+    return this.sync({ reason: 'local-change', pullOnly: false });
   }
 
-  scheduleRemoteDeltaSync(delay = 500) {
+  recordLocalWrite(id, updatedAtIso) {
+    if (!this.recentLocalWrites) {
+      this.recentLocalWrites = new Map();
+    }
+    this.recentLocalWrites.set(id, updatedAtIso || 'ANY');
+    setTimeout(() => {
+      if (this.recentLocalWrites) {
+        this.recentLocalWrites.delete(id);
+      }
+    }, 15000);
+  }
+
+  isSelfEcho(tableName, payload) {
+    if (!this.recentLocalWrites) return false;
+    const record = payload?.new;
+    if (tableName === 'transactions' && record && record.id) {
+      if (this.recentLocalWrites.has(record.id)) {
+        const expected = this.recentLocalWrites.get(record.id);
+        if (expected === 'ANY' || !record.updated_at || record.updated_at === expected) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  scheduleRemoteDeltaSync(delay = 400) {
     if (this.remoteSyncTimer) {
       clearTimeout(this.remoteSyncTimer);
       this.remoteSyncTimer = null;
@@ -92,12 +120,12 @@ export class SyncService {
     this.remoteSyncTimer = setTimeout(async () => {
       this.remoteSyncTimer = null;
       if (this.isSyncing) {
-        this.pendingSyncRequested = true;
+        this.pendingRemotePullRequested = true;
         return;
       }
       const user = authService.getUser();
       if (user) {
-        await this.sync(user);
+        await this.sync({ user, reason: 'realtime', pullOnly: true });
       }
     }, delay);
   }
@@ -113,8 +141,12 @@ export class SyncService {
     this.realtimeChannel = client.channel(channelName);
 
     const handleRemoteChange = (tableName, payload) => {
+      if (this.isSelfEcho(tableName, payload)) {
+        console.info(`[SyncService] Realtime (${tableName}) değişikliği self-echo olarak tespit edildi, yoksayılıyor:`, payload?.new?.id);
+        return;
+      }
       console.info(`[SyncService] Realtime (${tableName}) değişikliği algılandı:`, payload?.eventType || payload);
-      this.scheduleRemoteDeltaSync(500);
+      this.scheduleRemoteDeltaSync(400);
     };
 
     this.realtimeChannel
@@ -184,7 +216,11 @@ export class SyncService {
       const user = authService.getUser();
       if (user && !this.isSyncing && !this.debounceTimer && !this.remoteSyncTimer) {
         console.info('[SyncService] Önplan güvenlik yoklaması (Foreground Polling 120s)...');
-        this.sync(user);
+        if (this.store && this.store.hasUnsyncedChanges) {
+          this.sync({ user, reason: 'polling', pullOnly: false });
+        } else {
+          this.sync({ user, reason: 'polling', pullOnly: true });
+        }
       }
     }, intervalMs);
     if (this.pollingInterval && typeof this.pollingInterval.unref === 'function') {
@@ -203,7 +239,7 @@ export class SyncService {
     if (typeof window === 'undefined' || this.windowListenersAttached) return;
     this.windowListenersAttached = true;
 
-    const handleFocusOrVisible = () => {
+    const handleFocusOrVisible = (triggerName = 'Sekme görünür/odakta') => {
       const user = authService.getUser();
       if (!user) return;
       const now = Date.now();
@@ -211,28 +247,37 @@ export class SyncService {
       if (elapsed < 5000 && (!this.store || !this.store.hasUnsyncedChanges)) {
         return;
       }
-      console.info('[SyncService] Sekme görünür/odakta -> Delta sync kontrolü...');
-      this.scheduleDebouncedSync(300);
+      if (this.store && this.store.hasUnsyncedChanges) {
+        console.info(`[SyncService] ${triggerName} -> Bekleyen yerel değişiklikler push edilecek...`);
+        this.scheduleDebouncedSync(300);
+      } else {
+        console.info(`[SyncService] ${triggerName} -> Delta pull kontrolü...`);
+        this.scheduleRemoteDeltaSync(300);
+      }
     };
 
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
-          handleFocusOrVisible();
+          handleFocusOrVisible('Görünürlük değişti (visible)');
         }
       });
     }
 
     window.addEventListener('focus', () => {
-      handleFocusOrVisible();
+      handleFocusOrVisible('Pencere odaklandı (focus)');
     });
 
     window.addEventListener('online', () => {
       console.info('[SyncService] İnternet bağlantısı sağlandı -> Senkronizasyon tetikleniyor...');
       const user = authService.getUser();
       if (user) {
-        this.setStatus('syncing', 'Bağlantı kuruldu, eşitleniyor...');
-        this.scheduleDebouncedSync(100);
+        if (this.store && this.store.hasUnsyncedChanges) {
+          this.setStatus('syncing', 'Bağlantı kuruldu, eşitleniyor...');
+          this.scheduleDebouncedSync(100);
+        } else {
+          this.scheduleRemoteDeltaSync(100);
+        }
       } else {
         this.setStatus('idle');
       }
@@ -334,14 +379,27 @@ export class SyncService {
   }
 
   // 2. Ana Senkronizasyon Akışı
-  async sync(passedUser = null) {
+  async sync(options = {}) {
     const client = this.getClient();
     if ((!this.client && !isSupabaseConfigured()) || !client) {
       this.setStatus('offline', 'Supabase yapılandırılmamış');
       return { success: false, reason: 'unconfigured' };
     }
 
-    const user = passedUser || authService.getUser();
+    let user = null;
+    let opts = {};
+    if (options && options.id && !options.reason) {
+      user = options;
+      opts = {};
+    } else if (options && typeof options === 'object') {
+      opts = options;
+      user = opts.user || null;
+    }
+    if (!user) {
+      user = (this.authService && typeof this.authService.getUser === 'function')
+        ? this.authService.getUser()
+        : authService.getUser();
+    }
     if (!user) {
       this.setStatus('idle');
       return { success: false, reason: 'not_authenticated' };
@@ -352,14 +410,30 @@ export class SyncService {
       return { success: false, reason: 'offline' };
     }
 
+    const pullOnly = Boolean(
+      opts.pullOnly ||
+      (opts.reason === 'realtime') ||
+      (opts.reason === 'polling' && (!this.store || !this.store.hasUnsyncedChanges)) ||
+      ((opts.reason === 'focus' || opts.reason === 'visibility') && (!this.store || !this.store.hasUnsyncedChanges))
+    );
+
     if (this.isSyncing) {
-      this.pendingSyncRequested = true;
+      if (pullOnly) {
+        this.pendingRemotePullRequested = true;
+      } else {
+        this.pendingSyncRequested = true;
+      }
       return { success: false, reason: 'already_syncing' };
     }
 
     this.isSyncing = true;
     this.lastSyncAttemptTime = Date.now();
-    this.setStatus('syncing', 'Bulut ile eşitleniyor...');
+
+    // Sadece gerçek kullanıcı değişikliği veya önceden pending durumdaysa UI'da "syncing" göster
+    const isBackgroundPull = pullOnly && (!this.store || !this.store.hasUnsyncedChanges);
+    if (!isBackgroundPull) {
+      this.setStatus('syncing', 'Bulut ile eşitleniyor...');
+    }
 
     try {
       // Adım 1: user_sync_metadata kontrolü
@@ -381,18 +455,17 @@ export class SyncService {
         await this.runInitialMigration(user);
       } else if (!localLastSyncedAt) {
         // FRESH DEVICE / EMPTY LOCALSTORAGE BOOTSTRAP
-        // Cloud'da meta var, fakat bu cihazda daha önce senkronizasyon yapılmamış (local last_synced_at YOK).
         console.info('[SyncService] Fresh device tespit edildi. Full Cloud Bootstrap başlatılıyor...');
         await this.runFullCloudBootstrap(user, meta);
       } else {
-        // DELTA SYNC (Daha önce ilklendirilmiş ve bu cihazda eşitlenmiş hesap)
-        console.info('[SyncService] Çift yönlü delta senkronizasyonu başlatılıyor...');
-        await this.runDeltaSync(user, meta);
+        // DELTA SYNC
+        console.info(`[SyncService] Delta senkronizasyonu başlatılıyor (pullOnly: ${pullOnly})...`);
+        await this.runDeltaSync(user, meta, { pullOnly });
       }
 
       const nowIso = new Date().toISOString();
       this.setLastSyncedAt(nowIso);
-      if (this.store && typeof this.store.markSynced === 'function') {
+      if (!pullOnly && this.store && typeof this.store.markSynced === 'function') {
         this.store.markSynced();
       }
       this.setStatus('synced', 'Bulut ile başarıyla eşitlendi');
@@ -406,6 +479,9 @@ export class SyncService {
       if (this.pendingSyncRequested) {
         this.pendingSyncRequested = false;
         this.scheduleDebouncedSync(300);
+      } else if (this.pendingRemotePullRequested) {
+        this.pendingRemotePullRequested = false;
+        this.scheduleRemoteDeltaSync(300);
       }
     }
   }
@@ -618,10 +694,11 @@ export class SyncService {
   }
 
   // 4. İki Yönlü Delta Senkronizasyonu (Pull + Push)
-  async runDeltaSync(user, cloudMeta) {
+  async runDeltaSync(user, cloudMeta, { pullOnly = false } = {}) {
     const client = this.getClient();
     const lastSyncedAt = this.getLastSyncedAt() || null;
     const lastSyncedTime = lastSyncedAt ? (new Date(lastSyncedAt).getTime() || 0) : 0;
+    let hasPushedData = false;
 
     // --- PULL & SYNC: user_settings (Çift yönlü senkronizasyon & Last-Write-Wins) ---
     const { data: cloudSettings, error: settingsErr } = await client
@@ -639,7 +716,7 @@ export class SyncService {
     const cloudSettingsUpdated = cloudSettings?.updated_at ? new Date(cloudSettings.updated_at).getTime() : 0;
 
     if (cloudSettings && cloudSettingsUpdated > localSettingsUpdated) {
-      // Buluttaki ayarlar daha güncel -> Yereli güncelle
+      // Buluttaki ayarlar daha güncel -> Yereli güncelle (Cloud updated_at korunur)
       this.store.state.settings = {
         ...this.store.state.settings,
         currency: cloudSettings.currency || this.store.state.settings.currency,
@@ -658,8 +735,9 @@ export class SyncService {
         updatedAt: cloudSettingsUpdated
       };
       this.store.state.onboarded = Boolean(cloudSettings.onboarded);
-    } else if (!cloudSettings || localSettingsUpdated > cloudSettingsUpdated) {
-      // Yerel ayarlar daha güncel veya bulutta henüz yok -> Buluta gönder
+      if (this.store) this.store.dirtySettings = false;
+    } else if (!pullOnly && (this.store?.dirtySettings || (!cloudSettings && localSettingsUpdated > 0) || (localSettingsUpdated > cloudSettingsUpdated))) {
+      // Yerel ayarlar daha güncel veya bulutta henüz yok -> Yalnızca pullOnly DEĞİLSE ve yerel ayar dirty ise gönder
       const initBudget = localSettings.initialBudget || {};
       const userSettingsPayload = {
         user_id: user.id,
@@ -684,6 +762,8 @@ export class SyncService {
       if (pushSettingsErr) {
         throw new Error(`user_settings gönderilemedi: ${pushSettingsErr.message}`);
       }
+      if (this.store) this.store.dirtySettings = false;
+      hasPushedData = true;
     }
 
     // --- PULL & SYNC: presets (Çift yönlü senkronizasyon & Last-Write-Wins) ---
@@ -720,10 +800,10 @@ export class SyncService {
         // Yereldeki preset daha yeni veya eşit
         mergedPresets.push({
           ...lp,
-          updatedAt: localUpdated || Date.now()
+          updatedAt: localUpdated || cloudUpdated || Date.now()
         });
 
-        if (!cp || localUpdated > cloudUpdated) {
+        if (!pullOnly && (this.store?.dirtyPresets || (!cp && localUpdated > 0) || (cp && localUpdated > cloudUpdated))) {
           presetsToPush.push({
             user_id: user.id,
             preset_key: lp.id,
@@ -754,7 +834,10 @@ export class SyncService {
       }
     }
 
-    if (presetsToPush.length > 0) {
+    this.store.state.settings.presets = mergedPresets;
+    if (this.store) this.store.dirtyPresets = false;
+
+    if (!pullOnly && presetsToPush.length > 0) {
       const { error: pushPresetsErr } = await client
         .from('presets')
         .upsert(presetsToPush, { onConflict: 'user_id,preset_key' });
@@ -762,9 +845,8 @@ export class SyncService {
       if (pushPresetsErr) {
         throw new Error(`presets gönderilemedi: ${pushPresetsErr.message}`);
       }
+      hasPushedData = true;
     }
-
-    this.store.state.settings.presets = mergedPresets;
 
     // --- PULL: transactions (Delta: Sadece updated_at > lastSyncedAt olanlar veya tümü) ---
     let txQuery = client
@@ -814,76 +896,87 @@ export class SyncService {
       this.store.state.transactions = Array.from(localMap.values());
     }
 
-    // --- PUSH: Soft-delete kuyruğundakileri bulutta UPDATE et (Asla INSERT/UPSERT değil) ---
-    const deletedQueue = this.getDeletedQueue();
-    if (deletedQueue.length > 0) {
-      const successfullyDeletedIds = [];
-      for (const item of deletedQueue) {
-        const { error: delErr } = await client
-          .from('transactions')
-          .update({
-            is_deleted: true,
-            deleted_at: item.deletedAt || new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', item.id)
-          .eq('user_id', user.id);
+    // --- PUSH: Soft-delete kuyruğundakileri bulutta UPDATE et (YALNIZCA pullOnly DEĞİLSE) ---
+    if (!pullOnly) {
+      const deletedQueue = this.getDeletedQueue();
+      if (deletedQueue.length > 0) {
+        const successfullyDeletedIds = [];
+        for (const item of deletedQueue) {
+          const { error: delErr } = await client
+            .from('transactions')
+            .update({
+              is_deleted: true,
+              deleted_at: item.deletedAt || new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', item.id)
+            .eq('user_id', user.id);
 
-        if (delErr) {
-          if (successfullyDeletedIds.length > 0) {
-            this.clearDeletedQueue(successfullyDeletedIds);
+          if (delErr) {
+            if (successfullyDeletedIds.length > 0) {
+              this.clearDeletedQueue(successfullyDeletedIds);
+            }
+            throw new Error(`Soft-delete güncellenemedi (${item.id}): ${delErr.message}`);
           }
-          throw new Error(`Soft-delete güncellenemedi (${item.id}): ${delErr.message}`);
+          successfullyDeletedIds.push(item.id);
         }
-        successfullyDeletedIds.push(item.id);
+
+        if (successfullyDeletedIds.length > 0) {
+          this.clearDeletedQueue(successfullyDeletedIds);
+          hasPushedData = true;
+        }
       }
 
-      if (successfullyDeletedIds.length > 0) {
-        this.clearDeletedQueue(successfullyDeletedIds);
-      }
-    }
+      // --- PUSH: Yerel güncel işlemleri buluta gönder (Delta: updatedAt > lastSyncedTime olanlar) ---
+      const localTxs = this.store.getTransactions();
+      const txToPush = lastSyncedTime > 0
+        ? localTxs.filter(t => t.updatedAt && new Date(t.updatedAt).getTime() > lastSyncedTime)
+        : [];
 
-    // --- PUSH: Yerel güncel işlemleri buluta gönder (Delta: updatedAt > lastSyncedTime olanlar) ---
-    const localTxs = this.store.getTransactions();
-    const txToPush = lastSyncedTime > 0
-      ? localTxs.filter(t => !t.updatedAt || new Date(t.updatedAt).getTime() > lastSyncedTime)
-      : [];
+      if (txToPush.length > 0) {
+        const txPayload = txToPush.map(t => {
+          const upIso = t.updatedAt ? new Date(t.updatedAt).toISOString() : new Date().toISOString();
+          this.recordLocalWrite(t.id, upIso);
+          return {
+            id: t.id,
+            user_id: user.id,
+            title: t.title,
+            amount: Math.round(Number(t.amount) * 100) / 100,
+            type: t.type,
+            category_id: t.categoryId,
+            date: t.date,
+            notes: t.notes || null,
+            is_deleted: false,
+            created_at: t.createdAt ? new Date(t.createdAt).toISOString() : new Date().toISOString(),
+            updated_at: upIso
+          };
+        });
 
-    if (txToPush.length > 0) {
-      const txPayload = txToPush.map(t => ({
-        id: t.id,
-        user_id: user.id,
-        title: t.title,
-        amount: Math.round(Number(t.amount) * 100) / 100,
-        type: t.type,
-        category_id: t.categoryId,
-        date: t.date,
-        notes: t.notes || null,
-        is_deleted: false,
-        created_at: t.createdAt ? new Date(t.createdAt).toISOString() : new Date().toISOString(),
-        updated_at: t.updatedAt ? new Date(t.updatedAt).toISOString() : new Date().toISOString()
-      }));
+        const { error: pushTxErr } = await client
+          .from('transactions')
+          .upsert(txPayload);
 
-      const { error: pushTxErr } = await client
-        .from('transactions')
-        .upsert(txPayload);
-
-      if (pushTxErr) {
-        throw new Error(`transactions gönderilemedi: ${pushTxErr.message}`);
+        if (pushTxErr) {
+          throw new Error(`transactions gönderilemedi: ${pushTxErr.message}`);
+        }
+        hasPushedData = true;
       }
     }
 
     // --- METADATA: user_sync_metadata last_synced_at güncelle ---
-    const syncTimestamp = new Date().toISOString();
-    const { error: metaUpdateErr } = await client
-      .from('user_sync_metadata')
-      .update({
-        last_synced_at: syncTimestamp
-      })
-      .eq('user_id', user.id);
+    // YALNIZCA bu cihaz buluta gerçek bir PUSH gerçekleştirdiyse cloud metadata'yı güncelle!
+    if (hasPushedData) {
+      const syncTimestamp = new Date().toISOString();
+      const { error: metaUpdateErr } = await client
+        .from('user_sync_metadata')
+        .update({
+          last_synced_at: syncTimestamp
+        })
+        .eq('user_id', user.id);
 
-    if (metaUpdateErr) {
-      throw new Error(`user_sync_metadata güncellenemedi: ${metaUpdateErr.message}`);
+      if (metaUpdateErr) {
+        console.warn(`[SyncService] user_sync_metadata güncellenemedi: ${metaUpdateErr.message}`);
+      }
     }
 
     // Yerel store'u kaydet ve UI'ı güncelle
