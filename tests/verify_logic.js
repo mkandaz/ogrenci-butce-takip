@@ -2,11 +2,11 @@ import fs from 'fs';
 import path from 'path';
 import { calculateSummary, getDaysRemainingInMonth, calculateBudgetHealth } from '../src/store/calculations.js';
 import { BudgetStore } from '../src/store/BudgetStore.js';
-import { formatCurrency, formatNumber, formatDate, formatMonthTitle, normalizeCurrency, getCurrencySymbol } from '../src/utils/formatters.js';
+import { formatCurrency, formatNumber, formatDate, formatTime, formatMonthTitle, normalizeCurrency, getCurrencySymbol } from '../src/utils/formatters.js';
 import { t, setLanguage, getLanguage } from '../src/i18n/index.js';
 import tr from '../src/i18n/tr.js';
 import en from '../src/i18n/en.js';
-import { generateUUID, isValidUUID, getLocalDateString, getCurrentYearMonth } from '../src/utils/helpers.js';
+import { generateUUID, isValidUUID, getLocalDateString, getCurrentYearMonth, compareTransactions } from '../src/utils/helpers.js';
 import { SafeStorage } from '../src/utils/storage.js';
 import { AuthService, authService } from '../src/services/authService.js';
 import { SyncService } from '../src/services/syncService.js';
@@ -2371,6 +2371,198 @@ console.log('\n--- 12. FAZ 3 REALTIME DÖNGÜ ÖNLEME (ANTI-LOOP), PULL-ONLY VE 
   // 2. pullOnly: false ama yerel değişiklik yok
   await sync.sync({ user: fakeUser, reason: 'idle-check', pullOnly: false });
   assert(metadataUpdateCalls === 0, 'TC-59 Değişiklik olmayan temiz sync sırasında user_sync_metadata ASLA güncellenmedi');
+}
+
+// --------------------------------------------------------------------------
+// 13. FAZ 3 İŞLEM SIRALAMASI (TIE-BREAKER CREATED_AT) VE YEREL SAAT GÖSTERİMİ TESTLERİ
+// --------------------------------------------------------------------------
+console.log('\n--- 13. FAZ 3 İŞLEM SIRALAMASI (TIE-BREAKER CREATED_AT) VE YEREL SAAT GÖSTERİMİ TESTLERİ ---');
+
+// TC-60: Aynı Tarih (date) İçinde 00:40 ve 00:45 İşlemlerinde 00:45'in Üstte Olması
+{
+  const txEarlier = {
+    id: generateUUID(),
+    title: 'A Test (00:40)',
+    amount: 100,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-27',
+    createdAt: new Date('2026-09-26T21:40:00.000Z').getTime() // TR 00:40
+  };
+  const txLater = {
+    id: generateUUID(),
+    title: 'B Test (00:45)',
+    amount: 150,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-27',
+    createdAt: new Date('2026-09-26T21:45:00.000Z').getTime() // TR 00:45
+  };
+
+  // compareTransactions doğrudan testi
+  const cmpResult = compareTransactions(txEarlier, txLater, 'date-desc');
+  assert(cmpResult > 0, 'TC-60 compareTransactions 00:45 işlemini 00:40 işleminin önüne koydu (cmpResult > 0)');
+
+  // Dizi sıralaması testi
+  const list = [txEarlier, txLater].sort((a, b) => compareTransactions(a, b, 'date-desc'));
+  assert(list[0].title === 'B Test (00:45)', 'TC-60 Aynı gün içindeki iki işlemde 00:45 üstte yer aldı');
+  assert(list[1].title === 'A Test (00:40)', 'TC-60 Aynı gün içindeki iki işlemde 00:40 altta yer aldı');
+}
+
+// TC-61: Farklı Tarihlerde (date) Önce date DESC Önceliğinin Korunması
+{
+  const txYesterdayLate = {
+    id: generateUUID(),
+    title: 'Dün Gece (23:55)',
+    amount: 50,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-26',
+    createdAt: new Date('2026-09-26T20:55:00.000Z').getTime()
+  };
+  const txTodayEarly = {
+    id: generateUUID(),
+    title: 'Bugün Sabah (00:05)',
+    amount: 70,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-27',
+    createdAt: new Date('2026-09-26T21:05:00.000Z').getTime()
+  };
+
+  const list = [txYesterdayLate, txTodayEarly].sort((a, b) => compareTransactions(a, b, 'date-desc'));
+  assert(list[0].title === 'Bugün Sabah (00:05)', 'TC-61 Farklı günlerde saat fark etmeksizin yeni tarih (2026-09-27) üstte yer aldı');
+  assert(list[1].title === 'Dün Gece (23:55)', 'TC-61 Eski tarih (2026-09-26) altta kaldı');
+}
+
+// TC-62: Eski Bir İşlem Düzenlendiğinde (updatedAt Değiştiğinde) Sıranın Bozulmaması
+{
+  const store = new BudgetStore();
+  const tx1 = store.addTransaction({
+    title: 'İşlem 1 (10:00)',
+    amount: 100,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-27',
+    createdAt: 100000
+  });
+  const tx2 = store.addTransaction({
+    title: 'İşlem 2 (12:00)',
+    amount: 200,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-27',
+    createdAt: 200000
+  });
+
+  // İşlem 1 (10:00) daha sonra saat 15:00'te düzenlenir (updatedAt çok yüksek olur)
+  store.updateTransaction(tx1.id, {
+    title: 'İşlem 1 (Düzenlendi)',
+    amount: 120
+  });
+
+  const txs = store.getTransactions();
+  const updatedTx1 = txs.find(t => t.id === tx1.id);
+  assert(updatedTx1.createdAt === 100000, 'TC-62 updateTransaction sonrası orijinal createdAt zaman damgası korundu');
+  assert(updatedTx1.updatedAt > 200000, 'TC-62 updateTransaction sonrası updatedAt güncellendi');
+
+  // Sıralamayı doğrula: İşlem 2 (12:00) hala en üstte olmalıdır!
+  assert(txs[0].title === 'İşlem 2 (12:00)', 'TC-62 Düzenlenen eski işlem listenin en üstüne SIÇRAMADI (createdAt tie-breaker korundu)');
+  assert(txs[1].title === 'İşlem 1 (Düzenlendi)', 'TC-62 Düzenlenen işlem doğru sırada kaldı');
+}
+
+// TC-63: formatTime Saat Gösterimi ve TR Local Timezone Dönüşümü
+{
+  const isoUtc = '2026-09-26T21:43:00.000Z';
+  const formattedTr = formatTime(isoUtc, 'tr');
+  const d = new Date(isoUtc);
+  const expectedHours = String(d.getHours()).padStart(2, '0');
+  const expectedMinutes = String(d.getMinutes()).padStart(2, '0');
+  const expectedLocalTime = `${expectedHours}:${expectedMinutes}`;
+
+  assert(formattedTr === expectedLocalTime, `TC-63 formatTime kullanıcının yerel saatini üretti (${formattedTr} === ${expectedLocalTime})`);
+  assert(!formattedTr.includes(':00') || formattedTr.split(':').length === 2, 'TC-63 formatTime saniye göstermedi (HH:mm)');
+
+  // Boş ve geçersiz kontrolleri
+  assert(formatTime(null) === '', 'TC-63 formatTime(null) boş string döndürdü');
+  assert(formatTime(undefined) === '', 'TC-63 formatTime(undefined) boş string döndürdü');
+  assert(formatTime('gecersiz-tarih') === '', 'TC-63 formatTime(gecersiz) boş string döndürdü');
+}
+
+// TC-64: createdAt Eksik / Eski Kayıtların UI'ı Bozmaması (Legacy Fallback)
+{
+  const legacyTx1 = { id: 'leg-1', title: 'Eski Fiş 1', date: '2026-09-20', createdAt: null };
+  const legacyTx2 = { id: 'leg-2', title: 'Eski Fiş 2', date: '2026-09-20', createdAt: undefined };
+
+  const cmp = compareTransactions(legacyTx1, legacyTx2, 'date-desc');
+  assert(cmp === 0, 'TC-64 createdAt olmayan iki legacy işlem için stabil sıra korundu (cmp === 0)');
+  assert(formatTime(legacyTx1.createdAt) === '', 'TC-64 Legacy işlem için formatTime boş döndü (UI kırılmadı)');
+}
+
+// TC-65: UIManager İşlem Listesinde Tarih ve Saatin Birlikte Render Edilmesi
+{
+  const store = new BudgetStore();
+  const txWithTime = {
+    id: generateUUID(),
+    title: 'Gece Harcaması',
+    amount: 45,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-27',
+    createdAt: new Date('2026-09-26T21:43:00.000Z').getTime()
+  };
+  const txWithoutTime = {
+    id: generateUUID(),
+    title: 'Eski Saat Bilgisiz Harcama',
+    amount: 60,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-26',
+    createdAt: null
+  };
+
+  const ui = new UIManager(store);
+
+  const htmlWithTime = ui.renderTransactionRowHtml(txWithTime, 'tr', 'TRY');
+  const htmlWithoutTime = ui.renderTransactionRowHtml(txWithoutTime, 'tr', 'TRY');
+
+  assert(htmlWithTime.includes('Gece Harcaması'), 'TC-65 İşlem 1 listede render edildi');
+  assert(htmlWithoutTime.includes('Eski Saat Bilgisiz Harcama'), 'TC-65 İşlem 2 listede render edildi');
+  assert(htmlWithTime.includes('27 Eyl 2026'), 'TC-65 İşlem 1 için tarih (27 Eyl 2026) render edildi');
+  assert(htmlWithTime.includes('• '), 'TC-65 İşlem 1 için saat ayracı (•) render edildi');
+  const expectedLocalTime = formatTime(txWithTime.createdAt, 'tr');
+  assert(htmlWithTime.includes(expectedLocalTime), `TC-65 İşlem 1 için yerel saat (${expectedLocalTime}) render edildi`);
+  assert(!htmlWithoutTime.includes('• '), 'TC-65 createdAt eksik işlem için saat ayracı (•) render edilmedi');
+  assert(!htmlWithTime.includes('null') && !htmlWithTime.includes('undefined'), 'TC-65 HTML içinde "null" veya "undefined" metni yer almadı');
+}
+
+// TC-66: Çoklu Cihaz Senkronizasyonu Sıralama Bütünlüğü (Multi-Device Sort Invariance)
+{
+  const txEarly = {
+    id: 'tx-1',
+    title: 'A Test (00:40)',
+    amount: 10,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-27',
+    createdAt: 1790462400000
+  };
+  const txLate = {
+    id: 'tx-2',
+    title: 'B Test (00:45)',
+    amount: 20,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-27',
+    createdAt: 1790462700000
+  };
+
+  const device1List = [txLate, txEarly].sort((a, b) => compareTransactions(a, b, 'date-desc'));
+  const device2List = [txEarly, txLate].sort((a, b) => compareTransactions(a, b, 'date-desc'));
+
+  assert(device1List[0].id === 'tx-2' && device2List[0].id === 'tx-2', 'TC-66 İki cihazda da en son oluşturulan B Test (00:45) en üstte yer aldı');
+  assert(device1List[1].id === 'tx-1' && device2List[1].id === 'tx-1', 'TC-66 İki cihazda da A Test (00:40) ikinci sırada yer aldı');
+  assert(device1List.map(t => t.id).join(',') === device2List.map(t => t.id).join(','), 'TC-66 Çoklu cihazda sıra kesinlikle birebir aynı (invariant) oldu');
 }
 
 console.log('\n====================================================');

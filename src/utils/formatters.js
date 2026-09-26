@@ -105,3 +105,29 @@ export function formatMonthTitle(yearMonthStr, lang = 'tr') {
   const monthName = d.toLocaleDateString(locale, { month: 'long', year: 'numeric' });
   return monthName.charAt(0).toUpperCase() + monthName.slice(1);
 }
+
+/**
+ * Saat bilgisini yerelleştirilmiş formata çevirir (HH:mm)
+ * Timestamp (milisaniye, ISO UTC string vb.) alır.
+ * Kullanıcının LOCAL saat diliminde (Intl.DateTimeFormat) ve saniyesiz gösterir.
+ * Geçersiz veya eksik değerlerde boş string döner (Fallback/Legacy koruması).
+ *
+ * @param {number|string|Date} timestamp
+ * @param {string} [lang='tr']
+ * @returns {string} Örn: "00:43" (tr) veya "12:43 AM" (en)
+ */
+export function formatTime(timestamp, lang = 'tr') {
+  if (!timestamp) return '';
+  try {
+    const d = (timestamp instanceof Date) ? timestamp : new Date(timestamp);
+    if (isNaN(d.getTime())) return '';
+    const locale = lang === 'en' ? 'en-US' : 'tr-TR';
+    return new Intl.DateTimeFormat(locale, {
+      hour: '2-digit',
+      minute: '2-digit'
+    }).format(d);
+  } catch {
+    return '';
+  }
+}
+

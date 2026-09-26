@@ -673,6 +673,9 @@ export class SyncService {
       }));
 
     this.store.state.transactions = activeCloudTxs;
+    if (typeof this.store.sortTransactions === 'function') {
+      this.store.sortTransactions('date-desc');
+    }
 
     // ÖNEMLİ: Boş veya varsayılan yerel state'i buluta PUSH ETME!
     // Sadece cloud -> local hydrate.
@@ -680,6 +683,9 @@ export class SyncService {
     // ADIM 4: LocalStorage'a persist et ve arayüzü bilgilendir
     const applyRemoteData = () => {
       this.store.state.transactions = activeCloudTxs;
+      if (typeof this.store.sortTransactions === 'function') {
+        this.store.sortTransactions('date-desc');
+      }
       this.store.saveToStorage();
       this.store.notify();
     };
@@ -894,6 +900,9 @@ export class SyncService {
       });
 
       this.store.state.transactions = Array.from(localMap.values());
+      if (typeof this.store.sortTransactions === 'function') {
+        this.store.sortTransactions('date-desc');
+      }
     }
 
     // --- PUSH: Soft-delete kuyruğundakileri bulutta UPDATE et (YALNIZCA pullOnly DEĞİLSE) ---

@@ -1,7 +1,7 @@
 import { STORAGE_KEY, SCHEMA_VERSION, DEFAULT_CURRENCY, DEFAULT_LANGUAGE } from '../config/constants.js';
 import { DEFAULT_PRESETS, DEFAULT_SETTINGS, DEFAULT_CATEGORIES, DEFAULT_SEED_TRANSACTIONS } from '../config/defaultData.js';
 import { SafeStorage } from '../utils/storage.js';
-import { generateUUID, getCurrentYearMonth, getLocalDateString } from '../utils/helpers.js';
+import { generateUUID, getCurrentYearMonth, getLocalDateString, compareTransactions } from '../utils/helpers.js';
 import { normalizeCurrency } from '../utils/formatters.js';
 
 export class BudgetStore {
@@ -59,9 +59,9 @@ export class BudgetStore {
               categoryId: t.categoryId || (t.type === 'income' ? 'inc_other' : 'exp_other'),
               date: t.date || getLocalDateString(),
               notes: t.notes ? String(t.notes).trim() : '',
-              createdAt: t.createdAt || Date.now(),
-              updatedAt: t.updatedAt || Date.now()
-            }))
+              createdAt: t.createdAt ? (typeof t.createdAt === 'number' ? t.createdAt : new Date(t.createdAt).getTime()) : null,
+              updatedAt: t.updatedAt ? (typeof t.updatedAt === 'number' ? t.updatedAt : new Date(t.updatedAt).getTime()) : null
+            })).sort((a, b) => compareTransactions(a, b, 'date-desc'))
           };
         }
       }
@@ -144,6 +144,12 @@ export class BudgetStore {
     return this.state.transactions || [];
   }
 
+  sortTransactions(sortOption = 'date-desc') {
+    if (Array.isArray(this.state.transactions)) {
+      this.state.transactions.sort((a, b) => compareTransactions(a, b, sortOption));
+    }
+  }
+
   getCategories(type = null) {
     if (!type) return this.state.categories || [];
     return (this.state.categories || []).filter(c => c.type === type);
@@ -193,11 +199,12 @@ export class BudgetStore {
       categoryId: txData.categoryId,
       date: txData.date || getLocalDateString(),
       notes: txData.notes ? String(txData.notes).trim() : '',
-      createdAt: Date.now(),
-      updatedAt: Date.now()
+      createdAt: txData.createdAt ? (typeof txData.createdAt === 'number' ? txData.createdAt : new Date(txData.createdAt).getTime()) : Date.now(),
+      updatedAt: txData.updatedAt ? (typeof txData.updatedAt === 'number' ? txData.updatedAt : new Date(txData.updatedAt).getTime()) : Date.now()
     };
 
     this.state.transactions.unshift(newTx);
+    this.sortTransactions('date-desc');
     this.emitLocalChange('transaction:add', newTx);
     this.notify();
     return newTx;
@@ -219,11 +226,14 @@ export class BudgetStore {
     this.state.transactions[idx] = {
       ...existing,
       ...updatedFields,
+      createdAt: existing.createdAt, // createdAt ASLA değişmez!
       amount: newAmount,
       updatedAt: Date.now()
     };
 
-    this.emitLocalChange('transaction:update', this.state.transactions[idx]);
+    this.sortTransactions('date-desc');
+    const updatedTx = this.state.transactions.find(t => t.id === id);
+    this.emitLocalChange('transaction:update', updatedTx);
     this.notify();
     return true;
   }
@@ -534,8 +544,8 @@ export class BudgetStore {
         categoryId: t.categoryId || (t.type === 'income' ? 'inc_other' : 'exp_other'),
         date: t.date || getLocalDateString(),
         notes: t.notes ? String(t.notes).trim() : '',
-        createdAt: t.createdAt || Date.now(),
-        updatedAt: t.updatedAt || Date.now()
+        createdAt: t.createdAt ? (typeof t.createdAt === 'number' ? t.createdAt : new Date(t.createdAt).getTime()) : null,
+        updatedAt: t.updatedAt ? (typeof t.updatedAt === 'number' ? t.updatedAt : new Date(t.updatedAt).getTime()) : null
       };
     });
 
@@ -556,7 +566,7 @@ export class BudgetStore {
       this.state.transactions = Array.from(txMap.values());
     }
 
-    this.state.transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+    this.sortTransactions('date-desc');
     this.state.onboarded = true;
     this.emitLocalChange('data:import', null);
     this.notify();

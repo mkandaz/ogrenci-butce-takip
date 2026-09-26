@@ -82,3 +82,75 @@ export function getAdjacentMonth(yearMonthStr, offset = 1) {
   const nextM = String(d.getMonth() + 1).padStart(2, '0');
   return `${nextY}-${nextM}`;
 }
+
+/**
+ * İşlemleri belirtilen kritere göre sıralamak için karşılaştırma fonksiyonu
+ *
+ * Sıralama kuralları:
+ * - 'date-desc' (Varsayılan): Önce transaction.date DESC (YYYY-MM-DD), aynı gün içindeyse createdAt DESC.
+ *   (En son oluşturulan işlem en üstte; updatedAt sırayı bozmaz).
+ * - 'date-asc': Önce transaction.date ASC, aynı gün içindeyse createdAt ASC.
+ * - 'amount-desc': Tutar azalan (b.amount - a.amount). Eşitse date DESC, ardından createdAt DESC.
+ * - 'amount-asc': Tutar artan (a.amount - b.amount). Eşitse date DESC, ardından createdAt DESC.
+ *
+ * @param {Object} a - İlk işlem
+ * @param {Object} b - İkinci işlem
+ * @param {string} [sortOption='date-desc'] - Sıralama seçeneği
+ * @returns {number}
+ */
+export function compareTransactions(a, b, sortOption = 'date-desc') {
+  if (!a && !b) return 0;
+  if (!a) return 1;
+  if (!b) return -1;
+
+  if (sortOption === 'date-desc') {
+    const dateA = a.date || '';
+    const dateB = b.date || '';
+    if (dateA !== dateB) {
+      return dateB.localeCompare(dateA);
+    }
+    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    if (timeA !== timeB) {
+      return timeB - timeA;
+    }
+    return 0;
+  }
+
+  if (sortOption === 'date-asc') {
+    const dateA = a.date || '';
+    const dateB = b.date || '';
+    if (dateA !== dateB) {
+      return dateA.localeCompare(dateB);
+    }
+    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    if (timeA !== timeB) {
+      return timeA - timeB;
+    }
+    return 0;
+  }
+
+  if (sortOption === 'amount-desc') {
+    const diff = (Number(b.amount) || 0) - (Number(a.amount) || 0);
+    if (diff !== 0) return diff;
+    const dateDiff = (b.date || '').localeCompare(a.date || '');
+    if (dateDiff !== 0) return dateDiff;
+    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return timeB - timeA;
+  }
+
+  if (sortOption === 'amount-asc') {
+    const diff = (Number(a.amount) || 0) - (Number(b.amount) || 0);
+    if (diff !== 0) return diff;
+    const dateDiff = (b.date || '').localeCompare(a.date || '');
+    if (dateDiff !== 0) return dateDiff;
+    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return timeB - timeA;
+  }
+
+  return 0;
+}
+

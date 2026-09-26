@@ -81,8 +81,8 @@ const appIcons = {
   Mail
 };
 import { calculateSummary } from '../store/calculations.js';
-import { formatCurrency, formatNumber, formatDate, formatMonthTitle, getCurrencySymbol } from '../utils/formatters.js';
-import { getCurrentYearMonth, getAdjacentMonth, getLocalDateString } from '../utils/helpers.js';
+import { formatCurrency, formatNumber, formatDate, formatTime, formatMonthTitle, getCurrencySymbol } from '../utils/formatters.js';
+import { getCurrentYearMonth, getAdjacentMonth, getLocalDateString, compareTransactions } from '../utils/helpers.js';
 import { escapeHtml } from '../utils/sanitize.js';
 import { t, getLanguage, setLanguage, onLanguageChange } from '../i18n/index.js';
 import { showToast } from './toastManager.js';
@@ -720,6 +720,54 @@ export class UIManager {
     });
   }
 
+  renderTransactionRowHtml(tx, lang = getLanguage(), currency = this.store.getSettings().currency) {
+    const cat = this.store.getCategoryById(tx.categoryId);
+    const isIncome = tx.type === 'income';
+    const translatedCat = t(`categories.${tx.categoryId}`);
+    const catName = (translatedCat !== `categories.${tx.categoryId}`) ? translatedCat : (cat ? cat.name : 'Genel');
+    const catColor = cat ? cat.color : '#94a3b8';
+    const timeStr = formatTime(tx.createdAt, lang);
+
+    return `
+      <div class="flex items-center space-x-3.5 min-w-0">
+        <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+          isIncome
+            ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400'
+            : 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400'
+        }">
+          <i data-lucide="${isIncome ? 'arrow-down-left' : 'arrow-up-right'}" class="w-5 h-5"></i>
+        </div>
+        <div class="min-w-0">
+          <div class="flex items-center space-x-2">
+            <span class="text-xs font-bold text-slate-900 dark:text-white truncate">${escapeHtml(tx.title)}</span>
+            <span class="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+              <span class="w-1.5 h-1.5 rounded-full" style="background-color: ${catColor};"></span>
+              <span>${escapeHtml(catName)}</span>
+            </span>
+          </div>
+          <div class="flex items-center flex-wrap gap-x-2 gap-y-0.5 mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+            <span>${formatDate(tx.date, lang)}${timeStr ? ` <span class="text-slate-400 dark:text-slate-500 font-mono text-[10px]">• ${timeStr}</span>` : ''}</span>
+            ${tx.notes ? `<span class="truncate max-w-[200px]">• ${escapeHtml(tx.notes)}</span>` : ''}
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center space-x-3 shrink-0">
+        <span class="text-xs sm:text-sm font-extrabold ${isIncome ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-900 dark:text-white'}">
+          ${isIncome ? '+' : '-'}${formatCurrency(tx.amount, currency, lang)}
+        </span>
+        <div class="flex items-center space-x-1">
+          <button type="button" data-action="edit" title="${t('history.edit')}" class="min-w-[36px] min-h-[36px] p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-slate-800 transition flex items-center justify-center">
+            <i data-lucide="edit-3" class="w-4 h-4"></i>
+          </button>
+          <button type="button" data-action="delete" title="${t('history.delete')}" class="min-w-[36px] min-h-[36px] p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-slate-800 transition flex items-center justify-center">
+            <i data-lucide="trash-2" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
   renderTransactions(currency, lang) {
     if (!this.transactionsContainer) return;
 
@@ -748,13 +796,7 @@ export class UIManager {
     }
 
     // Sıralama
-    list.sort((a, b) => {
-      if (this.sortOption === 'date-desc') return new Date(b.date) - new Date(a.date);
-      if (this.sortOption === 'date-asc') return new Date(a.date) - new Date(b.date);
-      if (this.sortOption === 'amount-desc') return b.amount - a.amount;
-      if (this.sortOption === 'amount-asc') return a.amount - b.amount;
-      return 0;
-    });
+    list.sort((a, b) => compareTransactions(a, b, this.sortOption));
 
     if (this.txCountBadge) {
       this.txCountBadge.textContent = t('history.txCount', { count: list.length });
@@ -770,53 +812,9 @@ export class UIManager {
     if (this.transactionsEmptyState) this.transactionsEmptyState.classList.add('hidden');
 
     list.forEach(tx => {
-      const cat = this.store.getCategoryById(tx.categoryId);
-      const isIncome = tx.type === 'income';
       const row = document.createElement('div');
       row.className = 'p-4 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition flex items-center justify-between gap-3';
-
-      const translatedCat = t(`categories.${tx.categoryId}`);
-      const catName = (translatedCat !== `categories.${tx.categoryId}`) ? translatedCat : (cat ? cat.name : 'Genel');
-      const catColor = cat ? cat.color : '#94a3b8';
-
-      row.innerHTML = `
-        <div class="flex items-center space-x-3.5 min-w-0">
-          <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-            isIncome
-              ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400'
-              : 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400'
-          }">
-            <i data-lucide="${isIncome ? 'arrow-down-left' : 'arrow-up-right'}" class="w-5 h-5"></i>
-          </div>
-          <div class="min-w-0">
-            <div class="flex items-center space-x-2">
-              <span class="text-xs font-bold text-slate-900 dark:text-white truncate">${escapeHtml(tx.title)}</span>
-              <span class="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                <span class="w-1.5 h-1.5 rounded-full" style="background-color: ${catColor};"></span>
-                <span>${escapeHtml(catName)}</span>
-              </span>
-            </div>
-            <div class="flex items-center space-x-2 mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
-              <span>${formatDate(tx.date, lang)}</span>
-              ${tx.notes ? `<span class="truncate max-w-[200px]">• ${escapeHtml(tx.notes)}</span>` : ''}
-            </div>
-          </div>
-        </div>
-
-        <div class="flex items-center space-x-3 shrink-0">
-          <span class="text-xs sm:text-sm font-extrabold ${isIncome ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-900 dark:text-white'}">
-            ${isIncome ? '+' : '-'}${formatCurrency(tx.amount, currency, lang)}
-          </span>
-          <div class="flex items-center space-x-1">
-            <button type="button" data-action="edit" title="${t('history.edit')}" class="min-w-[36px] min-h-[36px] p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-slate-800 transition flex items-center justify-center">
-              <i data-lucide="edit-3" class="w-4 h-4"></i>
-            </button>
-            <button type="button" data-action="delete" title="${t('history.delete')}" class="min-w-[36px] min-h-[36px] p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-slate-800 transition flex items-center justify-center">
-              <i data-lucide="trash-2" class="w-4 h-4"></i>
-            </button>
-          </div>
-        </div>
-      `;
+      row.innerHTML = this.renderTransactionRowHtml(tx, lang, currency);
 
       row.querySelector('button[data-action="edit"]').addEventListener('click', () => {
         this.modalManager.openTransactionModal('edit', tx);
