@@ -10,6 +10,8 @@ import { generateUUID, isValidUUID } from '../src/utils/helpers.js';
 import { SafeStorage } from '../src/utils/storage.js';
 import { AuthService } from '../src/services/authService.js';
 import { SyncService } from '../src/services/syncService.js';
+import { UIManager } from '../src/components/UIManager.js';
+import { STORAGE_KEY } from '../src/config/constants.js';
 
 console.log('====================================================');
 console.log('🚀 ÖĞRENCİ BÜTÇE TAKİP - ENTEGRE TEST PAKETİ (FAZ 2 & 3)');
@@ -956,6 +958,291 @@ function createMockClient(handlers = {}) {
   const fullSync = new SyncService(store, fullSuccessClient);
   await fullSync.runDeltaSync(fakeUser, { last_synced_at: '2026-09-20T10:00:00Z' });
   assert(fullSync.getDeletedQueue().length === 0, 'TC-28 İkinci denemede başarılı olunca tüm kuyruk temizlendi');
+}
+
+// --------------------------------------------------------------------------
+// 9. FAZ 3 FRESH DEVICE & ONBOARDING RACE CONDITION TESTLERİ (TC-29 - TC-36)
+// --------------------------------------------------------------------------
+console.log('\n--- 9. FAZ 3 FRESH DEVICE BOOTSTRAP & ONBOARDING RACE CONDITION TESTLERİ ---');
+
+// TC-29 & TC-30: Authenticated + Existing Cloud Metadata + Empty LocalStorage => FULL Cloud Bootstrap
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+
+  const store = new BudgetStore();
+  const fakeUser = { id: generateUUID() };
+  let txSelectGtUsed = false;
+
+  // Cloud'da 13 aktif, 2 soft-deleted transaction var (toplam 15)
+  const cloud13Transactions = [];
+  for (let i = 1; i <= 13; i++) {
+    cloud13Transactions.push({
+      id: generateUUID(),
+      title: `Cloud İşlem ${i}`,
+      amount: 100 * i,
+      type: i % 2 === 0 ? 'income' : 'expense',
+      category_id: 'exp_food',
+      date: '2026-09-15',
+      is_deleted: false,
+      created_at: '2026-09-15T10:00:00Z',
+      updated_at: '2026-09-15T12:00:00Z'
+    });
+  }
+  // 2 adet silinmiş transaction
+  cloud13Transactions.push({
+    id: generateUUID(),
+    title: 'Silinmiş İşlem 1',
+    amount: 50,
+    type: 'expense',
+    category_id: 'exp_food',
+    date: '2026-09-10',
+    is_deleted: true,
+    updated_at: '2026-09-16T10:00:00Z'
+  });
+  cloud13Transactions.push({
+    id: generateUUID(),
+    title: 'Silinmiş İşlem 2',
+    amount: 75,
+    type: 'expense',
+    category_id: 'exp_social',
+    date: '2026-09-10',
+    is_deleted: true,
+    updated_at: '2026-09-16T11:00:00Z'
+  });
+
+  const mockClient = createMockClient({
+    user_sync_metadata: {
+      maybeSingle: () => ({
+        // Cloud'da daha önce başka bir cihazdan yapılmış sync kaydı var (2026-09-20)
+        data: { user_id: fakeUser.id, schema_version: '1.1.0', last_synced_at: '2026-09-20T10:00:00Z' },
+        error: null
+      })
+    },
+    user_settings: {
+      maybeSingle: () => ({
+        data: {
+          currency: 'TRY',
+          language: 'tr',
+          target_month: '2026-09',
+          onboarded: true,
+          initial_balance: 3500,
+          monthly_income: 6000,
+          updated_at: '2026-09-15T10:00:00Z'
+        },
+        error: null
+      })
+    },
+    presets: {
+      select: () => ({
+        data: [
+          { preset_key: 'preset_coffee', name: 'Kahve', emoji: '☕', amount: 80, category_id: 'exp_social', updated_at: '2026-09-15T10:00:00Z' }
+        ],
+        error: null
+      })
+    },
+    transactions: {
+      select: (state) => {
+        if (state.gtFilter) {
+          txSelectGtUsed = true;
+        }
+        return { data: cloud13Transactions, error: null };
+      }
+    }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  assert(sync.getLastSyncedAt() === null, 'TC-29 Fresh device: local last_synced_at başlangıçta yok (null)');
+
+  const res = await sync.sync(fakeUser);
+
+  assert(res.success === true, 'TC-29 Fresh device sync başarıyla tamamlandı');
+  assert(txSelectGtUsed === false, 'TC-29 Fresh device bootstrap sırasında cloud last_synced_at filtresi (.gt) KULLANILMADI');
+  assert(store.getTransactions().length === 13, 'TC-30 Cloud\'daki 13 aktif işlem fresh device\'a eksiksiz yüklendi');
+  assert(store.getTransactions().every(t => !t.title.includes('Silinmiş')), 'TC-30 Soft-deleted (is_deleted=true) işlemler yerel listeye EKLENMEDİ');
+  assert(store.state.onboarded === true, 'TC-31 Cloud settings.onboarded=true değeri yerel store\'a yansıtıldı');
+  assert(store.state.settings.currency === 'TRY', 'TC-31 Cloud para birimi TRY yüklendi');
+  assert(sync.getLastSyncedAt() !== null, 'TC-29 Bootstrap başarılı olunca yerel last_synced_at oluşturuldu');
+}
+
+// TC-31 & TC-32: Empty/Default Local State Cloud'u Overwrite Etmez ve LocalStorage'a Persist Edilir
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+
+  const store = new BudgetStore();
+  const fakeUser = { id: generateUUID() };
+  let cloudSettingsUpserted = false;
+  let cloudPresetsUpserted = false;
+  let cloudTransactionsUpserted = false;
+
+  const mockClient = createMockClient({
+    user_sync_metadata: {
+      maybeSingle: () => ({
+        data: { user_id: fakeUser.id, schema_version: '1.1.0', last_synced_at: '2026-09-20T10:00:00Z' },
+        error: null
+      })
+    },
+    user_settings: {
+      maybeSingle: () => ({
+        data: { currency: 'EUR', onboarded: true, updated_at: '2026-09-18T10:00:00Z' },
+        error: null
+      }),
+      upsert: () => { cloudSettingsUpserted = true; return { data: {}, error: null }; }
+    },
+    presets: {
+      select: () => ({
+        data: [{ preset_key: 'preset_coffee', name: 'Kahve', emoji: '☕', amount: 110, category_id: 'exp_social', updated_at: '2026-09-18T10:00:00Z' }],
+        error: null
+      }),
+      upsert: () => { cloudPresetsUpserted = true; return { data: [], error: null }; }
+    },
+    transactions: {
+      select: () => ({
+        data: [{ id: generateUUID(), title: 'Test Tx', amount: 250, type: 'expense', category_id: 'exp_food', date: '2026-09-18', is_deleted: false, updated_at: '2026-09-18T10:00:00Z' }],
+        error: null
+      }),
+      upsert: () => { cloudTransactionsUpserted = true; return { data: [], error: null }; }
+    }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  await sync.sync(fakeUser);
+
+  assert(cloudSettingsUpserted === false, 'TC-32 Fresh bootstrap sırasında user_settings cloud\'a PUSH edilmedi (overwrite engellendi)');
+  assert(cloudPresetsUpserted === false, 'TC-32 Fresh bootstrap sırasında presets cloud\'a PUSH edilmedi (overwrite engellendi)');
+  assert(cloudTransactionsUpserted === false, 'TC-32 Fresh bootstrap sırasında transactions cloud\'a PUSH edilmedi (overwrite engellendi)');
+
+  // LocalStorage persistence doğrulaması
+  const persistedDataStr = SafeStorage.getItem(STORAGE_KEY);
+  assert(Boolean(persistedDataStr), 'TC-32 Veri LocalStorage içine yazıldı');
+  const parsedData = JSON.parse(persistedDataStr);
+  assert(parsedData.onboarded === true, 'TC-32 LocalStorage onboarded: true persist edildi');
+  assert(parsedData.transactions.length === 1, 'TC-32 LocalStorage 1 işlem persist edildi');
+
+  // Reload simülasyonu
+  const reloadedStore = new BudgetStore();
+  assert(reloadedStore.state.onboarded === true, 'TC-32 Sayfa yenileme (reload) sonrası onboarded: true korundu');
+  assert(reloadedStore.getTransactions().length === 1, 'TC-32 Sayfa yenileme (reload) sonrası cloud işlemleri eksiksiz geldi');
+}
+
+// TC-33: Fresh Bootstrap Hatasında last_synced_at İlerlememesi
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+
+  const store = new BudgetStore();
+  const fakeUser = { id: generateUUID() };
+
+  const mockFailingBootstrapClient = createMockClient({
+    user_sync_metadata: {
+      maybeSingle: () => ({
+        data: { user_id: fakeUser.id, schema_version: '1.1.0', last_synced_at: '2026-09-20T10:00:00Z' },
+        error: null
+      })
+    },
+    user_settings: {
+      maybeSingle: () => ({
+        data: null,
+        error: { message: 'Cloud database connection reset' }
+      })
+    }
+  });
+
+  const sync = new SyncService(store, mockFailingBootstrapClient);
+  const res = await sync.sync(fakeUser);
+
+  assert(res.success === false, 'TC-33 Bootstrap hata verince sync başarısız döndü');
+  assert(sync.getStatus() === 'error', 'TC-33 Senkronizasyon durumu "error" oldu');
+  assert(sync.getLastSyncedAt() === null, 'TC-33 Başarısız bootstrap sonrası local last_synced_at ASLA oluşturulmadı');
+}
+
+// TC-34, TC-35, TC-36: Onboarding Race Condition ve Anonymous vs Authenticated Kararları
+{
+  // 1. Durum: Anonymous kullanıcı + Boş LocalStorage => Onboarding AÇILIR
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+
+  const anonStore = new BudgetStore();
+  let anonModalOpened = false;
+  let anonModalClosed = false;
+
+  const mockAnonModalManager = {
+    openOnboardingModal: () => { anonModalOpened = true; },
+    closeOnboardingModal: () => { anonModalClosed = true; }
+  };
+
+  const mockAnonAuthService = {
+    isConfigured: () => true,
+    waitForAuth: async () => null,
+    getUser: () => null,
+    onAuthStateChange: () => () => {}
+  };
+
+  const anonUI = new UIManager(anonStore, {
+    authService: mockAnonAuthService,
+    modalManager: mockAnonModalManager
+  });
+
+  await anonUI.init();
+  assert(anonModalOpened === true, 'TC-35 Anonymous kullanıcı için onboarding modalı eskisi gibi AÇILDI');
+
+  // 2. Durum: Authenticated kullanıcı + Cloud onboarded=true => Onboarding ASLA AÇILMAZ
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+
+  const authStore = new BudgetStore();
+  let authModalOpened = false;
+  let authModalClosed = false;
+
+  const mockAuthModalManager = {
+    openOnboardingModal: () => { authModalOpened = true; },
+    closeOnboardingModal: () => { authModalClosed = true; }
+  };
+
+  const fakeAuthedUser = { id: generateUUID(), email: 'ogrenci@universite.edu.tr' };
+  const mockAuthService = {
+    isConfigured: () => true,
+    waitForAuth: async () => fakeAuthedUser,
+    getUser: () => fakeAuthedUser,
+    onAuthStateChange: () => () => {}
+  };
+
+  const mockCloudBootstrapClient = createMockClient({
+    user_sync_metadata: {
+      maybeSingle: () => ({
+        data: { user_id: fakeAuthedUser.id, schema_version: '1.1.0', last_synced_at: '2026-09-20T10:00:00Z' },
+        error: null
+      })
+    },
+    user_settings: {
+      maybeSingle: () => ({
+        data: { currency: 'TRY', onboarded: true, target_month: '2026-09', updated_at: '2026-09-20T10:00:00Z' },
+        error: null
+      })
+    },
+    presets: {
+      select: () => ({ data: [], error: null })
+    },
+    transactions: {
+      select: () => ({
+        data: [{ id: generateUUID(), title: 'Burs Geliri', amount: 5000, type: 'income', category_id: 'inc_kyk', date: '2026-09-01', is_deleted: false, updated_at: '2026-09-20T10:00:00Z' }],
+        error: null
+      })
+    }
+  });
+
+  const syncForAuthUI = new SyncService(authStore, mockCloudBootstrapClient);
+  const authUI = new UIManager(authStore, {
+    authService: mockAuthService,
+    syncService: syncForAuthUI,
+    modalManager: mockAuthModalManager
+  });
+
+  await authUI.init();
+  assert(authModalOpened === false, 'TC-34 Mevcut cloud hesabında onboarded=true olduğu için onboarding modalı ASLA AÇILMADI');
+  assert(authStore.state.onboarded === true, 'TC-34 Cloud onboarded durumu store\'a aktarıldı');
+  assert(authStore.getTransactions().length === 1, 'TC-36 Startup sırasında auth/sync beklenerek veriler eksiksiz yüklendi');
 }
 
 console.log('\n====================================================');

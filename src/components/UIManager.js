@@ -94,52 +94,99 @@ import { authService } from '../services/authService.js';
 import { SyncService } from '../services/syncService.js';
 
 export class UIManager {
-  constructor(store) {
+  constructor(store, options = {}) {
     this.store = store;
+    this.authService = options.authService || authService;
+    this.syncService = options.syncService || new SyncService(this.store);
     this.selectedMonth = this.store.state.settings.targetMonth || getCurrentYearMonth();
     this.activeFilter = 'all'; // 'all' | 'income' | 'expense'
     this.searchQuery = '';
     this.categoryFilter = '';
     this.sortOption = 'date-desc';
 
-    this.cacheElements();
-    this.modalManager = new ModalManager(this.store, this);
-    this.chartManager = new ChartManager(
-      this.categoryChartCanvas,
-      this.flowChartCanvas,
-      this.chartEmptyState,
-      this.flowChartEmptyState
-    );
+    if (typeof document !== 'undefined') {
+      this.cacheElements();
+      this.modalManager = options.modalManager || new ModalManager(this.store, this);
+      this.chartManager = new ChartManager(
+        this.categoryChartCanvas,
+        this.flowChartCanvas,
+        this.chartEmptyState,
+        this.flowChartEmptyState
+      );
 
-    this.initTheme();
-    this.bindEvents();
+      this.initTheme();
+      this.bindEvents();
 
-    this.syncService = new SyncService(this.store);
+      this.authService.onAuthStateChange((user) => {
+        this.renderAuthBadge(user);
+        if (user && this.store.state.onboarded) {
+          this.modalManager.closeOnboardingModal();
+        }
+      });
 
-    authService.onAuthStateChange((user) => {
-      this.renderAuthBadge(user);
-    });
+      this.syncService.onStatusChange((status, message) => {
+        this.renderSyncStatus(status, message);
+      });
 
-    this.syncService.onStatusChange((status, message) => {
-      this.renderSyncStatus(status, message);
-    });
+      this.store.subscribe(() => {
+        this.render();
+      });
 
-    this.store.subscribe(() => {
+      onLanguageChange(() => {
+        this.render();
+      });
+
       this.render();
-    });
+      this.renderAuthBadge(this.authService.getUser());
+      this.renderSyncStatus(this.syncService.getStatus());
+    } else {
+      this.modalManager = options.modalManager || {
+        openOnboardingModal: () => {},
+        closeOnboardingModal: () => {}
+      };
+    }
 
-    onLanguageChange(() => {
-      this.render();
-    });
+    // Başlangıç bootstrap & onboarding akışı (auth/cloud pending kontrolü)
+    this.initBootstrapPromise = this.initBootstrap();
+  }
 
-    // İlk açılış onboarding kontrolü
-    if (!this.store.state.onboarded) {
-      setTimeout(() => this.modalManager.openOnboardingModal(), 200);
+  async init() {
+    return this.initBootstrapPromise;
+  }
+
+  async initBootstrap() {
+    // 1. Eğer yerel veride kullanıcı zaten onboarded ise, onboarding gösterme
+    if (this.store.state.onboarded) {
+      return;
+    }
+
+    // 2. Supabase yapılandırılmışsa, session ve auth durumunu bekle
+    if (this.authService && this.authService.isConfigured()) {
+      try {
+        const user = await this.authService.waitForAuth();
+        if (user) {
+          this.renderAuthBadge(user);
+          this.renderSyncStatus('syncing', 'Bulut verileri eşitleniyor...');
+          await this.syncService.sync(user);
+          if (this.store.state.settings?.targetMonth) {
+            this.selectedMonth = this.store.state.settings.targetMonth;
+          }
+        }
+      } catch (err) {
+        console.warn('[UIManager] Başlangıç auth/sync uyarısı:', err);
+      }
+    }
+
+    // 3. Karar anı:
+    // Eğer cloud bootstrap veya yerel veriden onboarded true geldiyse onboarding açılmaz!
+    if (this.store.state.onboarded) {
+      this.modalManager.closeOnboardingModal();
+    } else {
+      // Sadece gerçekten onboarded=false olan (örn: anonymous veya yeni hesap) kullanıcı için aç
+      this.modalManager.openOnboardingModal();
     }
 
     this.render();
-    this.renderAuthBadge(authService.getUser());
-    this.renderSyncStatus(this.syncService.getStatus());
   }
 
   cacheElements() {
@@ -502,6 +549,7 @@ export class UIManager {
   }
 
   render() {
+    if (typeof document === 'undefined') return;
     const transactions = this.store.getTransactions();
     const currentMonth = this.selectedMonth || getCurrentYearMonth();
     const summary = calculateSummary(transactions, new Date(), currentMonth);
@@ -838,6 +886,7 @@ export class UIManager {
   }
 
   renderAuthBadge(user) {
+    if (typeof document === 'undefined') return;
     if (user) {
       this.btnOpenAuth?.classList.add('hidden');
       this.userAuthBadge?.classList.remove('hidden');
@@ -853,6 +902,7 @@ export class UIManager {
   }
 
   renderSyncStatus(status, message = null) {
+    if (typeof document === 'undefined') return;
     if (!this.iconSyncCloud) return;
 
     if (status === 'syncing') {
@@ -875,6 +925,7 @@ export class UIManager {
   }
 
   refreshIcons() {
+    if (typeof document === 'undefined') return;
     createIcons({ icons: appIcons });
   }
 }

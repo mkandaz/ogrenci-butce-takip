@@ -110,6 +110,9 @@ export class SyncService {
     if (!user || this.isSyncing) return;
     try {
       await this.sync(user);
+      if (this.store.state.onboarded && typeof window !== 'undefined' && window.app?.modalManager) {
+        window.app.modalManager.closeOnboardingModal();
+      }
     } catch (err) {
       console.error('[SyncService] Giriş sonrası senkronizasyon hatası:', err);
     }
@@ -157,12 +160,19 @@ export class SyncService {
         throw new Error(`user_sync_metadata okunamadı: ${metaErr.message}`);
       }
 
+      const localLastSyncedAt = this.getLastSyncedAt();
+
       if (!meta) {
         // İLK MIGRATION (Bu hesap bulutta henüz ilklendirilmemiş)
         console.info('[SyncService] İlk bulut ilklendirmesi (Initial Migration) başlatılıyor...');
         await this.runInitialMigration(user);
+      } else if (!localLastSyncedAt) {
+        // FRESH DEVICE / EMPTY LOCALSTORAGE BOOTSTRAP
+        // Cloud'da meta var, fakat bu cihazda daha önce senkronizasyon yapılmamış (local last_synced_at YOK).
+        console.info('[SyncService] Fresh device tespit edildi. Full Cloud Bootstrap başlatılıyor...');
+        await this.runFullCloudBootstrap(user, meta);
       } else {
-        // DELTA SYNC (Daha önce ilklendirilmiş hesap)
+        // DELTA SYNC (Daha önce ilklendirilmiş ve bu cihazda eşitlenmiş hesap)
         console.info('[SyncService] Çift yönlü delta senkronizasyonu başlatılıyor...');
         await this.runDeltaSync(user, meta);
       }
@@ -283,10 +293,105 @@ export class SyncService {
     console.info('[SyncService] İlk bulut göçü başarıyla tamamlandı.');
   }
 
+  // 3.5. Fresh Device / Empty LocalStorage için Tam İndirme (Full Cloud Bootstrap)
+  async runFullCloudBootstrap(user, cloudMeta) {
+    const client = this.getClient();
+
+    // ADIM 1: user_settings Çek
+    const { data: cloudSettings, error: settingsErr } = await client
+      .from('user_settings')
+      .select('*')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (settingsErr) {
+      throw new Error(`user_settings okunamadı: ${settingsErr.message}`);
+    }
+
+    if (cloudSettings) {
+      this.store.state.settings = {
+        ...this.store.state.settings,
+        currency: cloudSettings.currency || 'TRY',
+        language: cloudSettings.language || 'tr',
+        targetMonth: cloudSettings.target_month || '',
+        monthStartDay: cloudSettings.month_start_day || 1,
+        warningThresholdPercent: cloudSettings.warning_threshold_percent || 15,
+        theme: cloudSettings.theme || 'light',
+        initialBudget: {
+          initialBalance: Number(cloudSettings.initial_balance) || 0,
+          monthlyIncome: Number(cloudSettings.monthly_income) || 0,
+          targetMonth: cloudSettings.target_month,
+          initialBalanceTxId: cloudSettings.initial_balance_tx_id,
+          monthlyIncomeTxId: cloudSettings.monthly_income_tx_id
+        },
+        updatedAt: cloudSettings.updated_at ? new Date(cloudSettings.updated_at).getTime() : Date.now()
+      };
+      this.store.state.onboarded = Boolean(cloudSettings.onboarded);
+    }
+
+    // ADIM 2: presets Çek
+    const { data: cloudPresets, error: presetsErr } = await client
+      .from('presets')
+      .select('*')
+      .eq('user_id', user.id);
+
+    if (presetsErr) {
+      throw new Error(`presets okunamadı: ${presetsErr.message}`);
+    }
+
+    if (cloudPresets && cloudPresets.length > 0) {
+      this.store.state.settings.presets = cloudPresets.map(cp => ({
+        id: cp.preset_key,
+        name: cp.name,
+        emoji: cp.emoji,
+        amount: Number(cp.amount),
+        categoryId: cp.category_id,
+        updatedAt: cp.updated_at ? new Date(cp.updated_at).getTime() : Date.now()
+      }));
+      this.store.state.settings.presetsUpdatedAt = Date.now();
+    }
+
+    // ADIM 3: transactions Çek (Tüm aktif kayıtlar, last_synced_at filtresi OLMADAN)
+    const { data: cloudTxs, error: cloudTxsErr } = await client
+      .from('transactions')
+      .select('*')
+      .eq('user_id', user.id);
+
+    if (cloudTxsErr) {
+      throw new Error(`transactions okunamadı: ${cloudTxsErr.message}`);
+    }
+
+    // is_deleted=true olanları yerel aktif listeye ekleme
+    const activeCloudTxs = (cloudTxs || [])
+      .filter(ctx => !ctx.is_deleted)
+      .map(ctx => ({
+        id: ctx.id,
+        title: ctx.title,
+        amount: Number(ctx.amount),
+        type: ctx.type,
+        categoryId: ctx.category_id,
+        date: ctx.date,
+        notes: ctx.notes || '',
+        createdAt: ctx.created_at ? new Date(ctx.created_at).getTime() : Date.now(),
+        updatedAt: ctx.updated_at ? new Date(ctx.updated_at).getTime() : Date.now()
+      }));
+
+    this.store.state.transactions = activeCloudTxs;
+
+    // ÖNEMLİ: Boş veya varsayılan yerel state'i buluta PUSH ETME!
+    // Sadece cloud -> local hydrate.
+
+    // ADIM 4: LocalStorage'a persist et ve arayüzü bilgilendir
+    this.store.saveToStorage();
+    this.store.notify();
+
+    console.info(`[SyncService] Full Cloud Bootstrap başarıyla tamamlandı. (${activeCloudTxs.length} aktif işlem yüklendi)`);
+  }
+
   // 4. İki Yönlü Delta Senkronizasyonu (Pull + Push)
   async runDeltaSync(user, cloudMeta) {
     const client = this.getClient();
-    const lastSyncedAt = this.getLastSyncedAt() || cloudMeta?.last_synced_at || null;
+    const lastSyncedAt = this.getLastSyncedAt() || null;
     const lastSyncedTime = lastSyncedAt ? (new Date(lastSyncedAt).getTime() || 0) : 0;
 
     // --- PULL & SYNC: user_settings (Çift yönlü senkronizasyon & Last-Write-Wins) ---
@@ -513,7 +618,7 @@ export class SyncService {
     const localTxs = this.store.getTransactions();
     const txToPush = lastSyncedTime > 0
       ? localTxs.filter(t => !t.updatedAt || new Date(t.updatedAt).getTime() > lastSyncedTime)
-      : localTxs;
+      : [];
 
     if (txToPush.length > 0) {
       const txPayload = txToPush.map(t => ({
