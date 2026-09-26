@@ -7,6 +7,9 @@ import { normalizeCurrency } from '../utils/formatters.js';
 export class BudgetStore {
   constructor() {
     this.listeners = [];
+    this.localChangeListeners = [];
+    this.hasUnsyncedChanges = false;
+    this.isApplyingRemote = false;
     this.state = this.loadState();
   }
 
@@ -98,6 +101,41 @@ export class BudgetStore {
     });
   }
 
+  onLocalChange(listener) {
+    if (typeof listener === 'function') {
+      this.localChangeListeners.push(listener);
+    }
+    return () => {
+      this.localChangeListeners = this.localChangeListeners.filter(l => l !== listener);
+    };
+  }
+
+  emitLocalChange(type, detail = null) {
+    if (this.isApplyingRemote) return;
+    this.hasUnsyncedChanges = true;
+    this.localChangeListeners.forEach(fn => {
+      try {
+        fn({ type, detail, timestamp: Date.now() });
+      } catch (e) {
+        console.error('Local change listener hatası:', e);
+      }
+    });
+  }
+
+  markSynced() {
+    this.hasUnsyncedChanges = false;
+  }
+
+  withRemoteUpdate(fn) {
+    const prev = this.isApplyingRemote;
+    this.isApplyingRemote = true;
+    try {
+      fn();
+    } finally {
+      this.isApplyingRemote = prev;
+    }
+  }
+
   getTransactions() {
     return this.state.transactions || [];
   }
@@ -124,6 +162,7 @@ export class BudgetStore {
       ...partial,
       updatedAt: Date.now()
     };
+    this.emitLocalChange('settings:update', partial);
     this.notify();
   }
 
@@ -152,6 +191,7 @@ export class BudgetStore {
     };
 
     this.state.transactions.unshift(newTx);
+    this.emitLocalChange('transaction:add', newTx);
     this.notify();
     return newTx;
   }
@@ -176,6 +216,7 @@ export class BudgetStore {
       updatedAt: Date.now()
     };
 
+    this.emitLocalChange('transaction:update', this.state.transactions[idx]);
     this.notify();
     return true;
   }
@@ -185,6 +226,7 @@ export class BudgetStore {
     this.state.transactions = this.state.transactions.filter(t => t.id !== id);
     if (this.state.transactions.length !== prevLen) {
       this.trackDeleted(id);
+      this.emitLocalChange('transaction:delete', { id });
       this.notify();
       return true;
     }
@@ -208,6 +250,8 @@ export class BudgetStore {
     this.state.transactions = [...DEFAULT_SEED_TRANSACTIONS];
     this.state.categories = [...DEFAULT_CATEGORIES];
     this.state.onboarded = true;
+    this.state.settings.updatedAt = Date.now();
+    this.emitLocalChange('budget:startDemo', null);
     this.notify();
   }
 
@@ -260,7 +304,9 @@ export class BudgetStore {
       initialBalanceTxId: initBalId,
       monthlyIncomeTxId: monIncId
     };
+    this.state.settings.updatedAt = Date.now();
     this.state.onboarded = true;
+    this.emitLocalChange('budget:startCustom', { initialBalance, monthlyIncome, targetMonth });
     this.notify();
   }
 
@@ -367,7 +413,8 @@ export class BudgetStore {
       initialBalanceTxId: initBalId,
       monthlyIncomeTxId: monIncId
     };
-
+    this.state.settings.updatedAt = Date.now();
+    this.emitLocalChange('settings:initialBudget', this.state.settings.initialBudget);
     this.notify();
     return true;
   }
@@ -439,6 +486,7 @@ export class BudgetStore {
     });
     this.state.settings.presetsUpdatedAt = timestamp;
     this.saveToStorage();
+    this.emitLocalChange('presets:update', newPresets);
     this.notify();
   }
 
@@ -497,6 +545,7 @@ export class BudgetStore {
 
     this.state.transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
     this.state.onboarded = true;
+    this.emitLocalChange('data:import', null);
     this.notify();
     return true;
   }

@@ -11,30 +11,235 @@ export class SyncService {
   constructor(store, customClient = null) {
     this.store = store;
     this.client = customClient;
-    this.syncStatus = 'idle'; // 'idle' | 'syncing' | 'synced' | 'offline' | 'error'
+    this.syncStatus = 'idle'; // 'idle' | 'syncing' | 'pending' | 'synced' | 'offline' | 'error'
     this.statusListeners = [];
     this.isSyncing = false;
+    this.debounceTimer = null;
+    this.remoteSyncTimer = null;
+    this.pendingSyncRequested = false;
+    this.lastSyncAttemptTime = 0;
+    this.realtimeChannel = null;
+    this.realtimeStatus = 'DISCONNECTED';
+    this.pollingInterval = null;
+    this.windowListenersAttached = false;
 
-    // Online/Offline tarayıcı dinleyicileri
-    if (typeof window !== 'undefined') {
-      window.addEventListener('online', () => {
-        this.setStatus(navigator.onLine ? 'idle' : 'offline');
-        if (authService.isLoggedIn()) {
-          this.sync();
-        }
-      });
-      window.addEventListener('offline', () => {
-        this.setStatus('offline');
+    // 1. Yerel store mutasyonlarında debounced sync planla
+    if (this.store && typeof this.store.onLocalChange === 'function') {
+      this.store.onLocalChange(() => {
+        this.scheduleDebouncedSync(1000);
       });
     }
 
-    // Auth durum değişikliklerinde senkronizasyonu tetikle
+    // 2. Pencere, sekme görünürlüğü, odak ve ağ durumu dinleyicileri
+    this.setupWindowListeners();
+
+    // 3. Auth durum değişikliklerinde senkronizasyonu ve Realtime aboneliğini yönet
     authService.onAuthStateChange((user, session, event) => {
       if (user) {
-        this.handleUserLogin(user);
+        this.setupRealtimeSubscription(user);
+        this.startForegroundPolling(120000);
+        if (event === 'SIGNED_IN') {
+          this.handleUserLogin(user);
+        }
+      } else {
+        this.unsubscribeRealtime();
+        this.stopForegroundPolling();
+        this.setStatus('idle');
+      }
+    });
+  }
+
+  scheduleDebouncedSync(delay = 1000) {
+    const user = authService.getUser();
+    if (!user) return;
+
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      this.setStatus('offline', 'Çevrimdışı Mod');
+      return;
+    }
+
+    this.setStatus('pending', 'Bekleyen değişiklikler...');
+
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+      this.debounceTimer = null;
+    }
+
+    this.debounceTimer = setTimeout(async () => {
+      this.debounceTimer = null;
+      if (this.isSyncing) {
+        this.pendingSyncRequested = true;
+        return;
+      }
+      await this.sync();
+    }, delay);
+  }
+
+  async flushDebouncedSync() {
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+      this.debounceTimer = null;
+    }
+    return this.sync();
+  }
+
+  scheduleRemoteDeltaSync(delay = 500) {
+    if (this.remoteSyncTimer) {
+      clearTimeout(this.remoteSyncTimer);
+      this.remoteSyncTimer = null;
+    }
+
+    this.remoteSyncTimer = setTimeout(async () => {
+      this.remoteSyncTimer = null;
+      if (this.isSyncing) {
+        this.pendingSyncRequested = true;
+        return;
+      }
+      const user = authService.getUser();
+      if (user) {
+        await this.sync(user);
+      }
+    }, delay);
+  }
+
+  setupRealtimeSubscription(user) {
+    if (!user || !user.id) return;
+    const client = this.getClient();
+    if (!client || typeof client.channel !== 'function') return;
+
+    this.unsubscribeRealtime();
+
+    const channelName = `db-user-${user.id}`;
+    this.realtimeChannel = client.channel(channelName);
+
+    const handleRemoteChange = (tableName, payload) => {
+      console.info(`[SyncService] Realtime (${tableName}) değişikliği algılandı:`, payload?.eventType || payload);
+      this.scheduleRemoteDeltaSync(500);
+    };
+
+    this.realtimeChannel
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'transactions',
+          filter: `user_id=eq.${user.id}`
+        },
+        (payload) => handleRemoteChange('transactions', payload)
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_settings',
+          filter: `user_id=eq.${user.id}`
+        },
+        (payload) => handleRemoteChange('user_settings', payload)
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'presets',
+          filter: `user_id=eq.${user.id}`
+        },
+        (payload) => handleRemoteChange('presets', payload)
+      )
+      .subscribe((status, err) => {
+        this.realtimeStatus = status;
+        if (status === 'SUBSCRIBED') {
+          console.info(`[SyncService] Realtime kanalı başarıyla bağlandı (${status}): ${channelName}`);
+        } else if (status === 'CHANNEL_ERROR') {
+          console.warn(`[SyncService] Realtime kanal hatası (${status}):`, err);
+        } else if (status === 'TIMED_OUT') {
+          console.warn(`[SyncService] Realtime kanal zaman aşımı (${status}):`, err);
+        }
+      });
+  }
+
+  unsubscribeRealtime() {
+    if (this.realtimeChannel) {
+      try {
+        const client = this.getClient();
+        if (client && typeof client.removeChannel === 'function') {
+          client.removeChannel(this.realtimeChannel);
+        }
+      } catch (e) {
+        console.warn('[SyncService] unsubscribeRealtime uyarısı:', e);
+      }
+      this.realtimeChannel = null;
+      this.realtimeStatus = 'DISCONNECTED';
+    }
+  }
+
+  startForegroundPolling(intervalMs = 120000) {
+    this.stopForegroundPolling();
+    this.pollingInterval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) {
+        return;
+      }
+      const user = authService.getUser();
+      if (user && !this.isSyncing && !this.debounceTimer && !this.remoteSyncTimer) {
+        console.info('[SyncService] Önplan güvenlik yoklaması (Foreground Polling 120s)...');
+        this.sync(user);
+      }
+    }, intervalMs);
+    if (this.pollingInterval && typeof this.pollingInterval.unref === 'function') {
+      this.pollingInterval.unref();
+    }
+  }
+
+  stopForegroundPolling() {
+    if (this.pollingInterval) {
+      clearInterval(this.pollingInterval);
+      this.pollingInterval = null;
+    }
+  }
+
+  setupWindowListeners() {
+    if (typeof window === 'undefined' || this.windowListenersAttached) return;
+    this.windowListenersAttached = true;
+
+    const handleFocusOrVisible = () => {
+      const user = authService.getUser();
+      if (!user) return;
+      const now = Date.now();
+      const elapsed = now - this.lastSyncAttemptTime;
+      if (elapsed < 5000 && (!this.store || !this.store.hasUnsyncedChanges)) {
+        return;
+      }
+      console.info('[SyncService] Sekme görünür/odakta -> Delta sync kontrolü...');
+      this.scheduleDebouncedSync(300);
+    };
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          handleFocusOrVisible();
+        }
+      });
+    }
+
+    window.addEventListener('focus', () => {
+      handleFocusOrVisible();
+    });
+
+    window.addEventListener('online', () => {
+      console.info('[SyncService] İnternet bağlantısı sağlandı -> Senkronizasyon tetikleniyor...');
+      const user = authService.getUser();
+      if (user) {
+        this.setStatus('syncing', 'Bağlantı kuruldu, eşitleniyor...');
+        this.scheduleDebouncedSync(100);
       } else {
         this.setStatus('idle');
       }
+    });
+
+    window.addEventListener('offline', () => {
+      this.setStatus('offline', 'Çevrimdışı Mod');
     });
   }
 
@@ -107,7 +312,13 @@ export class SyncService {
 
   // 1. Kullanıcı Giriş Yaptığında Başlatıcı
   async handleUserLogin(user) {
-    if (!user || this.isSyncing) return;
+    if (!user) return;
+    this.setupRealtimeSubscription(user);
+    this.startForegroundPolling(120000);
+    if (this.isSyncing) {
+      this.pendingSyncRequested = true;
+      return;
+    }
     try {
       await this.sync(user);
       if (this.store.state.onboarded && typeof window !== 'undefined' && window.app?.modalManager) {
@@ -142,10 +353,12 @@ export class SyncService {
     }
 
     if (this.isSyncing) {
+      this.pendingSyncRequested = true;
       return { success: false, reason: 'already_syncing' };
     }
 
     this.isSyncing = true;
+    this.lastSyncAttemptTime = Date.now();
     this.setStatus('syncing', 'Bulut ile eşitleniyor...');
 
     try {
@@ -179,6 +392,9 @@ export class SyncService {
 
       const nowIso = new Date().toISOString();
       this.setLastSyncedAt(nowIso);
+      if (this.store && typeof this.store.markSynced === 'function') {
+        this.store.markSynced();
+      }
       this.setStatus('synced', 'Bulut ile başarıyla eşitlendi');
       return { success: true };
     } catch (err) {
@@ -187,6 +403,10 @@ export class SyncService {
       return { success: false, error: err };
     } finally {
       this.isSyncing = false;
+      if (this.pendingSyncRequested) {
+        this.pendingSyncRequested = false;
+        this.scheduleDebouncedSync(300);
+      }
     }
   }
 
@@ -382,8 +602,17 @@ export class SyncService {
     // Sadece cloud -> local hydrate.
 
     // ADIM 4: LocalStorage'a persist et ve arayüzü bilgilendir
-    this.store.saveToStorage();
-    this.store.notify();
+    const applyRemoteData = () => {
+      this.store.state.transactions = activeCloudTxs;
+      this.store.saveToStorage();
+      this.store.notify();
+    };
+
+    if (this.store && typeof this.store.withRemoteUpdate === 'function') {
+      this.store.withRemoteUpdate(applyRemoteData);
+    } else {
+      applyRemoteData();
+    }
 
     console.info(`[SyncService] Full Cloud Bootstrap başarıyla tamamlandı. (${activeCloudTxs.length} aktif işlem yüklendi)`);
   }
@@ -658,7 +887,14 @@ export class SyncService {
     }
 
     // Yerel store'u kaydet ve UI'ı güncelle
-    this.store.notify();
+    if (this.store && typeof this.store.withRemoteUpdate === 'function') {
+      this.store.withRemoteUpdate(() => {
+        this.store.saveToStorage();
+        this.store.notify();
+      });
+    } else {
+      this.store.notify();
+    }
   }
 
   // Kural 7: Güvenli yerel yedek

@@ -200,6 +200,7 @@ export default {
     syncNow: 'Şimdi Eşitle',
     statusSynced: 'Bulut Eşitlendi',
     statusSyncing: 'Eşitleniyor...',
+    statusPending: 'Bekleyen Değişiklikler',
     statusOffline: 'Çevrimdışı Mod',
     statusError: 'Eşitleme Hatası'
   }

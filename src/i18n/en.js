@@ -200,6 +200,7 @@ export default {
     syncNow: 'Sync Now',
     statusSynced: 'Cloud Synced',
     statusSyncing: 'Syncing...',
+    statusPending: 'Pending Changes',
     statusOffline: 'Offline Mode',
     statusError: 'Sync Error'
   }

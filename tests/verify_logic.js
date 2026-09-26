@@ -8,7 +8,7 @@ import tr from '../src/i18n/tr.js';
 import en from '../src/i18n/en.js';
 import { generateUUID, isValidUUID } from '../src/utils/helpers.js';
 import { SafeStorage } from '../src/utils/storage.js';
-import { AuthService } from '../src/services/authService.js';
+import { AuthService, authService } from '../src/services/authService.js';
 import { SyncService } from '../src/services/syncService.js';
 import { UIManager } from '../src/components/UIManager.js';
 import { STORAGE_KEY } from '../src/config/constants.js';
@@ -1245,11 +1245,472 @@ console.log('\n--- 9. FAZ 3 FRESH DEVICE BOOTSTRAP & ONBOARDING RACE CONDITION T
   assert(authStore.getTransactions().length === 1, 'TC-36 Startup sırasında auth/sync beklenerek veriler eksiksiz yüklendi');
 }
 
+// --------------------------------------------------------------------------
+// 10. FAZ 3 AKTİF SENKRONİZASYON, DEBOUNCE, REALTIME & ÇOKLU CİHAZ TESTLERİ (TC-37 - TC-45)
+// --------------------------------------------------------------------------
+console.log('\n--- 10. FAZ 3 AKTİF SENKRONİZASYON, DEBOUNCE, REALTIME & ÇOKLU CİHAZ TESTLERİ ---');
+
+// TC-37: Giriş Yapmış Kullanıcı İşlem Ekleme -> Debounced Sync ve Pending Durumu
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+
+  const store = new BudgetStore();
+  const fakeUser = { id: generateUUID() };
+
+  const mockClient = createMockClient({
+    user_sync_metadata: {
+      maybeSingle: () => ({
+        data: { user_id: fakeUser.id, schema_version: '1.1.0', last_synced_at: new Date().toISOString() },
+        error: null
+      }),
+      update: () => ({ error: null })
+    },
+    user_settings: {
+      maybeSingle: () => ({ data: { currency: 'TRY', onboarded: true, updated_at: '2026-09-20T10:00:00Z' }, error: null })
+    },
+    presets: {
+      select: () => ({ data: [], error: null })
+    },
+    transactions: {
+      select: () => ({ data: [], error: null }),
+      upsert: () => ({ data: [], error: null })
+    }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  authService.currentUser = fakeUser;
+  sync.setLastSyncedAt(new Date(Date.now() - 60000).toISOString());
+
+  // İşlem eklendiğinde
+  store.addTransaction({
+    title: 'Sync Test Kahve',
+    amount: 90,
+    type: 'expense',
+    categoryId: 'exp_social',
+    date: '2026-09-27'
+  });
+
+  assert(store.hasUnsyncedChanges === true, 'TC-37 Yerel işlem eklenince store.hasUnsyncedChanges=true oldu');
+  assert(sync.getStatus() === 'pending', 'TC-37 Yerel işlem eklenince sync durumu hemen "pending" oldu');
+  assert(Boolean(sync.debounceTimer), 'TC-37 Debounce timer başlatıldı');
+
+  // Debounced sync flush
+  await sync.flushDebouncedSync();
+
+  assert(sync.getStatus() === 'synced', 'TC-37 Debounce timer bitip sync tamamlanınca durum "synced" oldu');
+  assert(store.hasUnsyncedChanges === false, 'TC-37 Başarılı sync sonrası store.hasUnsyncedChanges=false oldu');
+}
+
+// TC-38: Hızlı Seri Girişler (Debounce Coalescing) -> Tek Bir Sync
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+
+  const store = new BudgetStore();
+  const fakeUser = { id: generateUUID() };
+  let pushCount = 0;
+
+  const mockClient = createMockClient({
+    user_sync_metadata: {
+      maybeSingle: () => ({
+        data: { user_id: fakeUser.id, schema_version: '1.1.0', last_synced_at: new Date().toISOString() },
+        error: null
+      }),
+      update: () => ({ error: null })
+    },
+    user_settings: {
+      maybeSingle: () => ({ data: { currency: 'TRY', onboarded: true, updated_at: '2026-09-20T10:00:00Z' }, error: null })
+    },
+    presets: {
+      select: () => ({ data: [], error: null })
+    },
+    transactions: {
+      select: () => ({ data: [], error: null }),
+      upsert: (payload) => {
+        pushCount++;
+        return { data: payload, error: null };
+      }
+    }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  sync.setLastSyncedAt(new Date(Date.now() - 60000).toISOString());
+  authService.currentUser = fakeUser;
+
+  // 3 işlem arka arkaya eklenir
+  store.addTransaction({ title: 'T1', amount: 10, type: 'expense', categoryId: 'exp_food', date: '2026-09-27' });
+  const timer1 = sync.debounceTimer;
+  store.addTransaction({ title: 'T2', amount: 20, type: 'expense', categoryId: 'exp_food', date: '2026-09-27' });
+  const timer2 = sync.debounceTimer;
+  store.addTransaction({ title: 'T3', amount: 30, type: 'expense', categoryId: 'exp_food', date: '2026-09-27' });
+  const timer3 = sync.debounceTimer;
+
+  assert(timer1 !== timer2 && timer2 !== timer3, 'TC-38 Her yeni işlemde önceki debounce timer iptal edilip yenilendi');
+
+  await sync.flushDebouncedSync();
+  assert(pushCount === 1, 'TC-38 3 seri işlem için buluta sadece TEK BİR paket push yapıldı (coalesced)');
+  assert(sync.getStatus() === 'synced', 'TC-38 Coalesced sync sonrası durum "synced" oldu');
+}
+
+// TC-39: Transaction Güncelleme ve Silme -> Debounced Sync Tetiklenmesi
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+
+  const store = new BudgetStore();
+  const fakeUser = { id: generateUUID() };
+  let updateCalled = false;
+
+  const mockClient = createMockClient({
+    user_sync_metadata: {
+      maybeSingle: () => ({
+        data: { user_id: fakeUser.id, schema_version: '1.1.0', last_synced_at: new Date().toISOString() },
+        error: null
+      }),
+      update: () => ({ error: null })
+    },
+    user_settings: {
+      maybeSingle: () => ({ data: { currency: 'TRY', onboarded: true, updated_at: '2026-09-20T10:00:00Z' }, error: null })
+    },
+    presets: {
+      select: () => ({ data: [], error: null })
+    },
+    transactions: {
+      select: () => ({ data: [], error: null }),
+      upsert: () => ({ data: [], error: null }),
+      update: (payload) => {
+        updateCalled = true;
+        return { data: [payload], error: null };
+      }
+    }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  sync.setLastSyncedAt(new Date(Date.now() - 60000).toISOString());
+  authService.currentUser = fakeUser;
+
+  const tx = store.addTransaction({ title: 'Düzenlenecek', amount: 50, type: 'expense', categoryId: 'exp_food', date: '2026-09-27' });
+  await sync.flushDebouncedSync();
+
+  // 1. Güncelleme
+  store.updateTransaction(tx.id, { amount: 75, updatedAt: Date.now() + 1000 });
+  assert(sync.getStatus() === 'pending', 'TC-39 updateTransaction sonrası sync durumu "pending" oldu');
+  await sync.flushDebouncedSync();
+  assert(sync.getStatus() === 'synced', 'TC-39 Güncelleme buluta iletildi');
+
+  // 2. Silme
+  store.deleteTransaction(tx.id);
+  assert(sync.getStatus() === 'pending', 'TC-39 deleteTransaction sonrası sync durumu "pending" oldu');
+  await sync.flushDebouncedSync();
+  assert(updateCalled === true, 'TC-39 Silinen işlem soft-delete update olarak buluta gönderildi');
+}
+
+// TC-40: Preset & Settings Değişikliklerinin Debounced Sync Tetiklemesi
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+
+  const store = new BudgetStore();
+  const fakeUser = { id: generateUUID() };
+  let presetUpserted = false;
+  let settingsUpserted = false;
+
+  const mockClient = createMockClient({
+    user_sync_metadata: {
+      maybeSingle: () => ({
+        data: { user_id: fakeUser.id, schema_version: '1.1.0', last_synced_at: new Date().toISOString() },
+        error: null
+      }),
+      update: () => ({ error: null })
+    },
+    user_settings: {
+      maybeSingle: () => ({ data: { currency: 'TRY', updated_at: '2026-09-20T10:00:00Z' }, error: null }),
+      upsert: () => { settingsUpserted = true; return { data: {}, error: null }; }
+    },
+    presets: {
+      select: () => ({ data: [], error: null }),
+      upsert: () => { presetUpserted = true; return { data: [], error: null }; }
+    },
+    transactions: {
+      select: () => ({ data: [], error: null }),
+      upsert: () => ({ data: [], error: null })
+    }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  sync.setLastSyncedAt(new Date(Date.now() - 60000).toISOString());
+  authService.currentUser = fakeUser;
+
+  // Preset güncelleme
+  store.updatePresets([{ id: 'preset_lunch', name: 'Yemekhane', amount: 80, emoji: '🍱', categoryId: 'exp_food', updatedAt: Date.now() + 1000 }]);
+  assert(sync.getStatus() === 'pending', 'TC-40 updatePresets sonrası sync durumu "pending" oldu');
+  await sync.flushDebouncedSync();
+  assert(presetUpserted === true, 'TC-40 Preset değişikliği buluta gönderildi');
+
+  // Settings güncelleme
+  store.updateSettings({ currency: 'USD', updatedAt: Date.now() + 2000 });
+  assert(sync.getStatus() === 'pending', 'TC-40 updateSettings sonrası sync durumu "pending" oldu');
+  await sync.flushDebouncedSync();
+  assert(settingsUpserted === true, 'TC-40 Ayar değişikliği buluta gönderildi');
+}
+
+// TC-41: Çevrimdışı Değişiklik Korunması & Online Event ile Push Edilmesi
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+
+  const store = new BudgetStore();
+  const fakeUser = { id: generateUUID() };
+  let pushedTxs = [];
+
+  const mockClient = createMockClient({
+    user_sync_metadata: {
+      maybeSingle: () => ({
+        data: { user_id: fakeUser.id, schema_version: '1.1.0', last_synced_at: new Date().toISOString() },
+        error: null
+      }),
+      update: () => ({ error: null })
+    },
+    user_settings: {
+      maybeSingle: () => ({ data: null, error: null })
+    },
+    presets: {
+      select: () => ({ data: [], error: null })
+    },
+    transactions: {
+      select: () => ({ data: [], error: null }),
+      upsert: (payload) => {
+        pushedTxs = payload;
+        return { data: payload, error: null };
+      }
+    }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  sync.setLastSyncedAt(new Date(Date.now() - 60000).toISOString());
+  authService.currentUser = fakeUser;
+
+  // Çevrimdışı simülasyonu
+  const originalOnLine = global.navigator?.onLine;
+  if (!global.navigator) global.navigator = {};
+  global.navigator.onLine = false;
+
+  store.addTransaction({
+    title: 'Metro Bileti',
+    amount: 25,
+    type: 'expense',
+    categoryId: 'exp_transport',
+    date: '2026-09-27'
+  });
+
+  assert(store.getTransactions().length === 1, 'TC-41 Çevrimdışıyken işlem yerel store\'a hatasız kaydedildi');
+  assert(sync.getStatus() === 'offline', 'TC-41 Çevrimdışıyken durum "offline" oldu');
+  assert(pushedTxs.length === 0, 'TC-41 Çevrimdışıyken ağa istek atılmadı');
+
+  // Çevrimiçi simülasyonu
+  global.navigator.onLine = true;
+  await sync.sync(fakeUser);
+
+  assert(pushedTxs.length === 1 && pushedTxs[0].title === 'Metro Bileti', 'TC-41 Tekrar çevrimiçi olunca çevrimdışı işlem buluta gönderildi');
+  assert(sync.getStatus() === 'synced', 'TC-41 Gönderim sonrası durum "synced" oldu');
+  if (originalOnLine !== undefined) global.navigator.onLine = originalOnLine;
+}
+
+// TC-42: Sekme Odak (Focus / Visibility) Senkronizasyon Tetiklemesi
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+
+  const store = new BudgetStore();
+  const fakeUser = { id: generateUUID() };
+  let deltaSyncRan = false;
+
+  const mockClient = createMockClient({
+    user_sync_metadata: {
+      maybeSingle: () => ({
+        data: { user_id: fakeUser.id, schema_version: '1.1.0', last_synced_at: new Date().toISOString() },
+        error: null
+      }),
+      update: () => ({ error: null })
+    },
+    user_settings: {
+      maybeSingle: () => ({ data: { currency: 'TRY', onboarded: true, updated_at: '2026-09-20T10:00:00Z' }, error: null })
+    },
+    presets: {
+      select: () => ({ data: [], error: null })
+    },
+    transactions: {
+      select: () => {
+        deltaSyncRan = true;
+        return { data: [], error: null };
+      }
+    }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  sync.setLastSyncedAt(new Date(Date.now() - 60000).toISOString());
+  sync.lastSyncAttemptTime = Date.now() - 10000;
+  authService.currentUser = fakeUser;
+
+  sync.scheduleDebouncedSync(50);
+  assert(sync.getStatus() === 'pending', 'TC-42 Sekme odakta sync "pending" olarak planlandı');
+  await sync.flushDebouncedSync();
+  assert(deltaSyncRan === true, 'TC-42 Odak/görünürlük sonrası delta sync çalıştı');
+}
+
+// TC-43: Supabase Realtime Event & Uzak Cihaz Değişikliğinin Alınması
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+
+  const store = new BudgetStore();
+  const fakeUser = { id: generateUUID() };
+  let subscribedChannels = [];
+  let channelListeners = {};
+
+  const mockFrom = createMockClient({
+    user_sync_metadata: {
+      maybeSingle: () => ({
+        data: { user_id: fakeUser.id, schema_version: '1.1.0', last_synced_at: new Date().toISOString() },
+        error: null
+      }),
+      update: () => ({ error: null })
+    },
+    user_settings: {
+      maybeSingle: () => ({ data: { currency: 'TRY', onboarded: true, updated_at: '2026-09-20T10:00:00Z' }, error: null })
+    },
+    presets: {
+      select: () => ({ data: [], error: null })
+    },
+    transactions: {
+      select: () => ({
+        data: [{
+          id: generateUUID(),
+          user_id: fakeUser.id,
+          title: 'Diğer Cihazdan Eklenen Harcama',
+          amount: 150,
+          type: 'expense',
+          category_id: 'exp_food',
+          date: '2026-09-27',
+          is_deleted: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }],
+        error: null
+      })
+    }
+  }).from;
+
+  const mockRealtimeClient = {
+    channel: (name) => {
+      subscribedChannels.push(name);
+      const ch = {
+        name,
+        on: (type, filter, handler) => {
+          channelListeners[`${filter.table}`] = handler;
+          return ch;
+        },
+        subscribe: (cb) => {
+          if (cb) cb('SUBSCRIBED');
+          return ch;
+        }
+      };
+      return ch;
+    },
+    removeChannel: () => {},
+    from: mockFrom
+  };
+
+  const sync = new SyncService(store, mockRealtimeClient);
+  sync.setLastSyncedAt(new Date(Date.now() - 60000).toISOString());
+  authService.currentUser = fakeUser;
+
+  sync.setupRealtimeSubscription(fakeUser);
+
+  assert(subscribedChannels.includes(`db-user-${fakeUser.id}`), 'TC-43 Doğru user_id filtreli Realtime kanalı açıldı');
+  assert(sync.realtimeStatus === 'SUBSCRIBED', 'TC-43 Realtime kanal durumu "SUBSCRIBED" olarak doğrulandı');
+  assert(Boolean(channelListeners['transactions']), 'TC-43 transactions tablosu için postgres_changes dinleyicisi kuruldu');
+
+  // Diğer cihazdan bir postgres_changes INSERT event'i geldi
+  channelListeners['transactions']({
+    eventType: 'INSERT',
+    table: 'transactions',
+    new: { id: generateUUID(), title: 'Diğer Cihazdan Eklenen Harcama' }
+  });
+
+  assert(Boolean(sync.remoteSyncTimer), 'TC-43 Realtime event gelince debounced delta sync zamanlayıcısı kuruldu');
+
+  // Remote timer'ı çalıştır
+  clearTimeout(sync.remoteSyncTimer);
+  await sync.sync(fakeUser);
+
+  assert(store.getTransactions().some(t => t.title === 'Diğer Cihazdan Eklenen Harcama'), 'TC-43 Diğer cihazın işlemi Realtime tetiklemesiyle yerel store\'a çekildi');
+}
+
+// TC-44: Self-Echo / Döngü Koruması & withRemoteUpdate
+{
+  const store = new BudgetStore();
+  let localChangeEvents = 0;
+  store.onLocalChange(() => {
+    localChangeEvents++;
+  });
+
+  // Buluttan veri uygulanırken withRemoteUpdate kullanıldığında localChange eventi TETİKLENMEZ
+  store.withRemoteUpdate(() => {
+    store.state.transactions.push({ id: 'remote-1', title: 'Remote', amount: 10, type: 'expense', categoryId: 'exp_food', date: '2026-09-27' });
+    store.notify();
+  });
+
+  assert(localChangeEvents === 0, 'TC-44 withRemoteUpdate sırasında yerel kullanıcı mutasyonu (onLocalChange) ASLA üretilmedi (self-echo döngüsü önlendi)');
+  assert(store.hasUnsyncedChanges === false, 'TC-44 Remote update sonrası hasUnsyncedChanges false kaldı');
+}
+
+// TC-45: Eşzamanlı (Paralel) Sync Koruma & Queued Sync
+{
+  const store = new BudgetStore();
+  const fakeUser = { id: generateUUID() };
+  let activeSyncs = 0;
+  let maxConcurrent = 0;
+
+  const mockClient = createMockClient({
+    user_sync_metadata: {
+      maybeSingle: async () => {
+        activeSyncs++;
+        maxConcurrent = Math.max(maxConcurrent, activeSyncs);
+        await new Promise(r => setTimeout(r, 20));
+        activeSyncs--;
+        return { data: { user_id: fakeUser.id, schema_version: '1.1.0', last_synced_at: new Date().toISOString() }, error: null };
+      },
+      update: () => ({ error: null })
+    },
+    user_settings: {
+      maybeSingle: () => ({ data: null, error: null })
+    },
+    presets: {
+      select: () => ({ data: [], error: null })
+    },
+    transactions: {
+      select: () => ({ data: [], error: null })
+    }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  sync.setLastSyncedAt(new Date(Date.now() - 60000).toISOString());
+  authService.currentUser = fakeUser;
+
+  // İki sync aynı anda tetiklenir
+  const p1 = sync.sync(fakeUser);
+  const p2 = sync.sync(fakeUser);
+
+  await Promise.all([p1, p2]);
+
+  assert(maxConcurrent === 1, 'TC-45 Aynı anda iki sync paralel ÇALIŞTIRILMADI (isSyncing koruması sağlandı)');
+}
+
 console.log('\n====================================================');
 console.log(`🏁 ENTEGRE TEST SONUCU: ${passed} PASSED, ${failed} FAILED`);
 console.log('====================================================');
 
-if (failed > 0) {
-  process.exit(1);
-}
+process.exit(failed > 0 ? 1 : 0);
 

@@ -908,6 +908,9 @@ export class UIManager {
     if (status === 'syncing') {
       this.iconSyncCloud.className = 'w-4 h-4 text-amber-500 animate-spin';
       if (this.syncStatusText) this.syncStatusText.textContent = t('auth.statusSyncing');
+    } else if (status === 'pending') {
+      this.iconSyncCloud.className = 'w-4 h-4 text-amber-500';
+      if (this.syncStatusText) this.syncStatusText.textContent = t('auth.statusPending');
     } else if (status === 'synced') {
       this.iconSyncCloud.className = 'w-4 h-4 text-emerald-500';
       if (this.syncStatusText) this.syncStatusText.textContent = t('auth.statusSynced');
@@ -919,7 +922,7 @@ export class UIManager {
       if (this.syncStatusText) this.syncStatusText.textContent = t('auth.statusError');
     } else {
       this.iconSyncCloud.className = 'w-4 h-4 text-slate-400';
-      if (this.syncStatusText) this.syncStatusText.textContent = t('auth.statusSynced');
+      if (this.syncStatusText) this.syncStatusText.textContent = t('auth.statusOffline');
     }
     this.refreshIcons();
   }
