@@ -21,12 +21,45 @@ export function isValidUUID(str) {
 }
 
 /**
- * Şu anki yılı ve ayı "YYYY-MM" formatında döndürür
+ * Verilen Date nesnesini veya şu anki zamanı kullanıcının yerel saat diliminde (local timezone)
+ * "YYYY-MM-DD" formatında döndürür. ASLA toISOString().slice(0, 10) veya UTC kullanmaz.
+ *
+ * @param {Date|string|number} [date=new Date()]
+ * @returns {string} YYYY-MM-DD
  */
-export function getCurrentYearMonth() {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
+export function getLocalDateString(date = new Date()) {
+  let y, m, day;
+  if (date && typeof date.getFullYear === 'function') {
+    y = date.getFullYear();
+    m = String(date.getMonth() + 1).padStart(2, '0');
+    day = String(date.getDate()).padStart(2, '0');
+  } else {
+    const d = date instanceof Date ? date : new Date(date);
+    const validDate = isNaN(d.getTime()) ? new Date() : d;
+    y = validDate.getFullYear();
+    m = String(validDate.getMonth() + 1).padStart(2, '0');
+    day = String(validDate.getDate()).padStart(2, '0');
+  }
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * Şu anki yılı ve ayı kullanıcının yerel saat dilimine göre "YYYY-MM" formatında döndürür
+ *
+ * @param {Date|string|number} [date=new Date()]
+ * @returns {string} YYYY-MM
+ */
+export function getCurrentYearMonth(date = new Date()) {
+  let y, m;
+  if (date && typeof date.getFullYear === 'function') {
+    y = date.getFullYear();
+    m = String(date.getMonth() + 1).padStart(2, '0');
+  } else {
+    const d = date instanceof Date ? date : new Date(date);
+    const validDate = isNaN(d.getTime()) ? new Date() : d;
+    y = validDate.getFullYear();
+    m = String(validDate.getMonth() + 1).padStart(2, '0');
+  }
   return `${y}-${m}`;
 }
 

@@ -82,7 +82,7 @@ const appIcons = {
 };
 import { calculateSummary } from '../store/calculations.js';
 import { formatCurrency, formatNumber, formatDate, formatMonthTitle, getCurrencySymbol } from '../utils/formatters.js';
-import { getCurrentYearMonth, getAdjacentMonth } from '../utils/helpers.js';
+import { getCurrentYearMonth, getAdjacentMonth, getLocalDateString } from '../utils/helpers.js';
 import { escapeHtml } from '../utils/sanitize.js';
 import { t, getLanguage, setLanguage, onLanguageChange } from '../i18n/index.js';
 import { showToast } from './toastManager.js';
@@ -543,7 +543,7 @@ export class UIManager {
   getDefaultTransactionDate() {
     const currentYM = getCurrentYearMonth();
     if (this.selectedMonth === currentYM) {
-      return new Date().toISOString().slice(0, 10);
+      return getLocalDateString();
     }
     return `${this.selectedMonth}-01`;
   }
@@ -676,7 +676,7 @@ export class UIManager {
   }
 
   renderQuickPresets(currency, lang) {
-    if (!this.quickPresetsContainer) return;
+    if (!this.quickPresetsContainer || typeof document === 'undefined') return;
     const presets = this.store.getPresets();
     this.quickPresetsContainer.innerHTML = '';
 
@@ -872,7 +872,7 @@ export class UIManager {
       const blob = new Blob([jsonStr], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      const today = new Date().toISOString().slice(0, 10);
+      const today = getLocalDateString();
       a.href = url;
       a.download = `student_budget_export_${today}.json`;
       document.body.appendChild(a);

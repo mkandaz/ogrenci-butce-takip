@@ -6,7 +6,7 @@ import { formatCurrency, formatNumber, formatDate, formatMonthTitle, normalizeCu
 import { t, setLanguage, getLanguage } from '../src/i18n/index.js';
 import tr from '../src/i18n/tr.js';
 import en from '../src/i18n/en.js';
-import { generateUUID, isValidUUID } from '../src/utils/helpers.js';
+import { generateUUID, isValidUUID, getLocalDateString, getCurrentYearMonth } from '../src/utils/helpers.js';
 import { SafeStorage } from '../src/utils/storage.js';
 import { AuthService, authService } from '../src/services/authService.js';
 import { SyncService } from '../src/services/syncService.js';
@@ -1708,9 +1708,236 @@ console.log('\n--- 10. FAZ 3 AKTİF SENKRONİZASYON, DEBOUNCE, REALTIME & ÇOKLU
   assert(maxConcurrent === 1, 'TC-45 Aynı anda iki sync paralel ÇALIŞTIRILMADI (isSyncing koruması sağlandı)');
 }
 
+// --------------------------------------------------------------------------
+// 11. FAZ 3 YEREL TARİH (LOCAL TIMEZONE), DATE-ONLY VE UTC AYRIMI TESTLERİ (TC-46 - TC-52)
+// --------------------------------------------------------------------------
+console.log('\n--- 11. FAZ 3 YEREL TARİH (LOCAL TIMEZONE), DATE-ONLY VE UTC AYRIMI TESTLERİ ---');
+
+// TC-46: Timezone & Local Date Üretimi (UTC+3 ve Gece Yarısı Testleri)
+{
+  // UTC+3'te yerel saat 00:23 iken UTC bir önceki gün 21:23'tür.
+  // getLocalDateString() UTC değil, KULLANICININ YEREL TAKVİM GÜNÜNÜ (2026-09-27) vermelidir.
+  const localMidnightDate = {
+    getFullYear: () => 2026,
+    getMonth: () => 8, // Eylül (0-indexed)
+    getDate: () => 27,
+    getHours: () => 0,
+    getMinutes: () => 23,
+    getTime: () => 1790457780000,
+    toISOString: () => '2026-09-26T21:23:00.000Z'
+  };
+
+  const localRes = getLocalDateString(localMidnightDate);
+  assert(localRes === '2026-09-27', 'TC-46 UTC+3 saat 00:23 iken işlem tarihi 2026-09-27 olarak üretildi (2026-09-26 regresyonu önlendi)');
+  assert(localRes !== localMidnightDate.toISOString().slice(0, 10), 'TC-46 getLocalDateString sonucu toISOString().slice(0, 10) UTC değerinden bağımsızdır');
+
+  // UTC+3 saat 02:59 -> Aynı gün 2026-09-27
+  const earlyMorningDate = {
+    getFullYear: () => 2026,
+    getMonth: () => 8,
+    getDate: () => 27,
+    getHours: () => 2,
+    getMinutes: () => 59,
+    getTime: () => 1790467140000,
+    toISOString: () => '2026-09-26T23:59:00.000Z'
+  };
+  assert(getLocalDateString(earlyMorningDate) === '2026-09-27', 'TC-46 UTC+3 saat 02:59 iken aynı gün (2026-09-27) korundu');
+
+  // UTC+3 saat 03:01 -> Aynı gün 2026-09-27
+  const afterThreeDate = {
+    getFullYear: () => 2026,
+    getMonth: () => 8,
+    getDate: () => 27,
+    getHours: () => 3,
+    getMinutes: () => 1,
+    getTime: () => 1790467260000,
+    toISOString: () => '2026-09-27T00:01:00.000Z'
+  };
+  assert(getLocalDateString(afterThreeDate) === '2026-09-27', 'TC-46 UTC+3 saat 03:01 iken aynı gün (2026-09-27) korundu');
+}
+
+// TC-47: Ay ve Yıl Geçişleri (Month / Year Boundary)
+{
+  // 1 Ekim 2026 00:15 (UTC'de henüz 30 Eylül 21:15)
+  const monthBoundaryDate = {
+    getFullYear: () => 2026,
+    getMonth: () => 9, // Ekim (0-indexed)
+    getDate: () => 1,
+    getHours: () => 0,
+    getMinutes: () => 15,
+    getTime: () => 1790806500000,
+    toISOString: () => '2026-09-30T21:15:00.000Z'
+  };
+  assert(getLocalDateString(monthBoundaryDate) === '2026-10-01', 'TC-47 Ay geçişinde (1 Ekim 00:15) yerel tarih 2026-10-01 oldu (30 Eylül regresyonu önlendi)');
+  assert(getCurrentYearMonth(monthBoundaryDate) === '2026-10', 'TC-47 Ay geçişinde getCurrentYearMonth 2026-10 oldu');
+
+  // 1 Ocak 2027 00:05 (UTC'de henüz 31 Aralık 2026 21:05)
+  const yearBoundaryDate = {
+    getFullYear: () => 2027,
+    getMonth: () => 0, // Ocak (0-indexed)
+    getDate: () => 1,
+    getHours: () => 0,
+    getMinutes: () => 5,
+    getTime: () => 1798751100000,
+    toISOString: () => '2026-12-31T21:05:00.000Z'
+  };
+  assert(getLocalDateString(yearBoundaryDate) === '2027-01-01', 'TC-47 Yıl geçişinde (1 Ocak 00:05) yerel tarih 2027-01-01 oldu (2026 regresyonu önlendi)');
+  assert(getCurrentYearMonth(yearBoundaryDate) === '2027-01', 'TC-47 Yıl geçişinde getCurrentYearMonth 2027-01 oldu');
+}
+
+// TC-48: BudgetStore.addTransaction Tarih Belirtilmediğinde Yerel Tarihi Kullanma
+{
+  const store = new BudgetStore();
+  const tx = store.addTransaction({
+    title: 'Gece Kahvesi',
+    amount: 60,
+    type: 'expense',
+    categoryId: 'exp_food'
+  });
+
+  const expectedToday = getLocalDateString();
+  assert(tx.date === expectedToday, 'TC-48 addTransaction tarih verilmediğinde kullanıcının yerel takvim tarihini atadı');
+  assert(/^\d{4}-\d{2}-\d{2}$/.test(tx.date), 'TC-48 İşlem tarihi YYYY-MM-DD DATE-ONLY formatındadır');
+}
+
+// TC-49: UIManager.getDefaultTransactionDate ve Modal Entegrasyonu
+{
+  const store = new BudgetStore();
+  const ui = new UIManager(store);
+  const currentYM = getCurrentYearMonth();
+  ui.selectedMonth = currentYM;
+
+  const defaultDate = ui.getDefaultTransactionDate();
+  assert(defaultDate === getLocalDateString(), 'TC-49 UIManager.getDefaultTransactionDate aktif ayda getLocalDateString() döndürdü');
+
+  // Farklı bir ay seçildiğinde o ayın 1'ini döndürür
+  ui.selectedMonth = '2026-08';
+  assert(ui.getDefaultTransactionDate() === '2026-08-01', 'TC-49 Başka bir ay seçildiğinde ayın ilk gününü (2026-08-01) döndürdü');
+}
+
+// TC-50: BudgetStore importData ve loadState Eksik Tarihleri Yerel Tarihle Doldurma
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  const store = new BudgetStore();
+  const res = store.importData({
+    transactions: [
+      {
+        title: 'Tarihsiz İçecek',
+        amount: 35,
+        type: 'expense',
+        categoryId: 'exp_food'
+        // date yok!
+      }
+    ]
+  }, 'replace');
+
+  assert(res === true, 'TC-50 Tarihsiz işlem içe aktarıldı');
+  const importedTx = store.getTransactions().find(t => t.title === 'Tarihsiz İçecek');
+  assert(importedTx && importedTx.date === getLocalDateString(), 'TC-50 İçe aktarmada eksik tarih yerel tarih ile dolduruldu');
+}
+
+// TC-51: Supabase Senkronizasyonunda DATE-ONLY ve UTC TIMESTAMPS Ayrımı
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+
+  const store = new BudgetStore();
+  const fakeUser = { id: generateUUID() };
+  let pushedPayload = null;
+
+  const mockClient = createMockClient({
+    user_sync_metadata: {
+      maybeSingle: () => ({
+        data: { user_id: fakeUser.id, schema_version: '1.1.0', last_synced_at: new Date().toISOString() },
+        error: null
+      }),
+      update: () => ({ error: null })
+    },
+    user_settings: {
+      maybeSingle: () => ({ data: null, error: null })
+    },
+    presets: {
+      select: () => ({ data: [], error: null })
+    },
+    transactions: {
+      select: () => ({
+        // Cloud'dan gelen veri: date DATE-ONLY, updated_at TIMESTAMP
+        data: [{
+          id: generateUUID(),
+          user_id: fakeUser.id,
+          title: 'Cloud İşlemi',
+          amount: 200,
+          type: 'income',
+          category_id: 'inc_scholarship',
+          date: '2026-09-27',
+          is_deleted: false,
+          created_at: '2026-09-26T21:23:00.000Z',
+          updated_at: '2026-09-26T21:23:00.000Z'
+        }],
+        error: null
+      }),
+      upsert: (payload) => {
+        pushedPayload = payload;
+        return { data: payload, error: null };
+      }
+    }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  sync.setLastSyncedAt(new Date(Date.now() - 60000).toISOString());
+  authService.currentUser = fakeUser;
+
+  // Yerel işlem ekle: date DATE-ONLY
+  const localTx = store.addTransaction({
+    title: 'Gece Simülasyonu',
+    amount: 123,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-27',
+    updatedAt: Date.now() + 5000
+  });
+
+  await sync.sync(fakeUser);
+
+  // 1. PUSH doğrulaması
+  assert(Boolean(pushedPayload), 'TC-51 Yerel işlem buluta push edildi');
+  const pushedItem = pushedPayload.find(p => p.title === 'Gece Simülasyonu');
+  assert(pushedItem && pushedItem.date === '2026-09-27', 'TC-51 Supabase transactions.date DATE-ONLY (2026-09-27) olarak iletildi');
+  assert(pushedItem && pushedItem.created_at.includes('T') && pushedItem.created_at.endsWith('Z'), 'TC-51 Supabase created_at ISO UTC timestamp olarak iletildi');
+  assert(pushedItem && pushedItem.updated_at.includes('T') && pushedItem.updated_at.endsWith('Z'), 'TC-51 Supabase updated_at ISO UTC timestamp olarak iletildi');
+
+  // 2. PULL doğrulaması
+  const cloudTx = store.getTransactions().find(t => t.title === 'Cloud İşlemi');
+  assert(cloudTx && cloudTx.date === '2026-09-27', 'TC-51 Cloud transactions.date DATE-ONLY (2026-09-27) yerel store\'a bozulmadan aktarıldı');
+}
+
+// TC-52: Quick Expense Preset İle Eklenen İşlemin Yerel Tarihi Alması
+{
+  const store = new BudgetStore();
+  let prefillPassed = null;
+  const mockModalManager = {
+    openTransactionModal: (mode, prefill) => {
+      prefillPassed = prefill;
+    }
+  };
+
+  const ui = new UIManager(store, { modalManager: mockModalManager });
+  const preset = store.getPresets()[0];
+  mockModalManager.openTransactionModal('add', {
+    title: preset.title,
+    amount: preset.amount,
+    type: 'expense',
+    categoryId: preset.categoryId,
+    date: ui.getDefaultTransactionDate()
+  });
+
+  assert(prefillPassed && prefillPassed.date === getLocalDateString(), 'TC-52 Quick preset işlem tarihi için getDefaultTransactionDate() yerel tarih sağladı');
+}
+
 console.log('\n====================================================');
 console.log(`🏁 ENTEGRE TEST SONUCU: ${passed} PASSED, ${failed} FAILED`);
 console.log('====================================================');
 
 process.exit(failed > 0 ? 1 : 0);
+
 

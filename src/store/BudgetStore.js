@@ -1,7 +1,7 @@
 import { STORAGE_KEY, SCHEMA_VERSION, DEFAULT_CURRENCY, DEFAULT_LANGUAGE } from '../config/constants.js';
 import { DEFAULT_PRESETS, DEFAULT_SETTINGS, DEFAULT_CATEGORIES, DEFAULT_SEED_TRANSACTIONS } from '../config/defaultData.js';
 import { SafeStorage } from '../utils/storage.js';
-import { generateUUID, getCurrentYearMonth } from '../utils/helpers.js';
+import { generateUUID, getCurrentYearMonth, getLocalDateString } from '../utils/helpers.js';
 import { normalizeCurrency } from '../utils/formatters.js';
 
 export class BudgetStore {
@@ -55,7 +55,7 @@ export class BudgetStore {
               amount: Number(t.amount) || 0,
               type: t.type === 'income' ? 'income' : 'expense',
               categoryId: t.categoryId || (t.type === 'income' ? 'inc_other' : 'exp_other'),
-              date: t.date || new Date().toISOString().slice(0, 10),
+              date: t.date || getLocalDateString(),
               notes: t.notes ? String(t.notes).trim() : '',
               createdAt: t.createdAt || Date.now(),
               updatedAt: t.updatedAt || Date.now()
@@ -184,7 +184,7 @@ export class BudgetStore {
       amount,
       type: txData.type === 'income' ? 'income' : 'expense',
       categoryId: txData.categoryId,
-      date: txData.date || new Date().toISOString().slice(0, 10),
+      date: txData.date || getLocalDateString(),
       notes: txData.notes ? String(txData.notes).trim() : '',
       createdAt: Date.now(),
       updatedAt: Date.now()
@@ -519,7 +519,7 @@ export class BudgetStore {
         amount: Math.round(Number(t.amount) * 100) / 100,
         type: t.type === 'income' ? 'income' : 'expense',
         categoryId: t.categoryId || (t.type === 'income' ? 'inc_other' : 'exp_other'),
-        date: t.date || new Date().toISOString().slice(0, 10),
+        date: t.date || getLocalDateString(),
         notes: t.notes ? String(t.notes).trim() : '',
         createdAt: t.createdAt || Date.now(),
         updatedAt: t.updatedAt || Date.now()
