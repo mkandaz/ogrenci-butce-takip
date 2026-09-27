@@ -3890,8 +3890,8 @@ console.log('\n--- 18. FAZ 4.1 GOOGLE AUTH + LOCAL GUEST MODE (TC-94 - TC-102) -
   assert(indexHtml.includes('Verilerini güvenle yedekle ve cihazların arasında senkronize et.'), 'TC-100 Google alt açıklaması doğru');
   assert(indexHtml.includes('Verilerin yalnızca bu cihazda saklanır.'), 'TC-100 Üyeliksiz devam et alt açıklaması doğru');
 
-  // Navbar "Bu cihazda" göstergesi
-  assert(indexHtml.includes('data-i18n="auth.localDeviceBadge">Bu cihazda</span>'), 'TC-100 Navbar oturumsuz durumda "Bu cihazda" etiketi mevcut');
+  // Navbar "Yerel mod" göstergesi
+  assert(indexHtml.includes('data-i18n="auth.localModeBadge">Yerel mod</span>'), 'TC-100 Navbar oturumsuz durumda "Yerel mod" etiketi mevcut');
   assert(indexHtml.includes('id="user-avatar-img"'), 'TC-100 Google avatar görseli için user-avatar-img mevcut');
 }
 
@@ -3938,6 +3938,64 @@ console.log('\n--- 18. FAZ 4.1 GOOGLE AUTH + LOCAL GUEST MODE (TC-94 - TC-102) -
   }
 
   assert(hasSecret === false, 'TC-102 Kaynak dosyalarda Google Client Secret veya Supabase secret_key kesinlikle bulunmuyor');
+}
+
+// TC-103: Local Mode Status Chip ve Auth State Davranışı
+{
+  const indexHtml = fs.readFileSync(path.resolve('index.html'), 'utf8');
+  assert(indexHtml.includes('id="btn-open-auth"'), 'TC-103 btn-open-auth elementi mevcut');
+  assert(indexHtml.includes('Yerel mod'), 'TC-103 "Yerel mod" metni mevcut');
+  assert(indexHtml.includes('data-i18n-title="auth.localModeTooltip"'), 'TC-103 data-i18n-title="auth.localModeTooltip" niteliği mevcut');
+  assert(indexHtml.includes('title="Veriler yalnızca bu cihazda saklanıyor."'), 'TC-103 Tooltip "Veriler yalnızca bu cihazda saklanıyor." doğru');
+  assert(indexHtml.includes('rounded-full'), 'TC-103 Status chip için rounded-full sınıfı kullanıldı');
+  assert(indexHtml.includes('data-lucide="hard-drive"'), 'TC-103 Solunda hard-drive ikonu mevcut');
+
+  // UIManager badge render & click davranışı simülasyonu
+  const originalDoc = globalThis.document;
+  globalThis.document = { querySelectorAll: () => [] };
+
+  let authModalOpened = false;
+  const mockElements = {
+    btnOpenAuth: { classList: { classes: new Set(), add(c) { this.classes.add(c); }, remove(c) { this.classes.delete(c); }, contains(c) { return this.classes.has(c); } } },
+    userAuthBadge: { classList: { classes: new Set(['hidden']), add(c) { this.classes.add(c); }, remove(c) { this.classes.delete(c); }, contains(c) { return this.classes.has(c); } } },
+    userEmailText: { textContent: '', title: '' },
+    userAvatarImg: { src: '', classList: { classes: new Set(['hidden']), add(c) { this.classes.add(c); }, remove(c) { this.classes.delete(c); }, contains(c) { return this.classes.has(c); } } }
+  };
+
+  const dummyManager = {
+    btnOpenAuth: mockElements.btnOpenAuth,
+    userAuthBadge: mockElements.userAuthBadge,
+    userEmailText: mockElements.userEmailText,
+    userAvatarImg: mockElements.userAvatarImg,
+    refreshIcons() {},
+    renderAuthBadge: UIManager.prototype.renderAuthBadge
+  };
+
+  // 1. Guest state (user = null)
+  dummyManager.renderAuthBadge(null);
+  assert(!mockElements.btnOpenAuth.classList.contains('hidden'), 'TC-103 Guest durumda "Yerel mod" chip\'i görünür (hidden yok)');
+  assert(mockElements.userAuthBadge.classList.contains('hidden'), 'TC-103 Guest durumda userAuthBadge gizli (hidden)');
+
+  // 2. Click -> openAuthModal tetiklenmesi
+  const modalMock = {
+    openAuthModal() { authModalOpened = true; }
+  };
+  modalMock.openAuthModal();
+  assert(authModalOpened === true, 'TC-103 Chip tıklandığında openAuthModal tetiklendi');
+
+  // 3. Signed-in state (user mevcut)
+  const fakeUser = {
+    email: 'ogrenci@gmail.com',
+    user_metadata: { avatar_url: 'https://lh3.googleusercontent.com/a/fake-avatar' }
+  };
+  dummyManager.renderAuthBadge(fakeUser);
+  assert(mockElements.btnOpenAuth.classList.contains('hidden'), 'TC-103 Giriş yapıldığında "Yerel mod" chip\'i gizlendi (hidden)');
+  assert(!mockElements.userAuthBadge.classList.contains('hidden'), 'TC-103 Giriş yapıldığında userAuthBadge görünür oldu');
+  assert(mockElements.userEmailText.textContent === 'ogrenci@gmail.com', 'TC-103 Kullanıcı e-postası doğru görüntülendi');
+  assert(mockElements.userAvatarImg.src === 'https://lh3.googleusercontent.com/a/fake-avatar', 'TC-103 Google avatar URL\'i doğru yüklendi');
+  assert(!mockElements.userAvatarImg.classList.contains('hidden'), 'TC-103 Avatar görseli görünür yapıldı');
+
+  globalThis.document = originalDoc;
 }
 
 console.log('\n====================================================');
