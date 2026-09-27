@@ -33,40 +33,40 @@
 
   <!-- ================= NAVBAR ================= -->
   <header class="sticky top-0 z-40 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800 transition-colors">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+    <div class="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-1 sm:gap-3">
       
       <!-- Brand Logo -->
-      <div class="flex items-center space-x-3">
-        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
-          <i data-lucide="graduation-cap" class="w-6 h-6"></i>
+      <div class="flex items-center space-x-2 sm:space-x-3 shrink-0">
+        <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white shadow-md shadow-indigo-500/20 shrink-0">
+          <i data-lucide="graduation-cap" class="w-5 h-5 sm:w-6 sm:h-6"></i>
         </div>
-        <div>
-          <div class="flex items-center space-x-2">
-            <h1 class="text-lg font-bold tracking-tight text-slate-900 dark:text-white" data-i18n="brand.title">Öğrenci Bütçem</h1>
-            <span class="text-[10px] uppercase font-extrabold px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300">v1.1</span>
+        <div class="min-w-0">
+          <div class="flex items-center space-x-1.5 sm:space-x-2">
+            <h1 class="text-sm sm:text-lg font-bold tracking-tight text-slate-900 dark:text-white truncate" data-i18n="brand.title">Öğrenci Bütçem</h1>
+            <span class="text-[9px] sm:text-[10px] uppercase font-extrabold px-1 sm:px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 shrink-0">v1.1</span>
           </div>
-          <p class="text-xs text-slate-500 dark:text-slate-400 hidden sm:block" data-i18n="brand.subtitle">Akıllı & Güvenli Bütçe Takip Rehberi</p>
+          <p class="text-xs text-slate-500 dark:text-slate-400 hidden sm:block truncate" data-i18n="brand.subtitle">Akıllı & Güvenli Bütçe Takip Rehberi</p>
         </div>
       </div>
 
       <!-- Header Actions -->
-      <div class="flex items-center space-x-2 sm:space-x-3">
+      <div class="flex items-center space-x-1 sm:space-x-2 lg:space-x-3 shrink-0">
         <!-- Month Navigator -->
-        <div id="month-navigator-container" class="flex items-center bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-0.5">
-          <button id="btn-prev-month" type="button" title="Önceki Ay" aria-label="Önceki Ay" class="min-w-[36px] min-h-[36px] p-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 hover:shadow-xs transition flex items-center justify-center">
-            <i data-lucide="chevron-left" class="w-4 h-4"></i>
+        <div id="month-navigator-container" class="flex items-center bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-0.5 shrink-0">
+          <button id="btn-prev-month" type="button" title="Önceki Ay" aria-label="Önceki Ay" class="min-w-[28px] sm:min-w-[36px] min-h-[28px] sm:min-h-[36px] p-1 sm:p-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 hover:shadow-xs transition flex items-center justify-center">
+            <i data-lucide="chevron-left" class="w-3.5 h-3.5 sm:w-4 sm:h-4"></i>
           </button>
           
           <div class="relative flex items-center">
-            <button id="btn-month-display" type="button" class="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold text-slate-800 dark:text-slate-200 hover:bg-white/80 dark:hover:bg-slate-700/80 transition" title="Ay Değiştir">
-              <i data-lucide="calendar" class="w-3.5 h-3.5 text-indigo-500"></i>
+            <button id="btn-month-display" type="button" class="flex items-center space-x-1 sm:space-x-1.5 px-1.5 sm:px-2.5 py-1 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-bold text-slate-800 dark:text-slate-200 hover:bg-white/80 dark:hover:bg-slate-700/80 transition" title="Ay Değiştir">
+              <i data-lucide="calendar" class="w-3 h-3 sm:w-3.5 sm:h-3.5 text-indigo-500"></i>
               <span id="header-date-text">Eylül 2026</span>
             </button>
             <input type="month" id="header-month-picker" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full" title="Tarih seç" />
           </div>
 
-          <button id="btn-next-month" type="button" title="Sonraki Ay" aria-label="Sonraki Ay" class="min-w-[36px] min-h-[36px] p-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 hover:shadow-xs transition flex items-center justify-center">
-            <i data-lucide="chevron-right" class="w-4 h-4"></i>
+          <button id="btn-next-month" type="button" title="Sonraki Ay" aria-label="Sonraki Ay" class="min-w-[28px] sm:min-w-[36px] min-h-[28px] sm:min-h-[36px] p-1 sm:p-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 hover:shadow-xs transition flex items-center justify-center">
+            <i data-lucide="chevron-right" class="w-3.5 h-3.5 sm:w-4 sm:h-4"></i>
           </button>
         </div>
 
@@ -84,9 +84,9 @@
         </div>
 
         <!-- Data & Settings Dropdown -->
-        <div class="relative inline-block text-left" id="backup-menu-container">
-          <button id="btn-backup-menu" type="button" title="Ayarlar & Veri Yönetimi" aria-label="Ayarlar ve Veri Menüsü" class="min-w-[44px] min-h-[44px] p-2.5 rounded-xl flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition">
-            <i data-lucide="settings" class="w-5 h-5"></i>
+        <div class="relative inline-block text-left shrink-0" id="backup-menu-container">
+          <button id="btn-backup-menu" type="button" title="Ayarlar & Veri Yönetimi" aria-label="Ayarlar ve Veri Menüsü" class="min-w-[32px] sm:min-w-[44px] min-h-[32px] sm:min-h-[44px] p-1.5 sm:p-2.5 rounded-xl flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition">
+            <i data-lucide="settings" class="w-4 h-4 sm:w-5 sm:h-5"></i>
           </button>
           <!-- Backup dropdown menu -->
           <div id="backup-dropdown" class="hidden absolute right-0 mt-2 w-64 rounded-xl bg-white dark:bg-slate-900 shadow-xl border border-slate-200 dark:border-slate-800 py-1.5 z-50 text-xs">
@@ -126,45 +126,45 @@
         </div>
 
         <!-- Cloud Sync & Auth Container -->
-        <div id="cloud-sync-container" class="flex items-center">
+        <div id="cloud-sync-container" class="flex items-center shrink-0">
           <!-- Logged Out State: "Yerel mod" Status Chip -->
-          <button id="btn-open-auth" type="button" class="inline-flex items-center space-x-1.5 px-2.5 py-1 sm:py-1.5 rounded-full text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition cursor-pointer select-none" title="Veriler yalnızca bu cihazda saklanıyor." data-i18n-title="auth.localModeTooltip">
+          <button id="btn-open-auth" type="button" class="inline-flex items-center space-x-1 sm:space-x-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition cursor-pointer select-none" title="Veriler yalnızca bu cihazda saklanıyor." data-i18n-title="auth.localModeTooltip">
             <i data-lucide="hard-drive" class="w-3.5 h-3.5 text-slate-400 dark:text-slate-500"></i>
             <span data-i18n="auth.localModeBadge">Yerel mod</span>
           </button>
 
           <!-- Logged In State: User Badge & Sync Indicator -->
-          <div id="user-auth-badge" class="hidden flex items-center space-x-1.5 text-xs bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5">
+          <div id="user-auth-badge" class="hidden flex items-center space-x-1 sm:space-x-1.5 text-xs bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 sm:px-2.5 py-1 sm:py-1.5">
             <span id="sync-status-indicator" title="Senkronizasyon Durumu" class="flex items-center space-x-1 text-slate-600 dark:text-slate-300 cursor-pointer">
-              <i data-lucide="cloud" id="icon-sync-cloud" class="w-4 h-4 text-emerald-500"></i>
+              <i data-lucide="cloud" id="icon-sync-cloud" class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-500"></i>
               <span id="sync-status-text" class="hidden sm:inline font-medium text-[11px]" data-i18n="auth.statusSynced">Bulut Eşitlendi</span>
             </span>
             <span class="text-slate-300 dark:text-slate-600">|</span>
-            <img id="user-avatar-img" class="w-5 h-5 rounded-full object-cover hidden" alt="Avatar" referrerpolicy="no-referrer" />
-            <span id="user-email-text" class="font-bold text-slate-700 dark:text-slate-200 max-w-[120px] truncate" title=""></span>
-            <button id="btn-sign-out" type="button" title="Çıkış Yap" class="min-w-[28px] min-h-[28px] p-1 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition flex items-center justify-center">
+            <img id="user-avatar-img" class="w-4 h-4 sm:w-5 sm:h-5 rounded-full object-cover hidden" alt="Avatar" referrerpolicy="no-referrer" />
+            <span id="user-email-text" class="font-bold text-slate-700 dark:text-slate-200 max-w-[60px] sm:max-w-[120px] truncate" title=""></span>
+            <button id="btn-sign-out" type="button" title="Çıkış Yap" class="min-w-[24px] sm:min-w-[28px] min-h-[24px] sm:min-h-[28px] p-0.5 sm:p-1 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition flex items-center justify-center">
               <i data-lucide="log-out" class="w-3.5 h-3.5"></i>
             </button>
           </div>
         </div>
 
         <!-- Dark/Light Theme Toggle -->
-        <button id="btn-theme-toggle" type="button" title="Temayı Değiştir" aria-label="Temayı Değiştir" class="min-w-[44px] min-h-[44px] p-2.5 rounded-xl flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition">
-          <i data-lucide="moon" id="theme-icon-moon" class="w-5 h-5 hidden"></i>
-          <i data-lucide="sun" id="theme-icon-sun" class="w-5 h-5"></i>
+        <button id="btn-theme-toggle" type="button" title="Temayı Değiştir" aria-label="Temayı Değiştir" class="min-w-[32px] sm:min-w-[44px] min-h-[32px] sm:min-h-[44px] p-1.5 sm:p-2.5 rounded-xl flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition shrink-0">
+          <i data-lucide="moon" id="theme-icon-moon" class="w-4 h-4 sm:w-5 sm:h-5 hidden"></i>
+          <i data-lucide="sun" id="theme-icon-sun" class="w-4 h-4 sm:w-5 sm:h-5"></i>
         </button>
 
         <!-- New Transaction CTA Button -->
-        <button id="btn-open-add-modal" type="button" class="min-h-[44px] inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-medium text-xs sm:text-sm shadow-sm shadow-indigo-500/30 transition">
+        <button id="btn-open-add-modal" type="button" class="min-h-[36px] sm:min-h-[44px] inline-flex items-center space-x-1.5 sm:space-x-2 px-2.5 sm:px-4 py-1.5 sm:py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-medium text-xs sm:text-sm shadow-sm shadow-indigo-500/30 transition shrink-0">
           <i data-lucide="plus-circle" class="w-4 h-4"></i>
-          <span data-i18n="nav.addTransaction">İşlem Ekle</span>
+          <span class="inline" data-i18n="nav.addTransaction">İşlem Ekle</span>
         </button>
       </div>
     </div>
   </header>
 
   <!-- ================= MAIN CONTENT ================= -->
-  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+  <main class="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6 overflow-x-hidden">
 
     <!-- CRITICAL BUDGET HEALTH ALERT BANNER -->
     <section id="budget-alert-banner" class="hidden transition-all duration-300 rounded-2xl p-4 border flex items-start sm:items-center justify-between gap-3 shadow-sm" role="region" aria-label="Bütçe Durumu Bildirimi">
@@ -183,10 +183,10 @@
     </section>
 
     <!-- HERO DASHBOARD: 4 SUMMARY METRIC CARDS -->
-    <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
       
       <!-- 1. Kalan Bütçe (Net Balance) -->
-      <div class="transition-card bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+      <div class="transition-card bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between overflow-hidden">
         <div>
           <div class="flex items-center justify-between">
             <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400" data-i18n="cards.netBalance">Kalan Net Bütçe</span>
@@ -195,7 +195,7 @@
             </span>
           </div>
           <div class="mt-3">
-            <span id="metric-net-balance" class="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+            <span id="metric-net-balance" class="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white truncate block">
               0,00 ₺
             </span>
           </div>
@@ -213,7 +213,7 @@
       </div>
 
       <!-- 2. GÜNLÜK GÜVENLİ HARCAMA LİMİTİ (STAR CARD) -->
-      <div id="star-card-container" class="transition-card bg-gradient-to-br from-indigo-600 via-indigo-700 to-violet-800 text-white p-5 rounded-2xl shadow-lg shadow-indigo-500/20 flex flex-col justify-between relative overflow-hidden">
+      <div id="star-card-container" class="transition-card bg-gradient-to-br from-indigo-600 via-indigo-700 to-violet-800 text-white p-4 sm:p-5 rounded-2xl shadow-lg shadow-indigo-500/20 flex flex-col justify-between relative overflow-hidden">
         <div class="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-white/10 pointer-events-none blur-xl"></div>
 
         <div>
@@ -228,7 +228,7 @@
           </div>
           <div class="mt-3">
             <div class="flex items-baseline space-x-1">
-              <span id="metric-daily-limit" class="text-3xl sm:text-4xl font-extrabold tracking-tight">
+              <span id="metric-daily-limit" class="text-3xl sm:text-4xl font-extrabold tracking-tight truncate block">
                 0,00 ₺
               </span>
               <span class="text-xs font-medium text-indigo-200" data-i18n="cards.perDay">/ gün</span>
@@ -243,7 +243,7 @@
       </div>
 
       <!-- 3. Bu Ay Gelir -->
-      <div class="transition-card bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+      <div class="transition-card bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between overflow-hidden">
         <div>
           <div class="flex items-center justify-between">
             <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400" data-i18n="cards.thisMonthIncome">Bu Ay Gelir</span>
@@ -252,7 +252,7 @@
             </div>
           </div>
           <div class="mt-3">
-            <span id="metric-total-income" class="text-2xl sm:text-3xl font-extrabold tracking-tight text-emerald-600 dark:text-emerald-400">
+            <span id="metric-total-income" class="text-2xl sm:text-3xl font-extrabold tracking-tight text-emerald-600 dark:text-emerald-400 truncate block">
               0,00 ₺
             </span>
           </div>
@@ -264,7 +264,7 @@
       </div>
 
       <!-- 4. Bu Ay Gider -->
-      <div class="transition-card bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+      <div class="transition-card bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between overflow-hidden">
         <div>
           <div class="flex items-center justify-between">
             <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400" data-i18n="cards.thisMonthExpense">Bu Ay Gider</span>
@@ -273,7 +273,7 @@
             </div>
           </div>
           <div class="mt-3">
-            <span id="metric-total-expense" class="text-2xl sm:text-3xl font-extrabold tracking-tight text-rose-600 dark:text-rose-400">
+            <span id="metric-total-expense" class="text-2xl sm:text-3xl font-extrabold tracking-tight text-rose-600 dark:text-rose-400 truncate block">
               0,00 ₺
             </span>
           </div>
@@ -287,9 +287,9 @@
     </section>
 
     <!-- QUICK PRESET SHORTCUTS -->
-    <section class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm" aria-label="Hızlı Harcama Kısayolları">
+    <section class="bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden" aria-label="Hızlı Harcama Kısayolları">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div class="flex items-center justify-between w-full sm:w-auto sm:space-x-3">
+        <div class="flex items-center justify-between w-full sm:w-auto sm:space-x-3 shrink-0">
           <div class="flex items-center space-x-2 text-xs font-bold text-slate-700 dark:text-slate-300">
             <i data-lucide="zap" class="w-4 h-4 text-amber-500"></i>
             <span data-i18n="presets.title">Hızlı Harcamalar:</span>
@@ -299,7 +299,7 @@
             <span data-i18n="presets.editAmounts">Tutarları Düzenle</span>
           </button>
         </div>
-        <div class="flex flex-wrap items-center gap-2" id="quick-presets-container">
+        <div class="flex flex-wrap items-center gap-2 max-w-full overflow-x-auto sm:overflow-x-visible pb-1 sm:pb-0" id="quick-presets-container">
           <!-- Dynamic presets injected here -->
         </div>
       </div>
@@ -458,11 +458,11 @@
   </footer>
 
   <!-- ================= TRANSACTION MODAL (ADD / EDIT) ================= -->
-  <div id="transaction-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title-text" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs transition-opacity duration-200">
-    <div class="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+  <div id="transaction-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title-text" class="hidden fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-slate-900/60 backdrop-blur-xs transition-opacity duration-200">
+    <div class="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-2xl max-w-md w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[100dvh] sm:max-h-[90vh] h-[92dvh] sm:h-auto">
       
-      <!-- Modal Header -->
-      <div class="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+      <!-- Sticky Modal Header -->
+      <div class="sticky top-0 z-10 bg-white dark:bg-slate-900 p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
         <div class="flex items-center space-x-2.5">
           <div id="modal-header-icon" class="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
             <i data-lucide="plus" class="w-4 h-4"></i>
@@ -475,90 +475,93 @@
       </div>
 
       <!-- Modal Body Form -->
-      <form id="tx-form" novalidate class="p-5 space-y-4 overflow-y-auto">
+      <form id="tx-form" novalidate class="flex flex-col flex-1 overflow-hidden min-h-0">
         <input type="hidden" id="tx-field-id" value="" />
 
-        <!-- Transaction Type Switcher -->
-        <div>
-          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5" data-i18n="modal.txType">İşlem Türü</label>
-          <div class="grid grid-cols-2 gap-2 p-1 rounded-xl bg-slate-100 dark:bg-slate-800">
-            <button type="button" id="tx-type-expense-btn" class="type-toggle-btn min-h-[44px] py-2 text-xs font-bold rounded-lg bg-rose-500 text-white shadow-xs transition flex items-center justify-center space-x-1.5">
-              <i data-lucide="arrow-up-right" class="w-3.5 h-3.5"></i>
-              <span data-i18n="modal.expense">Gider</span>
-            </button>
-            <button type="button" id="tx-type-income-btn" class="type-toggle-btn min-h-[44px] py-2 text-xs font-bold rounded-lg text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition flex items-center justify-center space-x-1.5">
-              <i data-lucide="arrow-down-left" class="w-3.5 h-3.5"></i>
-              <span data-i18n="modal.income">Gelir</span>
-            </button>
-          </div>
-          <input type="hidden" id="tx-field-type" value="expense" />
-        </div>
-
-        <!-- Title -->
-        <div>
-          <label for="tx-field-title" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-            <span data-i18n="modal.titleField">İşlem Başlığı</span> <span class="text-rose-500">*</span>
-          </label>
-          <input type="text" id="tx-field-title" maxlength="80" placeholder="Örn: Yemekhane Fişi, KYK Bursu" class="w-full px-3 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition" />
-          <p id="tx-err-title" class="text-[11px] text-rose-500 font-medium mt-1 hidden flex items-center gap-1">
-            <i data-lucide="alert-circle" class="w-3 h-3 shrink-0"></i>
-            <span class="err-text"></span>
-          </p>
-        </div>
-
-        <!-- Amount and Date in 2 columns -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <!-- Scrollable Form Fields -->
+        <div class="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 min-h-0 overscroll-contain">
+          <!-- Transaction Type Switcher -->
           <div>
-            <label for="tx-field-amount" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              <span data-i18n="modal.amountField">Tutar</span> <span class="text-rose-500">*</span>
+            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5" data-i18n="modal.txType">İşlem Türü</label>
+            <div class="grid grid-cols-2 gap-2 p-1 rounded-xl bg-slate-100 dark:bg-slate-800">
+              <button type="button" id="tx-type-expense-btn" class="type-toggle-btn min-h-[44px] py-2 text-xs font-bold rounded-lg bg-rose-500 text-white shadow-xs transition flex items-center justify-center space-x-1.5">
+                <i data-lucide="arrow-up-right" class="w-3.5 h-3.5"></i>
+                <span data-i18n="modal.expense">Gider</span>
+              </button>
+              <button type="button" id="tx-type-income-btn" class="type-toggle-btn min-h-[44px] py-2 text-xs font-bold rounded-lg text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition flex items-center justify-center space-x-1.5">
+                <i data-lucide="arrow-down-left" class="w-3.5 h-3.5"></i>
+                <span data-i18n="modal.income">Gelir</span>
+              </button>
+            </div>
+            <input type="hidden" id="tx-field-type" value="expense" />
+          </div>
+
+          <!-- Title -->
+          <div>
+            <label for="tx-field-title" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              <span data-i18n="modal.titleField">İşlem Başlığı</span> <span class="text-rose-500">*</span>
             </label>
-            <input type="number" id="tx-field-amount" step="0.01" min="0.01" max="10000000" placeholder="0,00" class="w-full px-3 py-2.5 text-xs font-bold rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition" />
-            <p id="tx-err-amount" class="text-[11px] text-rose-500 font-medium mt-1 hidden flex items-center gap-1">
+            <input type="text" id="tx-field-title" maxlength="80" placeholder="Örn: Yemekhane Fişi, KYK Bursu" class="w-full px-3 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition" />
+            <p id="tx-err-title" class="text-[11px] text-rose-500 font-medium mt-1 hidden flex items-center gap-1">
               <i data-lucide="alert-circle" class="w-3 h-3 shrink-0"></i>
               <span class="err-text"></span>
             </p>
           </div>
+
+          <!-- Amount and Date in 2 columns -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label for="tx-field-amount" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                <span data-i18n="modal.amountField">Tutar</span> <span class="text-rose-500">*</span>
+              </label>
+              <input type="number" id="tx-field-amount" step="0.01" min="0.01" max="10000000" placeholder="0,00" class="w-full px-3 py-2.5 text-xs font-bold rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition" />
+              <p id="tx-err-amount" class="text-[11px] text-rose-500 font-medium mt-1 hidden flex items-center gap-1">
+                <i data-lucide="alert-circle" class="w-3 h-3 shrink-0"></i>
+                <span class="err-text"></span>
+              </p>
+            </div>
+            <div>
+              <label for="tx-field-date" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                <span data-i18n="modal.dateField">Tarih</span> <span class="text-rose-500">*</span>
+              </label>
+              <input type="date" id="tx-field-date" class="w-full px-3 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition" />
+              <p id="tx-err-date" class="text-[11px] text-rose-500 font-medium mt-1 hidden flex items-center gap-1">
+                <i data-lucide="alert-circle" class="w-3 h-3 shrink-0"></i>
+                <span class="err-text"></span>
+              </p>
+            </div>
+          </div>
+
+          <!-- Category Selector -->
           <div>
-            <label for="tx-field-date" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              <span data-i18n="modal.dateField">Tarih</span> <span class="text-rose-500">*</span>
+            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+              <span data-i18n="modal.categoryField">Kategori</span> <span class="text-rose-500">*</span>
             </label>
-            <input type="date" id="tx-field-date" class="w-full px-3 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition" />
-            <p id="tx-err-date" class="text-[11px] text-rose-500 font-medium mt-1 hidden flex items-center gap-1">
+            <div id="tx-category-picker" class="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-44 overflow-y-auto p-1 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
+              <!-- Category pills dynamically injected here -->
+            </div>
+            <input type="hidden" id="tx-field-category" value="" />
+            <p id="tx-err-category" class="text-[11px] text-rose-500 font-medium mt-1 hidden flex items-center gap-1">
+              <i data-lucide="alert-circle" class="w-3 h-3 shrink-0"></i>
+              <span class="err-text"></span>
+            </p>
+          </div>
+
+          <!-- Notes (Optional) -->
+          <div>
+            <label for="tx-field-notes" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              <span data-i18n="modal.notesField">Ek Notlar (İsteğe Bağlı)</span>
+            </label>
+            <textarea id="tx-field-notes" rows="2" maxlength="300" placeholder="Fatura numarası, arkadaşla bölüşülen harcama detayı vb." class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition resize-none"></textarea>
+            <p id="tx-err-notes" class="text-[11px] text-rose-500 font-medium mt-1 hidden flex items-center gap-1">
               <i data-lucide="alert-circle" class="w-3 h-3 shrink-0"></i>
               <span class="err-text"></span>
             </p>
           </div>
         </div>
 
-        <!-- Category Selector -->
-        <div>
-          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-            <span data-i18n="modal.categoryField">Kategori</span> <span class="text-rose-500">*</span>
-          </label>
-          <div id="tx-category-picker" class="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-44 overflow-y-auto p-1 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
-            <!-- Category pills dynamically injected here -->
-          </div>
-          <input type="hidden" id="tx-field-category" value="" />
-          <p id="tx-err-category" class="text-[11px] text-rose-500 font-medium mt-1 hidden flex items-center gap-1">
-            <i data-lucide="alert-circle" class="w-3 h-3 shrink-0"></i>
-            <span class="err-text"></span>
-          </p>
-        </div>
-
-        <!-- Notes (Optional) -->
-        <div>
-          <label for="tx-field-notes" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-            <span data-i18n="modal.notesField">Ek Notlar (İsteğe Bağlı)</span>
-          </label>
-          <textarea id="tx-field-notes" rows="2" maxlength="300" placeholder="Fatura numarası, arkadaşla bölüşülen harcama detayı vb." class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition resize-none"></textarea>
-          <p id="tx-err-notes" class="text-[11px] text-rose-500 font-medium mt-1 hidden flex items-center gap-1">
-            <i data-lucide="alert-circle" class="w-3 h-3 shrink-0"></i>
-            <span class="err-text"></span>
-          </p>
-        </div>
-
-        <!-- Modal Footer Actions -->
-        <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end space-x-2">
+        <!-- Sticky Modal Footer Actions -->
+        <div class="sticky bottom-0 z-10 bg-white dark:bg-slate-900 px-4 py-3 sm:p-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end space-x-2 shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pb-4">
           <button type="button" id="modal-btn-cancel" class="min-h-[44px] px-4 py-2.5 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition" data-i18n="modal.cancel">
             Vazgeç
           </button>

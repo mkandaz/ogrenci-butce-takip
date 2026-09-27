@@ -4,6 +4,8 @@ import { SafeStorage } from '../utils/storage.js';
 import { generateUUID, getCurrentYearMonth, getLocalDateString, compareTransactions } from '../utils/helpers.js';
 import { normalizeCurrency } from '../utils/formatters.js';
 
+export const SYNC_OUTBOX_KEY = 'student_budget_sync_outbox';
+
 export class BudgetStore {
   constructor() {
     this.listeners = [];
@@ -18,6 +20,16 @@ export class BudgetStore {
   loadState() {
     try {
       const raw = SafeStorage.getItem(STORAGE_KEY);
+      if (!raw) {
+        this.clearOutbox();
+        return {
+          version: SCHEMA_VERSION,
+          onboarded: false,
+          settings: { ...DEFAULT_SETTINGS, presets: DEFAULT_PRESETS },
+          categories: [...DEFAULT_CATEGORIES],
+          transactions: []
+        };
+      }
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed && Array.isArray(parsed.transactions)) {
@@ -140,6 +152,90 @@ export class BudgetStore {
     }
   }
 
+  // --- Kalıcı Senkronizasyon Kuyruğu (Durable Outbox) ---
+  getOutbox() {
+    try {
+      const raw = SafeStorage.getItem(SYNC_OUTBOX_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  addToOutbox(item) {
+    if (this.isApplyingRemote || !item || !item.id) return;
+    try {
+      const queue = this.getOutbox();
+      const existingIdx = queue.findIndex(q => q.id === item.id);
+      const queuedAt = item.queuedAt || Date.now();
+      const updatedAt = item.updatedAt || Date.now();
+
+      if (existingIdx >= 0) {
+        const existing = queue[existingIdx];
+        if (item.operation === 'delete') {
+          queue[existingIdx] = {
+            id: item.id,
+            operation: 'delete',
+            updatedAt,
+            queuedAt
+          };
+        } else if (item.operation === 'update') {
+          queue[existingIdx] = {
+            id: item.id,
+            operation: existing.operation === 'insert' ? 'insert' : 'update',
+            updatedAt,
+            queuedAt
+          };
+        } else {
+          queue[existingIdx] = {
+            id: item.id,
+            operation: item.operation,
+            updatedAt,
+            queuedAt
+          };
+        }
+      } else {
+        queue.push({
+          id: item.id,
+          operation: item.operation,
+          updatedAt,
+          queuedAt
+        });
+      }
+
+      SafeStorage.setItem(SYNC_OUTBOX_KEY, JSON.stringify(queue));
+    } catch (e) {
+      console.warn('[BudgetStore] addToOutbox hatası:', e);
+    }
+  }
+
+  removeFromOutbox(txIds = []) {
+    try {
+      if (!txIds || !txIds.length) {
+        SafeStorage.removeItem(SYNC_OUTBOX_KEY);
+      } else {
+        const idSet = new Set(txIds);
+        const queue = this.getOutbox();
+        const filtered = queue.filter(item => !idSet.has(item.id));
+        if (filtered.length === 0) {
+          SafeStorage.removeItem(SYNC_OUTBOX_KEY);
+        } else {
+          SafeStorage.setItem(SYNC_OUTBOX_KEY, JSON.stringify(filtered));
+        }
+      }
+    } catch (e) {
+      console.warn('[BudgetStore] removeFromOutbox hatası:', e);
+    }
+  }
+
+  clearOutbox() {
+    try {
+      SafeStorage.removeItem(SYNC_OUTBOX_KEY);
+    } catch (e) {
+      console.warn('[BudgetStore] clearOutbox hatası:', e);
+    }
+  }
+
   getTransactions() {
     return this.state.transactions || [];
   }
@@ -205,6 +301,12 @@ export class BudgetStore {
 
     this.state.transactions.unshift(newTx);
     this.sortTransactions('date-desc');
+    this.addToOutbox({
+      id: newTx.id,
+      operation: 'insert',
+      updatedAt: newTx.updatedAt,
+      queuedAt: Date.now()
+    });
     this.emitLocalChange('transaction:add', newTx);
     this.notify();
     return newTx;
@@ -233,6 +335,12 @@ export class BudgetStore {
 
     this.sortTransactions('date-desc');
     const updatedTx = this.state.transactions.find(t => t.id === id);
+    this.addToOutbox({
+      id,
+      operation: 'update',
+      updatedAt: updatedTx.updatedAt,
+      queuedAt: Date.now()
+    });
     this.emitLocalChange('transaction:update', updatedTx);
     this.notify();
     return true;
@@ -243,6 +351,12 @@ export class BudgetStore {
     this.state.transactions = this.state.transactions.filter(t => t.id !== id);
     if (this.state.transactions.length !== prevLen) {
       this.trackDeleted(id);
+      this.addToOutbox({
+        id,
+        operation: 'delete',
+        updatedAt: Date.now(),
+        queuedAt: Date.now()
+      });
       this.emitLocalChange('transaction:delete', { id });
       this.notify();
       return true;
@@ -443,6 +557,8 @@ export class BudgetStore {
     this.state.transactions = [];
     this.state.categories = [...DEFAULT_CATEGORIES];
     this.state.onboarded = false;
+    this.hasUnsyncedChanges = false;
+    this.clearOutbox();
     this.notify();
   }
 
@@ -452,6 +568,7 @@ export class BudgetStore {
     this.state.hasUnsyncedChanges = false;
     SafeStorage.removeItem('student_budget_last_synced_at');
     SafeStorage.removeItem('student_budget_deleted_queue');
+    this.clearOutbox();
     this.saveToStorage();
     this.notify();
   }

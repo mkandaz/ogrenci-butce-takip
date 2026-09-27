@@ -191,26 +191,28 @@ export class ModalManager {
     }
 
     // Modal dışına tıklayınca kapatma & ESC tuşu
-    window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        if (this.txModal && !this.txModal.classList.contains('hidden')) {
-          this.closeTransactionModal();
-        } else if (this.importModal && !this.importModal.classList.contains('hidden')) {
-          this.closeImportModal();
-        } else if (this.confirmModal && !this.confirmModal.classList.contains('hidden')) {
-          this.closeConfirmModal();
-        } else if (this.presetModal && !this.presetModal.classList.contains('hidden')) {
-          this.closePresetModal();
-        } else if (this.initialBudgetModal && !this.initialBudgetModal.classList.contains('hidden')) {
-          this.closeInitialBudgetModal();
-        } else if (this.authModal && !this.authModal.classList.contains('hidden')) {
-          this.closeAuthModal();
+    if (typeof window !== 'undefined') {
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          if (this.txModal && !this.txModal.classList.contains('hidden')) {
+            this.closeTransactionModal();
+          } else if (this.importModal && !this.importModal.classList.contains('hidden')) {
+            this.closeImportModal();
+          } else if (this.confirmModal && !this.confirmModal.classList.contains('hidden')) {
+            this.closeConfirmModal();
+          } else if (this.presetModal && !this.presetModal.classList.contains('hidden')) {
+            this.closePresetModal();
+          } else if (this.initialBudgetModal && !this.initialBudgetModal.classList.contains('hidden')) {
+            this.closeInitialBudgetModal();
+          } else if (this.authModal && !this.authModal.classList.contains('hidden')) {
+            this.closeAuthModal();
+          }
         }
-      }
-    });
+      });
+    }
 
     [this.txModal, this.importModal, this.confirmModal, this.presetModal, this.initialBudgetModal, this.authModal].forEach(modal => {
-      if (modal) {
+      if (modal && typeof modal.addEventListener === 'function') {
         modal.addEventListener('click', (e) => {
           if (e.target === modal) {
             if (modal === this.txModal) this.closeTransactionModal();
@@ -223,6 +225,25 @@ export class ModalManager {
         });
       }
     });
+  }
+
+  updateBodyScrollLock() {
+    if (typeof document === 'undefined' || !document.body || !document.body.classList) return;
+    const modals = [
+      this.txModal,
+      this.importModal,
+      this.confirmModal,
+      this.presetModal,
+      this.initialBudgetModal,
+      this.authModal,
+      this.onboardingModal
+    ];
+    const isAnyOpen = modals.some(modal => modal && !modal.classList.contains('hidden'));
+    if (isAnyOpen) {
+      document.body.classList.add('overflow-hidden');
+    } else {
+      document.body.classList.remove('overflow-hidden');
+    }
   }
 
   // --- Transaction Modal Methods ---
@@ -262,10 +283,12 @@ export class ModalManager {
         if (this.txFieldTitle) this.txFieldTitle.focus();
       }, 50);
     }
+    this.updateBodyScrollLock();
   }
 
   closeTransactionModal() {
     if (this.txModal) this.txModal.classList.add('hidden');
+    this.updateBodyScrollLock();
     this.clearAllFieldErrors();
     if (this.lastFocusedElement && typeof this.lastFocusedElement.focus === 'function') {
       this.lastFocusedElement.focus();
@@ -457,12 +480,14 @@ export class ModalManager {
     });
 
     this.presetModal.classList.remove('hidden');
+    this.updateBodyScrollLock();
     const firstInput = this.presetInputsContainer.querySelector('input');
     if (firstInput) setTimeout(() => firstInput.focus(), 50);
   }
 
   closePresetModal() {
     if (this.presetModal) this.presetModal.classList.add('hidden');
+    this.updateBodyScrollLock();
     if (this.lastFocusedElement && typeof this.lastFocusedElement.focus === 'function') {
       this.lastFocusedElement.focus();
     }
@@ -509,10 +534,12 @@ export class ModalManager {
     if (this.importFileInput) this.importFileInput.value = '';
     if (this.importFileError) this.importFileError.classList.add('hidden');
     if (this.importModal) this.importModal.classList.remove('hidden');
+    this.updateBodyScrollLock();
   }
 
   closeImportModal() {
     if (this.importModal) this.importModal.classList.add('hidden');
+    this.updateBodyScrollLock();
     if (this.lastFocusedElement && typeof this.lastFocusedElement.focus === 'function') {
       this.lastFocusedElement.focus();
     }
@@ -565,10 +592,12 @@ export class ModalManager {
     if (this.confirmModalAction) this.confirmModalAction.textContent = actionText;
     this.confirmCallback = onConfirm;
     if (this.confirmModal) this.confirmModal.classList.remove('hidden');
+    this.updateBodyScrollLock();
   }
 
   closeConfirmModal() {
     if (this.confirmModal) this.confirmModal.classList.add('hidden');
+    this.updateBodyScrollLock();
     this.confirmCallback = null;
     if (this.confirmModalTitle) this.confirmModalTitle.textContent = t('confirmModal.title');
     if (this.confirmModalDesc) this.confirmModalDesc.textContent = t('confirmModal.desc');
@@ -584,6 +613,7 @@ export class ModalManager {
     if (this.onboardingModal) {
       this.onboardingModal.classList.add('hidden');
     }
+    this.updateBodyScrollLock();
   }
 
   closeOnboardingModal() {
@@ -591,6 +621,7 @@ export class ModalManager {
     if (this.onboardingModal) {
       this.onboardingModal.classList.add('hidden');
     }
+    this.updateBodyScrollLock();
   }
 
   // --- Initial Budget Edit Modal Methods ---
@@ -604,11 +635,13 @@ export class ModalManager {
     if (this.editTargetMonth) this.editTargetMonth.value = data.targetMonth || getCurrentYearMonth();
 
     this.initialBudgetModal.classList.remove('hidden');
+    this.updateBodyScrollLock();
     if (this.editInitialBalance) setTimeout(() => this.editInitialBalance.focus(), 50);
   }
 
   closeInitialBudgetModal() {
     if (this.initialBudgetModal) this.initialBudgetModal.classList.add('hidden');
+    this.updateBodyScrollLock();
     if (this.lastFocusedElement && typeof this.lastFocusedElement.focus === 'function') {
       this.lastFocusedElement.focus();
     }
@@ -649,11 +682,13 @@ export class ModalManager {
     if (this.btnAuthGoogleText) this.btnAuthGoogleText.textContent = t('auth.googleBtn');
 
     this.authModal.classList.remove('hidden');
+    this.updateBodyScrollLock();
     if (this.btnAuthGoogle) setTimeout(() => this.btnAuthGoogle.focus(), 50);
   }
 
   closeAuthModal() {
     if (this.authModal) this.authModal.classList.add('hidden');
+    this.updateBodyScrollLock();
     if (this.lastFocusedElement && typeof this.lastFocusedElement.focus === 'function') {
       this.lastFocusedElement.focus();
     }

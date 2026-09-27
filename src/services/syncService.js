@@ -6,6 +6,7 @@ import { SafeStorage } from '../utils/storage.js';
 const LAST_SYNCED_KEY = 'student_budget_last_synced_at';
 const PRE_CLOUD_BACKUP_KEY = 'student_budget_pre_cloud_backup';
 const DELETED_QUEUE_KEY = 'student_budget_deleted_queue';
+const SYNC_OUTBOX_KEY = 'student_budget_sync_outbox';
 
 export class SyncService {
   constructor(store, customClient = null) {
@@ -55,6 +56,10 @@ export class SyncService {
         this.setStatus('idle');
       }
     });
+
+    if (this.store && this.getOutbox().length > 0) {
+      this.store.hasUnsyncedChanges = true;
+    }
 
     if (typeof window !== 'undefined') {
       const initialUser = (this.authService && typeof this.authService.getUser === 'function')
@@ -299,28 +304,40 @@ export class SyncService {
     if (typeof window === 'undefined' || this.windowListenersAttached) return;
     this.windowListenersAttached = true;
 
-    const handleFocusOrVisible = async (triggerName = 'Sekme görünür/odakta') => {
+    const handleLifecycleResume = async (triggerName = 'Yaşam döngüsü resume') => {
       const user = (this.authService && typeof this.authService.getUser === 'function')
         ? this.authService.getUser()
         : authService.getUser();
       if (!user) return;
+
+      const outbox = this.getOutbox();
+      const hasDirty = Boolean(
+        outbox.length > 0 ||
+        (this.store && this.store.hasUnsyncedChanges) ||
+        (this.store && this.store.dirtySettings) ||
+        (this.store && this.store.dirtyPresets) ||
+        (this.getDeletedQueue().length > 0)
+      );
+
+      // Eğer outbox'ta bekleyen işlem varsa veya dirty ise derhal recovery / flush yap!
+      if (hasDirty) {
+        console.info(`[SyncService] ${triggerName} -> Outbox/dirty veriler mevcut, kurtarma başlatılıyor...`);
+        if (!this.isSyncing && !this.isRecovering) {
+          await this.recoverAfterReconnect(user);
+        }
+        return;
+      }
+
       const now = Date.now();
       const elapsed = now - this.lastSyncAttemptTime;
-      if (elapsed < 3000 && (!this.store || !this.store.hasUnsyncedChanges)) {
-        return;
-      }
-      if (this.store && this.store.hasUnsyncedChanges) {
-        console.info(`[SyncService] ${triggerName} -> Bekleyen yerel değişiklikler push edilecek...`);
-        this.scheduleDebouncedSync(300);
-        return;
-      }
+      if (elapsed < 3000) return;
 
       // Realtime sağlıklı mı kontrolü
       const isRealtimeHealthy = (this.realtimeStatus === 'SUBSCRIBED' && !this.realtimeDisconnected);
       const timeSinceLastFullCatchUp = now - (this.lastFullCatchUpTime || 0);
 
       // Realtime kapalıysa/kopuksa VEYA son full catch-up üzerinden 45 saniye geçmişse:
-      // Focus/visibility anında güvenli bir Full Catch-up çalıştır!
+      // Focus/visibility/pageshow anında güvenli bir Full Catch-up çalıştır!
       if (!isRealtimeHealthy || timeSinceLastFullCatchUp > 45000) {
         console.info(`[SyncService] ${triggerName} -> Realtime sağlıksız veya son tam tarama > 45s -> Full Cloud Catch-up...`);
         this.lastFullCatchUpTime = now;
@@ -330,7 +347,7 @@ export class SyncService {
           this.setLastSyncedAt(new Date().toISOString());
           this.setStatus('synced', 'Bulut ile başarıyla eşitlendi');
         } catch (e) {
-          console.warn('[SyncService] Focus full catch-up uyarısı:', e);
+          console.warn('[SyncService] Resume full catch-up uyarısı:', e);
         }
       } else {
         console.info(`[SyncService] ${triggerName} -> Realtime sağlıklı, delta pull kontrolü...`);
@@ -341,13 +358,17 @@ export class SyncService {
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
-          handleFocusOrVisible('Görünürlük değişti (visible)');
+          handleLifecycleResume('Görünürlük değişti (visible)');
         }
       });
     }
 
+    window.addEventListener('pageshow', () => {
+      handleLifecycleResume('Sayfa görüntülendi (pageshow)');
+    });
+
     window.addEventListener('focus', () => {
-      handleFocusOrVisible('Pencere odaklandı (focus)');
+      handleLifecycleResume('Pencere odaklandı (focus)');
     });
 
     window.addEventListener('online', async () => {
@@ -435,6 +456,45 @@ export class SyncService {
     } catch (e) {
       console.warn('[SyncService] clearDeletedQueue hatası:', e);
     }
+  }
+
+  // Durable Outbox Takibi (student_budget_sync_outbox)
+  getOutbox() {
+    if (this.store && typeof this.store.getOutbox === 'function') {
+      return this.store.getOutbox();
+    }
+    try {
+      const raw = SafeStorage.getItem(SYNC_OUTBOX_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  removeFromOutbox(txIds = []) {
+    if (this.store && typeof this.store.removeFromOutbox === 'function') {
+      return this.store.removeFromOutbox(txIds);
+    }
+    try {
+      if (!txIds || !txIds.length) {
+        SafeStorage.removeItem(SYNC_OUTBOX_KEY);
+      } else {
+        const idSet = new Set(txIds);
+        const queue = this.getOutbox();
+        const filtered = queue.filter(item => !idSet.has(item.id));
+        if (filtered.length === 0) {
+          SafeStorage.removeItem(SYNC_OUTBOX_KEY);
+        } else {
+          SafeStorage.setItem(SYNC_OUTBOX_KEY, JSON.stringify(filtered));
+        }
+      }
+    } catch (e) {
+      console.warn('[SyncService] removeFromOutbox hatası:', e);
+    }
+  }
+
+  async flushOutboxThenCatchUp(user = null) {
+    return this.recoverAfterReconnect(user);
   }
 
   // 1. Kullanıcı Giriş Yaptığında Başlatıcı
@@ -534,37 +594,43 @@ export class SyncService {
       }
 
       const localLastSyncedAt = this.getLastSyncedAt();
+      const outbox = this.getOutbox();
+      const hasPendingOutbox = outbox.length > 0;
+      const hasDirty = Boolean(
+        hasPendingOutbox ||
+        (this.store && this.store.hasUnsyncedChanges) ||
+        (this.store && this.store.dirtySettings) ||
+        (this.store && this.store.dirtyPresets) ||
+        (this.getDeletedQueue().length > 0)
+      );
 
       if (!meta) {
         // İLK MIGRATION (Bu hesap bulutta henüz ilklendirilmemiş)
         console.info('[SyncService] İlk bulut ilklendirmesi (Initial Migration) başlatılıyor...');
         await this.runInitialMigration(user);
+        this.removeFromOutbox();
         this.hasPerformedStartupCatchUp = true;
         this.lastFullCatchUpTime = Date.now();
-      } else if (!localLastSyncedAt) {
-        // FRESH DEVICE / EMPTY LOCALSTORAGE BOOTSTRAP
+      } else if (!localLastSyncedAt && !hasDirty) {
+        // FRESH DEVICE / EMPTY LOCALSTORAGE BOOTSTRAP (Sadece yerel dirty veri yoksa)
         console.info('[SyncService] Fresh device tespit edildi. Full Cloud Bootstrap başlatılıyor...');
         await this.runFullCloudBootstrap(user, meta);
         this.hasPerformedStartupCatchUp = true;
         this.lastFullCatchUpTime = Date.now();
-      } else if (opts.reason === 'startup' || (typeof window !== 'undefined' && !this.hasPerformedStartupCatchUp && !pullOnly && opts.reason !== 'local-change')) {
-        // STARTUP SELF-HEAL & POISONED CURSOR HEALING:
+      } else if ((!pullOnly && hasPendingOutbox) || opts.reason === 'startup' || opts.reason === 'online' || (typeof window !== 'undefined' && !this.hasPerformedStartupCatchUp && !pullOnly && opts.reason !== 'local-change')) {
+        // STARTUP / RECONNECT / OUTBOX FLUSH ORDER:
         console.info('[SyncService] Startup Self-Heal: Mevcut cihaz için filtresiz Full Cloud Catch-up başlatılıyor...');
         this.hasPerformedStartupCatchUp = true;
         this.lastFullCatchUpTime = Date.now();
 
-        // Yerel dirty değişiklik varsa önce buluta push et
-        const hasDirty = Boolean(
-          (this.store && this.store.hasUnsyncedChanges) ||
-          (this.store && this.store.dirtySettings) ||
-          (this.store && this.store.dirtyPresets) ||
-          (this.getDeletedQueue().length > 0)
-        );
+        // 1. Önce bekleyen yerel dirty/outbox verilerini PUSH et
         if (hasDirty) {
+          console.info('[SyncService] [Startup] Bekleyen outbox/dirty veriler buluta PUSH ediliyor...');
           await this.pushLocalChanges(user, client);
         }
 
-        // Filtresiz tüm kayıtları çek & LWW merge yap
+        // 2. Ardından filtresiz tam CATCH-UP yap & LWW merge yap
+        console.info('[SyncService] [Startup] Buluttan tam CATCH-UP yapılıyor...');
         await this.runFullCloudCatchUp(user, client);
       } else {
         // DELTA SYNC
@@ -581,7 +647,8 @@ export class SyncService {
       return { success: true };
     } catch (err) {
       console.error('[SyncService] Senkronizasyon hatası:', err);
-      this.setStatus('error', err.message || 'Senkronizasyon başarısız');
+      const isNet = (typeof navigator !== 'undefined' && navigator.onLine === false) || err.message?.includes('fetch') || err.message?.includes('network');
+      this.setStatus(isNet ? 'offline' : 'error', err.message || 'Senkronizasyon başarısız');
       return { success: false, error: err };
     } finally {
       this.isSyncing = false;
@@ -781,17 +848,30 @@ export class SyncService {
         updatedAt: ctx.updated_at ? new Date(ctx.updated_at).getTime() : Date.now()
       }));
 
-    this.store.state.transactions = activeCloudTxs;
+    // Eğer outbox'ta bekleyen yerel transaction varsa, bunları bootstrap sırasında kaybetme!
+    const localMap = new Map((this.store?.state?.transactions || []).map(t => [t.id, t]));
+    const outbox = this.getOutbox();
+    const pendingOutboxMap = new Map(outbox.map(item => [item.id, item]));
+
+    // Bulut kayıtlarını ekle/güncelle
+    activeCloudTxs.forEach(actx => {
+      const pendingItem = pendingOutboxMap.get(actx.id);
+      if (!pendingItem || (pendingItem.operation !== 'insert' && pendingItem.operation !== 'update')) {
+        localMap.set(actx.id, actx);
+      }
+    });
+
+    // Cloud'da henüz olmayan yerel insert'ler localMap içinde aynen korunur!
+    const activeMergedTxs = Array.from(localMap.values());
+
+    this.store.state.transactions = activeMergedTxs;
     if (typeof this.store.sortTransactions === 'function') {
       this.store.sortTransactions('date-desc');
     }
 
-    // ÖNEMLİ: Boş veya varsayılan yerel state'i buluta PUSH ETME!
-    // Sadece cloud -> local hydrate.
-
     // ADIM 4: LocalStorage'a persist et ve arayüzü bilgilendir
     const applyRemoteData = () => {
-      this.store.state.transactions = activeCloudTxs;
+      this.store.state.transactions = activeMergedTxs;
       if (typeof this.store.sortTransactions === 'function') {
         this.store.sortTransactions('date-desc');
       }
@@ -871,51 +951,76 @@ export class SyncService {
       }
     }
 
-    // ADIM 3: Soft-delete kuyruğu PUSH
+    // ADIM 3: Soft-delete kuyruğu ve Outbox 'delete' PUSH
     const deletedQueue = this.getDeletedQueue();
-    if (deletedQueue.length > 0) {
+    const outbox = this.getOutbox();
+    const outboxDeletes = outbox.filter(item => item.operation === 'delete');
+
+    const deleteIdMap = new Map();
+    deletedQueue.forEach(item => deleteIdMap.set(item.id, item.deletedAt || new Date().toISOString()));
+    outboxDeletes.forEach(item => {
+      if (!deleteIdMap.has(item.id)) {
+        deleteIdMap.set(item.id, item.updatedAt ? new Date(item.updatedAt).toISOString() : new Date().toISOString());
+      }
+    });
+
+    if (deleteIdMap.size > 0) {
       const successfullyDeletedIds = [];
-      for (const item of deletedQueue) {
+      for (const [delId, delAt] of deleteIdMap.entries()) {
         const { error: delErr } = await client
           .from('transactions')
           .update({
             is_deleted: true,
-            deleted_at: item.deletedAt || new Date().toISOString(),
+            deleted_at: delAt,
             updated_at: new Date().toISOString()
           })
-          .eq('id', item.id)
+          .eq('id', delId)
           .eq('user_id', user.id);
 
         if (delErr) {
           if (successfullyDeletedIds.length > 0) {
             this.clearDeletedQueue(successfullyDeletedIds);
+            this.removeFromOutbox(successfullyDeletedIds);
           }
-          throw new Error(`Soft-delete güncellenemedi (${item.id}): ${delErr.message}`);
+          throw new Error(`Soft-delete güncellenemedi (${delId}): ${delErr.message}`);
         }
-        successfullyDeletedIds.push(item.id);
+        successfullyDeletedIds.push(delId);
       }
 
       if (successfullyDeletedIds.length > 0) {
         this.clearDeletedQueue(successfullyDeletedIds);
+        this.removeFromOutbox(successfullyDeletedIds);
         hasPushedData = true;
       }
     }
 
-    // ADIM 4: Yeni ve güncellenen işlemleri PUSH et
+    // ADIM 4: Yeni ve güncellenen işlemleri PUSH et (Outbox insert/update & local txs)
     const localTxs = this.store?.getTransactions() || [];
+    const localTxMap = new Map(localTxs.map(t => [t.id, t]));
     const lastSyncedAt = this.getLastSyncedAt();
     const lastSyncedTime = lastSyncedAt ? (new Date(lastSyncedAt).getTime() || 0) : 0;
 
-    let txToPush = [];
+    const outboxUpserts = outbox.filter(item => item.operation === 'insert' || item.operation === 'update');
+    const pushTxMap = new Map();
+
+    // 1. Outbox'ta bekleyen insert ve update kayıtları
+    outboxUpserts.forEach(item => {
+      const tx = localTxMap.get(item.id);
+      if (tx) {
+        pushTxMap.set(tx.id, tx);
+      }
+    });
+
+    // 2. Geriye dönük uyumluluk: Son senkronizasyondan sonra değişenler veya hasUnsyncedChanges
     if (lastSyncedTime > 0) {
-      txToPush = localTxs.filter(t => !t.updatedAt || new Date(t.updatedAt).getTime() >= (lastSyncedTime - 5000));
-    } else {
-      txToPush = localTxs;
+      localTxs.filter(t => !t.updatedAt || new Date(t.updatedAt).getTime() >= (lastSyncedTime - 5000)).forEach(t => {
+        pushTxMap.set(t.id, t);
+      });
+    } else if (pushTxMap.size === 0 && this.store?.hasUnsyncedChanges) {
+      localTxs.forEach(t => pushTxMap.set(t.id, t));
     }
 
-    if (txToPush.length === 0 && this.store?.hasUnsyncedChanges) {
-      txToPush = localTxs;
-    }
+    const txToPush = Array.from(pushTxMap.values());
 
     if (txToPush.length > 0) {
       const txPayload = txToPush.map(t => {
@@ -943,6 +1048,9 @@ export class SyncService {
       if (pushTxErr) {
         throw new Error(`transactions gönderilemedi: ${pushTxErr.message}`);
       }
+
+      // SADECE BAŞARILI PUSH SONRASI OUTBOX'TAN KALDIR!
+      this.removeFromOutbox(txToPush.map(t => t.id));
       hasPushedData = true;
     }
 
@@ -1074,17 +1182,28 @@ export class SyncService {
     }
 
     const localMap = new Map((this.store?.state?.transactions || []).map(t => [t.id, t]));
+    const outbox = this.getOutbox();
+    const pendingOutboxMap = new Map(outbox.map(item => [item.id, item]));
 
     (cloudTxs || []).forEach(ctx => {
+      const pendingItem = pendingOutboxMap.get(ctx.id);
+
       if (ctx.is_deleted) {
-        localMap.delete(ctx.id);
+        // Eğer yerel outbox'ta bekleyen insert veya update varsa, cloud silmesini yok say, yerel işlemi KORU!
+        if (pendingItem && (pendingItem.operation === 'insert' || pendingItem.operation === 'update')) {
+          // Yerel bekleyen işlemi koru!
+        } else {
+          localMap.delete(ctx.id);
+        }
       } else {
         const localItem = localMap.get(ctx.id);
         const cloudUpdated = ctx.updated_at ? new Date(ctx.updated_at).getTime() : 0;
         const localUpdated = localItem?.updatedAt ? new Date(localItem.updatedAt).getTime() : 0;
 
-        // Last-write-wins: Bulut daha yeni veya eşitse, ya da yerelde henüz yoksa bulut verisini al
-        if (!localItem || cloudUpdated >= localUpdated) {
+        // Eğer yerel outbox'ta henüz push edilmemiş insert veya update varsa, yerel işlemi KORU!
+        if (pendingItem && (pendingItem.operation === 'insert' || pendingItem.operation === 'update')) {
+          // Yerel bekleyen işlemi koru!
+        } else if (!localItem || cloudUpdated >= localUpdated) {
           localMap.set(ctx.id, {
             id: ctx.id,
             title: ctx.title,
@@ -1162,7 +1281,9 @@ export class SyncService {
       this.resubscribeRealtimeIfDisconnected(currentUser);
 
       // B) Bu cihazda yerel unpushed/dirty değişiklik var mı?
+      const outbox = this.getOutbox();
       const hasDirty = Boolean(
+        outbox.length > 0 ||
         (this.store && this.store.hasUnsyncedChanges) ||
         (this.store && this.store.dirtySettings) ||
         (this.store && this.store.dirtyPresets) ||
@@ -1192,7 +1313,8 @@ export class SyncService {
       return { success: true };
     } catch (err) {
       console.error('[SyncService] Reconnect Recovery hatası:', err);
-      this.setStatus('error', err.message || 'Yeniden bağlanma senkronizasyonu başarısız');
+      const isNet = (typeof navigator !== 'undefined' && navigator.onLine === false) || err.message?.includes('fetch') || err.message?.includes('network');
+      this.setStatus(isNet ? 'offline' : 'error', err.message || 'Yeniden bağlanma senkronizasyonu başarısız');
       return { success: false, error: err };
     } finally {
       this.isRecovering = false;

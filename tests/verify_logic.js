@@ -891,6 +891,7 @@ function createMockClient(handlers = {}) {
 // TC-27: Cloud işlemi fail ederse last_synced_at'in ilerlemediğini ve status'un error olduğunu doğrula
 {
   const store = new BudgetStore();
+  store.updateSettings({ currency: 'EUR' });
   const fakeUser = { id: generateUUID() };
   const initialSyncTime = '2026-09-20T10:00:00.000Z';
 
@@ -3994,6 +3995,408 @@ console.log('\n--- 18. FAZ 4.1 GOOGLE AUTH + LOCAL GUEST MODE (TC-94 - TC-102) -
   assert(mockElements.userEmailText.textContent === 'ogrenci@gmail.com', 'TC-103 Kullanıcı e-postası doğru görüntülendi');
   assert(mockElements.userAvatarImg.src === 'https://lh3.googleusercontent.com/a/fake-avatar', 'TC-103 Google avatar URL\'i doğru yüklendi');
   assert(!mockElements.userAvatarImg.classList.contains('hidden'), 'TC-103 Avatar görseli görünür yapıldı');
+
+  globalThis.document = originalDoc;
+}
+
+// --------------------------------------------------------------------------
+// 19. FAZ 4.2 — iOS PWA OFFLINE DURABILITY & MOBILE RESPONSIVE POLISH (TC-104 - TC-113)
+// --------------------------------------------------------------------------
+console.log('\n--- 19. FAZ 4.2 — iOS PWA OFFLINE DURABILITY & MOBILE RESPONSIVE POLISH ---');
+
+// TC-104: Offline Transaction Insert -> Kalıcı Outbox'a (student_budget_sync_outbox) Kaydedilmesi
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem('student_budget_sync_outbox');
+
+  const store = new BudgetStore();
+  const tx = store.addTransaction({
+    title: 'Offline Harcama',
+    amount: 77,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-28'
+  });
+
+  const outboxRaw = SafeStorage.getItem('student_budget_sync_outbox');
+  assert(Boolean(outboxRaw), 'TC-104 İşlem eklenince kalıcı outbox (student_budget_sync_outbox) oluşturuldu');
+
+  const outbox = JSON.parse(outboxRaw || '[]');
+  assert(outbox.length === 1, 'TC-104 Outbox içinde 1 kayıt var');
+  assert(outbox[0].id === tx.id, 'TC-104 Outbox kayıt ID eşleşti');
+  assert(outbox[0].operation === 'insert', 'TC-104 Outbox işlem türü "insert" oldu');
+  assert(Boolean(outbox[0].queuedAt), 'TC-104 Outbox queuedAt zaman damgası mevcut');
+  assert(store.hasUnsyncedChanges === true, 'TC-104 store.hasUnsyncedChanges true olarak işaretlendi');
+}
+
+// TC-105: Offline Transaction Update -> Outbox'ta Güncelleme İşleminin Saklanması
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem('student_budget_sync_outbox');
+
+  const store = new BudgetStore();
+  const tx = store.addTransaction({
+    title: 'Kahve',
+    amount: 40,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-28'
+  });
+
+  store.updateTransaction(tx.id, {
+    title: 'Büyük Boy Kahve',
+    amount: 55,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-28'
+  });
+
+  const outbox = store.getOutbox();
+  assert(outbox.length === 1, 'TC-105 Aynı işlem için outbox şişmedi (1 kayıt kaldı)');
+  assert(outbox[0].operation === 'insert', 'TC-105 Henüz sunucuya gitmemiş kayıt güncellendiğinde insert operasyonu korundu');
+
+  store.removeFromOutbox();
+  store.updateTransaction(tx.id, {
+    title: 'Filtre Kahve',
+    amount: 60,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-28'
+  });
+
+  const updatedOutbox = store.getOutbox();
+  assert(updatedOutbox.length === 1, 'TC-105 Var olan kayıt düzenlenince outbox\'a eklendi');
+  assert(updatedOutbox[0].operation === 'update', 'TC-105 Düzenlenen işlemin outbox operasyonu "update" oldu');
+}
+
+// TC-106: Offline Transaction Delete -> Outbox'ta Delete İşleminin Saklanması
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem('student_budget_sync_outbox');
+
+  const store = new BudgetStore();
+  const tx = store.addTransaction({
+    title: 'Silinecek İşlem',
+    amount: 100,
+    type: 'expense',
+    categoryId: 'exp_bills',
+    date: '2026-09-28'
+  });
+
+  store.deleteTransaction(tx.id);
+  const outbox = store.getOutbox();
+  assert(outbox.length === 1, 'TC-106 Silinen işlem outbox\'ta yer aldı');
+  assert(outbox[0].id === tx.id, 'TC-106 Silinen işlem ID eşleşti');
+  assert(outbox[0].operation === 'delete', 'TC-106 Outbox operasyonu "delete" oldu');
+}
+
+// TC-107: PWA Restart / Reload -> Outbox Yüklenmesi ve hasUnsyncedChanges=true Olması
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem('student_budget_sync_outbox');
+
+  const initialStore = new BudgetStore();
+  const tx = initialStore.addTransaction({
+    title: 'Kalıcı Harcama',
+    amount: 120,
+    type: 'expense',
+    categoryId: 'exp_transport',
+    date: '2026-09-28'
+  });
+
+  // Simüle et: PWA kapatıldı ve yeniden başlatıldı
+  const restartedStore = new BudgetStore();
+  const restartedSync = new SyncService(restartedStore);
+
+  assert(restartedSync.getOutbox().length === 1, 'TC-107 PWA yeniden açıldığında outbox diskten (LocalStorage) okundu');
+  assert(restartedStore.hasUnsyncedChanges === true, 'TC-107 Outbox var olduğu için restartedStore.hasUnsyncedChanges=true oldu');
+  assert(restartedStore.getTransactions().some(t => t.id === tx.id), 'TC-107 Yerel transaction restart sonrası kaybolmadı');
+}
+
+// TC-108: Startup Sırasında Doğru Senkronizasyon Sıralaması (Önce PUSH, Sonra CATCH-UP)
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem('student_budget_sync_outbox');
+
+  const store = new BudgetStore();
+  const tx = store.addTransaction({
+    title: 'Offline Sıralama Testi',
+    amount: 50,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-28'
+  });
+
+  const callOrder = [];
+  const fakeUser = { id: generateUUID() };
+
+  const mockClient = createMockClient({
+    user_sync_metadata: {
+      maybeSingle: () => ({
+        data: { user_id: fakeUser.id, schema_version: '1.1.0', last_synced_at: new Date(Date.now() - 30000).toISOString() },
+        error: null
+      })
+    },
+    user_settings: {
+      maybeSingle: () => ({
+        data: { currency: 'TRY', updated_at: new Date(Date.now() - 30000).toISOString() },
+        error: null
+      })
+    },
+    presets: {
+      select: () => {
+        callOrder.push('catchup-presets');
+        return { data: [], error: null };
+      }
+    },
+    transactions: {
+      upsert: (payload) => {
+        callOrder.push('push-transactions');
+        return { data: payload, error: null };
+      },
+      select: () => {
+        callOrder.push('catchup-transactions');
+        return { data: [], error: null };
+      }
+    }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  sync.setLastSyncedAt(new Date(Date.now() - 30000).toISOString());
+
+  await sync.sync({ user: fakeUser, reason: 'startup' });
+
+  const pushIdx = callOrder.indexOf('push-transactions');
+  const catchupIdx = callOrder.indexOf('catchup-transactions');
+
+  assert(pushIdx !== -1, 'TC-108 Startup sırasında outbox verisi push edildi');
+  assert(catchupIdx !== -1, 'TC-108 Startup sırasında tam catch-up yapıldı');
+  assert(pushIdx < catchupIdx, 'TC-108 Sıralama Kuralı: Önce PUSH yapıldı, ardından CATCH-UP yapıldı');
+}
+
+// TC-109: Cloud Catch-Up Sırasında Yerel Bekleyen Outbox Kayıtlarının Silinmemesi / Ezilmemesi
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem('student_budget_sync_outbox');
+
+  const store = new BudgetStore();
+  const tx = store.addTransaction({
+    title: 'Korunacak Yerel İşlem',
+    amount: 150,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-28'
+  });
+
+  const fakeUser = { id: generateUUID() };
+  const mockClient = createMockClient({
+    user_settings: { select: () => ({ data: null, error: null }) },
+    presets: { select: () => ({ data: [], error: null }) },
+    transactions: {
+      select: () => ({
+        data: [{
+          id: tx.id,
+          title: 'Eski Bulut Başlığı',
+          amount: 10,
+          type: 'expense',
+          category_id: 'exp_food',
+          date: '2026-09-28',
+          is_deleted: true,
+          updated_at: new Date(Date.now() - 60000).toISOString()
+        }],
+        error: null
+      })
+    }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  await sync.runFullCloudCatchUp(fakeUser, mockClient);
+
+  const localTxs = store.getTransactions();
+  assert(localTxs.some(t => t.id === tx.id), 'TC-109 Cloud is_deleted kaydı bekleyen yerel outbox işlemini ASLA silmedi');
+  const preserved = localTxs.find(t => t.id === tx.id);
+  assert(preserved.title === 'Korunacak Yerel İşlem', 'TC-109 Yerel bekleyen işlem verisi bulut tarafından ezilmedi');
+}
+
+// TC-110: Başarılı Bulut Onayı Sonrasında Outbox'ın Temizlenmesi
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem('student_budget_sync_outbox');
+
+  const store = new BudgetStore();
+  const tx = store.addTransaction({
+    title: 'Onaylanacak İşlem',
+    amount: 80,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-28'
+  });
+
+  assert(store.getOutbox().length === 1, 'TC-110 Başlangıçta outbox dolu');
+
+  const fakeUser = { id: generateUUID() };
+  const mockSuccessClient = createMockClient({
+    user_sync_metadata: {
+      maybeSingle: () => ({
+        data: { user_id: fakeUser.id, schema_version: '1.1.0', last_synced_at: new Date(Date.now() - 30000).toISOString() },
+        error: null
+      })
+    },
+    user_settings: { maybeSingle: () => ({ data: null, error: null }) },
+    presets: { select: () => ({ data: [], error: null }) },
+    transactions: {
+      select: () => ({ data: [], error: null }),
+      upsert: () => ({ data: [], error: null })
+    }
+  });
+
+  const sync = new SyncService(store, mockSuccessClient);
+  sync.setLastSyncedAt(new Date(Date.now() - 30000).toISOString());
+
+  const res = await sync.sync({ user: fakeUser, reason: 'startup' });
+
+  assert(res.success === true, 'TC-110 Senkronizasyon başarılı tamamlandı');
+  assert(store.getOutbox().length === 0, 'TC-110 Başarılı bulut yazımı sonrası outbox temizlendi');
+  assert(SafeStorage.getItem('student_budget_sync_outbox') === null, 'TC-110 LocalStorage içindeki outbox anahtarı kaldırıldı');
+  assert(store.hasUnsyncedChanges === false, 'TC-110 store.hasUnsyncedChanges=false oldu');
+  assert(sync.getStatus() === 'synced', 'TC-110 syncStatus "synced" durumuna geçti');
+}
+
+// TC-111: Ağ Hatası / Fetch Fail Durumunda Outbox'ın KESİNLİKLE Silinmemesi
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem('student_budget_sync_outbox');
+
+  const store = new BudgetStore();
+  const tx = store.addTransaction({
+    title: 'Başarısız Gönderim',
+    amount: 90,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-28'
+  });
+
+  const fakeUser = { id: generateUUID() };
+  const mockFailingClient = createMockClient({
+    user_sync_metadata: {
+      maybeSingle: () => ({
+        data: { user_id: fakeUser.id, schema_version: '1.1.0', last_synced_at: new Date(Date.now() - 30000).toISOString() },
+        error: null
+      })
+    },
+    user_settings: { maybeSingle: () => ({ data: null, error: null }) },
+    presets: { select: () => ({ data: [], error: null }) },
+    transactions: {
+      select: () => ({ data: [], error: null }),
+      upsert: () => {
+        throw new Error('fetch failed: Network unreachable');
+      }
+    }
+  });
+
+  const sync = new SyncService(store, mockFailingClient);
+  sync.setLastSyncedAt(new Date(Date.now() - 30000).toISOString());
+
+  const res = await sync.sync({ user: fakeUser, reason: 'startup' });
+
+  assert(res.success === false, 'TC-111 Ağ hatasında sync başarısız döndü');
+  assert(store.getOutbox().length === 1, 'TC-111 Ağ hatasında outbox KESİNLİKLE silinmedi (korundu)');
+  assert(store.getOutbox()[0].id === tx.id, 'TC-111 Gönderilemeyen işlem outbox\'ta bekliyor');
+  assert(sync.getStatus() === 'offline' || sync.getStatus() === 'error', 'TC-111 syncStatus "offline" veya "error" oldu');
+}
+
+// TC-112: iOS PWA Yaşam Döngüsü Olayları ve Anti-Loop Koruması
+{
+  const store = new BudgetStore();
+  const fakeUser = { id: generateUUID() };
+
+  const mockClient = createMockClient({
+    user_sync_metadata: {
+      maybeSingle: () => ({
+        data: { user_id: fakeUser.id, schema_version: '1.1.0', last_synced_at: new Date().toISOString() },
+        error: null
+      })
+    },
+    user_settings: { maybeSingle: () => ({ data: null, error: null }) },
+    presets: { select: () => ({ data: [], error: null }) },
+    transactions: { select: () => ({ data: [], error: null }) }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  sync.setLastSyncedAt(new Date().toISOString());
+
+  sync.isSyncing = true;
+  const busyResult = await sync.sync({ user: fakeUser, reason: 'pageshow' });
+  assert(busyResult.reason === 'already_syncing', 'TC-112 Eşzamanlı sync çağrısı (isSyncing=true) engellendi');
+
+  sync.isSyncing = false;
+  sync.isRecovering = true;
+  const busyRecResult = await sync.recoverAfterReconnect(fakeUser);
+  assert(busyRecResult.reason === 'already_recovering', 'TC-112 Eşzamanlı reconnect recovery (isRecovering=true) engellendi');
+  sync.isRecovering = false;
+}
+
+// TC-113: Mobil UI & Responsive İyileştirmeleri (Özet Kartları 1-Col, Modal Scroll Lock, Sticky Header/Footer, Safe Area)
+{
+  const indexHtml = fs.readFileSync(path.resolve('index.html'), 'utf8');
+
+  // 1. Özet kartları mobil 1-kolon kontrolü
+  assert(indexHtml.includes('grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'), 'TC-113 Özet kartları mobilde tek kolon (grid-cols-1 sm:grid-cols-2 lg:grid-cols-4)');
+  assert(indexHtml.includes('overflow-x-hidden'), 'TC-113 Yatay taşmayı önlemek için overflow-x-hidden uygulandı');
+
+  // 2. İşlem modalı mobil tam ekran / safe area kontrolü
+  assert(indexHtml.includes('max-h-[100dvh] sm:max-h-[90vh]'), 'TC-113 İşlem modalı mobilde 100dvh, masaüstünde 90vh');
+  assert(indexHtml.includes('sticky top-0'), 'TC-113 Modal başlığı mobilde sticky top-0 yapıldı');
+  assert(indexHtml.includes('sticky bottom-0'), 'TC-113 Modal butonları mobilde sticky bottom-0 yapıldı');
+  assert(indexHtml.includes('safe-area-inset-bottom'), 'TC-113 Modal butonları iOS home indicator için safe-area-inset-bottom içeriyor');
+
+  // 3. Body scroll lock kontrolü
+  const originalDoc = globalThis.document;
+  const bodyClasses = new Set();
+  const mockModal = {
+    addEventListener: () => {},
+    classList: {
+      classes: new Set(['hidden']),
+      add(c) { this.classes.add(c); },
+      remove(c) { this.classes.delete(c); },
+      contains(c) { return this.classes.has(c); }
+    }
+  };
+
+  globalThis.document = {
+    body: {
+      classList: {
+        add(c) { bodyClasses.add(c); },
+        remove(c) { bodyClasses.delete(c); },
+        contains(c) { return bodyClasses.has(c); }
+      }
+    },
+    getElementById: (id) => {
+      if (id === 'transaction-modal') return mockModal;
+      return null;
+    },
+    activeElement: null
+  };
+
+  const store = new BudgetStore();
+  const modalMgr = new ModalManager(store, {});
+  modalMgr.txModal = mockModal;
+
+  mockModal.classList.remove('hidden');
+  modalMgr.updateBodyScrollLock();
+  assert(bodyClasses.has('overflow-hidden'), 'TC-113 Modal açıkken document.body üzerinde "overflow-hidden" eklendi');
+
+  mockModal.classList.add('hidden');
+  modalMgr.updateBodyScrollLock();
+  assert(!bodyClasses.has('overflow-hidden'), 'TC-113 Tüm modallar kapanınca document.body üzerinden "overflow-hidden" kaldırıldı');
 
   globalThis.document = originalDoc;
 }
