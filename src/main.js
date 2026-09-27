@@ -4,15 +4,24 @@ import { BudgetStore } from './store/BudgetStore.js';
 import { UIManager } from './components/UIManager.js';
 
 // PWA Service Worker Kaydı (Çevrimdışı Önbellek ve Otomatik Güncelleme)
-registerSW({
+const updateSW = registerSW({
   immediate: true,
   onNeedRefresh() {
-    console.log('Yeni bir uygulama sürümü mevcut. Yenileniyor...');
+    console.log('[PWA] Yeni bir uygulama sürümü mevcut. Otomatik güncelleniyor...');
   },
   onOfflineReady() {
-    console.log('Uygulama tamamen çevrimdışı çalışmaya hazır!');
+    console.log('[PWA] Uygulama tamamen çevrimdışı çalışmaya hazır!');
   }
 });
+
+// Sekme yeniden görünür olduğunda arka planda yeni sürüm kontrolü
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && typeof updateSW === 'function') {
+      updateSW();
+    }
+  });
+}
 
 // Uygulamayı Başlat
 document.addEventListener('DOMContentLoaded', () => {

@@ -3564,6 +3564,103 @@ setLanguage('tr');
   assert(actionEl.textContent === 'Sil / Onayla', 'TC-88 Buton metni korundu, flicker/flash önlendi');
 }
 
+// --------------------------------------------------------------------------
+// 17. FAZ 4 PRODUCTION DEPLOYMENT & PWA VALIDATION TESTLERİ (TC-89 - TC-93)
+// --------------------------------------------------------------------------
+console.log('\n--- 17. FAZ 4 PRODUCTION DEPLOYMENT & PWA VALIDATION (TC-89 - TC-93) ---');
+
+// TC-89: PWA Manifest Konfigürasyonu Doğrulaması
+{
+  const viteConfigPath = path.resolve('vite.config.js');
+  const viteConfigContent = fs.readFileSync(viteConfigPath, 'utf8');
+
+  assert(viteConfigContent.includes("display: 'standalone'"), 'TC-89 Manifest display standalone olarak yapılandırıldı');
+  assert(viteConfigContent.includes("start_url: '/'"), 'TC-89 Manifest start_url "/" olarak ayarlandı');
+  assert(viteConfigContent.includes("scope: '/'"), 'TC-89 Manifest scope "/" olarak ayarlandı');
+  assert(viteConfigContent.includes("lang: 'tr'"), 'TC-89 Manifest dili Türkçe ("tr") olarak ayarlandı');
+  assert(viteConfigContent.includes("registerType: 'autoUpdate'"), 'TC-89 PWA registerType autoUpdate aktif');
+  assert(viteConfigContent.includes('google-fonts-cache'), 'TC-89 PWA Google Fonts runtime caching aktif');
+}
+
+// TC-90: index.html iOS Safari Standalone PWA Meta Etiketleri Doğrulaması
+{
+  const indexPath = path.resolve('index.html');
+  const indexHtml = fs.readFileSync(indexPath, 'utf8');
+
+  assert(indexHtml.includes('<meta name="apple-mobile-web-app-capable" content="yes"'), 'TC-90 iOS standalone web app capable meta etiketi mevcut');
+  assert(indexHtml.includes('<meta name="apple-mobile-web-app-status-bar-style" content="default"'), 'TC-90 iOS status bar style meta etiketi mevcut');
+  assert(indexHtml.includes('<meta name="apple-mobile-web-app-title" content="Öğrenci Bütçem"'), 'TC-90 iOS web app title meta etiketi mevcut');
+  assert(indexHtml.includes('<link rel="apple-touch-icon" href="/icons/icon-192x192.png"'), 'TC-90 iOS apple-touch-icon bağlantısı mevcut');
+}
+
+// TC-91: Auth Magic Link Runtime Origin Yönlendirme ve Hardcoded Localhost Yokluğu
+{
+  let otpRedirectTo = null;
+  const mockClient = {
+    auth: {
+      getSession: async () => ({ data: { session: null }, error: null }),
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+      signInWithOtp: async ({ email, options }) => {
+        otpRedirectTo = options?.emailRedirectTo;
+        return { data: { user: null, session: null }, error: null };
+      }
+    }
+  };
+
+  const auth = new AuthService(mockClient);
+  auth.isConfigured = () => true;
+
+  const originalWindow = globalThis.window;
+  globalThis.window = {
+    location: {
+      origin: 'https://ogrenci-butce-takip.vercel.app'
+    }
+  };
+
+  await auth.signInWithMagicLink('test.ogrenci@universite.edu.tr');
+  assert(otpRedirectTo === 'https://ogrenci-butce-takip.vercel.app', 'TC-91 Magic Link redirectTo runtime window.location.origin değerini aldı');
+
+  globalThis.window = originalWindow;
+
+  const authSource = fs.readFileSync(path.resolve('src/services/authService.js'), 'utf8');
+  assert(!authSource.includes('localhost:5173'), 'TC-91 authService içinde hardcoded localhost redirect bulunmuyor');
+  assert(!authSource.includes('127.0.0.1'), 'TC-91 authService içinde hardcoded 127.0.0.1 redirect bulunmuyor');
+}
+
+// TC-92: Production Güvenlik Denetimi (Kaynak Kodda Secret/Service_Role Yokluğu)
+{
+  const filesToAudit = [
+    'src/services/supabaseClient.js',
+    'src/services/authService.js',
+    'src/services/syncService.js',
+    'src/main.js',
+    'index.html'
+  ];
+
+  let hasLeakedSecret = false;
+  for (const relPath of filesToAudit) {
+    const content = fs.readFileSync(path.resolve(relPath), 'utf8');
+    if (content.includes('service_role') || content.includes('supabase_admin') || content.includes('postgres://')) {
+      hasLeakedSecret = true;
+      break;
+    }
+  }
+
+  assert(hasLeakedSecret === false, 'TC-92 Kaynak dosyalarda service_role, secret key veya db URI bağlantı dizesi kesinlikle bulunmuyor');
+}
+
+// TC-93: .env.example ve .gitignore Doğrulaması (.env.local Git Tarafından Track Edilmez)
+{
+  const gitignore = fs.readFileSync(path.resolve('.gitignore'), 'utf8');
+  assert(gitignore.includes('.env.local'), 'TC-93 .gitignore dosyası .env.local dosyasını yok sayıyor');
+  assert(gitignore.includes('.env'), 'TC-93 .gitignore dosyası .env dosyasını yok sayıyor');
+
+  const envExample = fs.readFileSync(path.resolve('.env.example'), 'utf8');
+  assert(envExample.includes('VITE_SUPABASE_URL='), 'TC-93 .env.example içinde VITE_SUPABASE_URL yer alıyor');
+  assert(envExample.includes('VITE_SUPABASE_PUBLISHABLE_KEY='), 'TC-93 .env.example içinde VITE_SUPABASE_PUBLISHABLE_KEY yer alıyor');
+  assert(!envExample.includes('service_role'), 'TC-93 .env.example şablonunda service_role bulunmuyor');
+}
+
 console.log('\n====================================================');
 console.log(`🏁 ENTEGRE TEST SONUCU: ${passed} PASSED, ${failed} FAILED`);
 console.log('====================================================');
