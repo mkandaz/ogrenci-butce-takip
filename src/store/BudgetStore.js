@@ -5,16 +5,64 @@ import { generateUUID, getCurrentYearMonth, getLocalDateString, compareTransacti
 import { normalizeCurrency } from '../utils/formatters.js';
 
 export const SYNC_OUTBOX_KEY = 'student_budget_sync_outbox';
+export const DIRTY_SETTINGS_KEY = 'student_budget_dirty_settings';
+export const DIRTY_PRESETS_KEY = 'student_budget_dirty_presets';
 
 export class BudgetStore {
   constructor() {
     this.listeners = [];
     this.localChangeListeners = [];
-    this.hasUnsyncedChanges = false;
-    this.dirtySettings = false;
-    this.dirtyPresets = false;
+    this._dirtySettingsFallback = false;
+    this._dirtyPresetsFallback = false;
     this.isApplyingRemote = false;
     this.state = this.loadState();
+    this.hasUnsyncedChanges = Boolean(
+      this.getOutbox().length > 0 ||
+      this.dirtySettings ||
+      this.dirtyPresets
+    );
+  }
+
+  get dirtySettings() {
+    try {
+      return SafeStorage.getItem(DIRTY_SETTINGS_KEY) === 'true';
+    } catch {
+      return Boolean(this._dirtySettingsFallback);
+    }
+  }
+
+  set dirtySettings(val) {
+    this._dirtySettingsFallback = Boolean(val);
+    try {
+      if (val) {
+        SafeStorage.setItem(DIRTY_SETTINGS_KEY, 'true');
+      } else {
+        SafeStorage.removeItem(DIRTY_SETTINGS_KEY);
+      }
+    } catch (e) {
+      console.warn('[BudgetStore] dirtySettings kaydetme hatası:', e);
+    }
+  }
+
+  get dirtyPresets() {
+    try {
+      return SafeStorage.getItem(DIRTY_PRESETS_KEY) === 'true';
+    } catch {
+      return Boolean(this._dirtyPresetsFallback);
+    }
+  }
+
+  set dirtyPresets(val) {
+    this._dirtyPresetsFallback = Boolean(val);
+    try {
+      if (val) {
+        SafeStorage.setItem(DIRTY_PRESETS_KEY, 'true');
+      } else {
+        SafeStorage.removeItem(DIRTY_PRESETS_KEY);
+      }
+    } catch (e) {
+      console.warn('[BudgetStore] dirtyPresets kaydetme hatası:', e);
+    }
   }
 
   loadState() {
@@ -22,6 +70,8 @@ export class BudgetStore {
       const raw = SafeStorage.getItem(STORAGE_KEY);
       if (!raw) {
         this.clearOutbox();
+        SafeStorage.removeItem(DIRTY_SETTINGS_KEY);
+        SafeStorage.removeItem(DIRTY_PRESETS_KEY);
         return {
           version: SCHEMA_VERSION,
           onboarded: false,
@@ -382,6 +432,9 @@ export class BudgetStore {
     this.state.categories = [...DEFAULT_CATEGORIES];
     this.state.onboarded = true;
     this.state.settings.updatedAt = Date.now();
+    if (!this.isApplyingRemote) {
+      this.dirtySettings = true;
+    }
     this.emitLocalChange('budget:startDemo', null);
     this.notify();
   }
@@ -437,6 +490,9 @@ export class BudgetStore {
     };
     this.state.settings.updatedAt = Date.now();
     this.state.onboarded = true;
+    if (!this.isApplyingRemote) {
+      this.dirtySettings = true;
+    }
     this.emitLocalChange('budget:startCustom', { initialBalance, monthlyIncome, targetMonth });
     this.notify();
   }
@@ -558,6 +614,8 @@ export class BudgetStore {
     this.state.categories = [...DEFAULT_CATEGORIES];
     this.state.onboarded = false;
     this.hasUnsyncedChanges = false;
+    this.dirtySettings = false;
+    this.dirtyPresets = false;
     this.clearOutbox();
     this.notify();
   }
@@ -568,6 +626,8 @@ export class BudgetStore {
     this.state.hasUnsyncedChanges = false;
     SafeStorage.removeItem('student_budget_last_synced_at');
     SafeStorage.removeItem('student_budget_deleted_queue');
+    this.dirtySettings = false;
+    this.dirtyPresets = false;
     this.clearOutbox();
     this.saveToStorage();
     this.notify();

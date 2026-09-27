@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { calculateSummary, getDaysRemainingInMonth, calculateBudgetHealth } from '../src/store/calculations.js';
-import { BudgetStore } from '../src/store/BudgetStore.js';
+import { BudgetStore, DIRTY_SETTINGS_KEY, DIRTY_PRESETS_KEY } from '../src/store/BudgetStore.js';
 import { formatCurrency, formatNumber, formatDate, formatTime, formatMonthTitle, normalizeCurrency, getCurrencySymbol } from '../src/utils/formatters.js';
 import { t, setLanguage, getLanguage } from '../src/i18n/index.js';
 import tr from '../src/i18n/tr.js';
@@ -4399,6 +4399,189 @@ console.log('\n--- 19. FAZ 4.2 — iOS PWA OFFLINE DURABILITY & MOBILE RESPONSIV
   assert(!bodyClasses.has('overflow-hidden'), 'TC-113 Tüm modallar kapanınca document.body üzerinden "overflow-hidden" kaldırıldı');
 
   globalThis.document = originalDoc;
+}
+
+// TC-114: Offline Ayar Değişikliği (Settings) -> Kalıcı Dirty Bayrağı -> PWA Restart -> Push-Before-Pull Korunması
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(DIRTY_SETTINGS_KEY);
+  SafeStorage.removeItem(DIRTY_PRESETS_KEY);
+  SafeStorage.removeItem('student_budget_sync_outbox');
+
+  const store = new BudgetStore();
+  store.updateSettings({ currency: 'USD', theme: 'dark' });
+
+  assert(SafeStorage.getItem(DIRTY_SETTINGS_KEY) === 'true', 'TC-114 Offline ayar değişikliği sonrası student_budget_dirty_settings diske kaydedildi');
+  assert(store.dirtySettings === true, 'TC-114 store.dirtySettings true döndü');
+  assert(store.hasUnsyncedChanges === true, 'TC-114 store.hasUnsyncedChanges true oldu');
+
+  // PWA Sürecinin Kapatılıp Yeniden Başlatılması (App Restart Simülasyonu)
+  const restartedStore = new BudgetStore();
+  assert(restartedStore.dirtySettings === true, 'TC-114 PWA restart sonrası restartedStore.dirtySettings=true olarak okundu');
+  assert(restartedStore.hasUnsyncedChanges === true, 'TC-114 PWA restart sonrası restartedStore.hasUnsyncedChanges=true oldu');
+  assert(restartedStore.state.settings.currency === 'USD', 'TC-114 Yerel ayar (USD) restart sonrası korundu');
+
+  const fakeUser = { id: generateUUID() };
+  let pushedSettings = null;
+  const mockClient = createMockClient({
+    user_sync_metadata: {
+      maybeSingle: () => ({
+        data: { user_id: fakeUser.id, schema_version: '1.1.0', last_synced_at: new Date(Date.now() - 60000).toISOString() },
+        error: null
+      })
+    },
+    user_settings: {
+      maybeSingle: () => ({
+        // Bulutta eski ayarlar var (TRY)
+        data: { user_id: fakeUser.id, currency: 'TRY', theme: 'light', updated_at: new Date(Date.now() - 100000).toISOString() },
+        error: null
+      }),
+      upsert: (payload) => {
+        pushedSettings = payload;
+        return { data: payload, error: null };
+      }
+    },
+    presets: { select: () => ({ data: [], error: null }) },
+    transactions: { select: () => ({ data: [], error: null }) }
+  });
+
+  const sync = new SyncService(restartedStore, mockClient);
+  sync.setLastSyncedAt(new Date(Date.now() - 60000).toISOString());
+
+  const res = await sync.sync({ user: fakeUser, reason: 'startup' });
+
+  assert(res.success === true, 'TC-114 Senkronizasyon başarılı tamamlandı');
+  assert(pushedSettings !== null, 'TC-114 Yerel ayar buluta PUSH edildi');
+  assert(pushedSettings.currency === 'USD', 'TC-114 Buluta gönderilen para birimi USD oldu');
+  assert(restartedStore.state.settings.currency === 'USD', 'TC-114 Buluttaki eski ayar (TRY) yereldeki değişikliği EZMEDİ');
+  assert(restartedStore.dirtySettings === false, 'TC-114 Başarılı push sonrası restartedStore.dirtySettings=false oldu');
+  assert(SafeStorage.getItem(DIRTY_SETTINGS_KEY) === null, 'TC-114 Başarılı push sonrası student_budget_dirty_settings anahtarı silindi');
+}
+
+// TC-115: Offline Preset Değişikliği -> Kalıcı Dirty Bayrağı -> PWA Restart -> Push-Before-Pull Korunması
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(DIRTY_SETTINGS_KEY);
+  SafeStorage.removeItem(DIRTY_PRESETS_KEY);
+  SafeStorage.removeItem('student_budget_sync_outbox');
+
+  const store = new BudgetStore();
+  const presets = store.getPresets();
+  presets[0].amount = 999;
+  store.updatePresets(presets);
+
+  assert(SafeStorage.getItem(DIRTY_PRESETS_KEY) === 'true', 'TC-115 Offline preset değişikliği sonrası student_budget_dirty_presets diske kaydedildi');
+  assert(store.dirtyPresets === true, 'TC-115 store.dirtyPresets true döndü');
+  assert(store.hasUnsyncedChanges === true, 'TC-115 store.hasUnsyncedChanges true oldu');
+
+  // PWA Yeniden Başlatılması
+  const restartedStore = new BudgetStore();
+  assert(restartedStore.dirtyPresets === true, 'TC-115 PWA restart sonrası restartedStore.dirtyPresets=true olarak okundu');
+  assert(restartedStore.getPresets()[0].amount === 999, 'TC-115 Yerel preset (999 TL) restart sonrası korundu');
+
+  const fakeUser = { id: generateUUID() };
+  let pushedPresets = null;
+  const mockClient = createMockClient({
+    user_sync_metadata: {
+      maybeSingle: () => ({
+        data: { user_id: fakeUser.id, schema_version: '1.1.0', last_synced_at: new Date(Date.now() - 60000).toISOString() },
+        error: null
+      })
+    },
+    user_settings: { maybeSingle: () => ({ data: null, error: null }) },
+    presets: {
+      select: () => ({
+        // Bulutta eski preset tutarı (50 TL)
+        data: [{ user_id: fakeUser.id, preset_key: presets[0].id, name: presets[0].name, emoji: presets[0].emoji, amount: 50, category_id: presets[0].categoryId, updated_at: new Date(Date.now() - 100000).toISOString() }],
+        error: null
+      }),
+      upsert: (payload) => {
+        pushedPresets = payload;
+        return { data: payload, error: null };
+      }
+    },
+    transactions: { select: () => ({ data: [], error: null }) }
+  });
+
+  const sync = new SyncService(restartedStore, mockClient);
+  sync.setLastSyncedAt(new Date(Date.now() - 60000).toISOString());
+
+  const res = await sync.sync({ user: fakeUser, reason: 'startup' });
+
+  assert(res.success === true, 'TC-115 Senkronizasyon başarılı tamamlandı');
+  assert(pushedPresets !== null, 'TC-115 Yerel preset buluta PUSH edildi');
+  assert(pushedPresets.find(p => p.preset_key === presets[0].id)?.amount === 999, 'TC-115 Buluta gönderilen preset tutarı 999 TL oldu');
+  assert(restartedStore.getPresets()[0].amount === 999, 'TC-115 Buluttaki eski preset (50 TL) yereldeki yeni değeri EZMEDİ');
+  assert(restartedStore.dirtyPresets === false, 'TC-115 Başarılı push sonrası restartedStore.dirtyPresets=false oldu');
+  assert(SafeStorage.getItem(DIRTY_PRESETS_KEY) === null, 'TC-115 Başarılı push sonrası student_budget_dirty_presets anahtarı silindi');
+}
+
+// TC-116: Ağ Hatasında Kalıcı Dirty Bayraklarının Kesinlikle Silinmemesi (Resilience)
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(DIRTY_SETTINGS_KEY);
+  SafeStorage.removeItem(DIRTY_PRESETS_KEY);
+  SafeStorage.removeItem('student_budget_sync_outbox');
+
+  const store = new BudgetStore();
+  store.updateSettings({ currency: 'EUR' });
+  const presets = store.getPresets();
+  presets[0].amount = 888;
+  store.updatePresets(presets);
+
+  assert(SafeStorage.getItem(DIRTY_SETTINGS_KEY) === 'true', 'TC-116 Ayar dirty bayrağı aktif');
+  assert(SafeStorage.getItem(DIRTY_PRESETS_KEY) === 'true', 'TC-116 Preset dirty bayrağı aktif');
+
+  const fakeUser = { id: generateUUID() };
+  const mockFailingClient = createMockClient({
+    user_sync_metadata: {
+      maybeSingle: () => ({
+        data: { user_id: fakeUser.id, schema_version: '1.1.0', last_synced_at: new Date(Date.now() - 60000).toISOString() },
+        error: null
+      })
+    },
+    user_settings: {
+      upsert: () => {
+        throw new Error('fetch failed: Connection refused');
+      }
+    }
+  });
+
+  const sync = new SyncService(store, mockFailingClient);
+  sync.setLastSyncedAt(new Date(Date.now() - 60000).toISOString());
+
+  const res = await sync.sync({ user: fakeUser, reason: 'startup' });
+
+  assert(res.success === false, 'TC-116 Ağ hatasında senkronizasyon başarısız oldu');
+  assert(SafeStorage.getItem(DIRTY_SETTINGS_KEY) === 'true', 'TC-116 Ağ hatasında student_budget_dirty_settings KESİNLİKLE silinmedi');
+  assert(SafeStorage.getItem(DIRTY_PRESETS_KEY) === 'true', 'TC-116 Ağ hatasında student_budget_dirty_presets KESİNLİKLE silinmedi');
+  assert(store.dirtySettings === true, 'TC-116 store.dirtySettings true kalmaya devam etti');
+  assert(store.dirtyPresets === true, 'TC-116 store.dirtyPresets true kalmaya devam etti');
+}
+
+// TC-117: Çıkış Yapıldığında (SignOut) Dirty Bayraklarının Gizlilik için Temizlenmesi
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(DIRTY_SETTINGS_KEY);
+  SafeStorage.removeItem(DIRTY_PRESETS_KEY);
+  SafeStorage.removeItem('student_budget_sync_outbox');
+
+  const store = new BudgetStore();
+  store.updateSettings({ currency: 'GBP' });
+  const presets = store.getPresets();
+  presets[0].amount = 777;
+  store.updatePresets(presets);
+
+  assert(SafeStorage.getItem(DIRTY_SETTINGS_KEY) === 'true', 'TC-117 Çıkış öncesi dirtySettings var');
+  assert(SafeStorage.getItem(DIRTY_PRESETS_KEY) === 'true', 'TC-117 Çıkış öncesi dirtyPresets var');
+
+  store.clearSessionOnSignOut();
+
+  assert(SafeStorage.getItem(DIRTY_SETTINGS_KEY) === null, 'TC-117 clearSessionOnSignOut sonrası student_budget_dirty_settings temizlendi');
+  assert(SafeStorage.getItem(DIRTY_PRESETS_KEY) === null, 'TC-117 clearSessionOnSignOut sonrası student_budget_dirty_presets temizlendi');
+  assert(store.dirtySettings === false, 'TC-117 store.dirtySettings false oldu');
+  assert(store.dirtyPresets === false, 'TC-117 store.dirtyPresets false oldu');
+  assert(store.getOutbox().length === 0, 'TC-117 Outbox temizlendi');
 }
 
 console.log('\n====================================================');

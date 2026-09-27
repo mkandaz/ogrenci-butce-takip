@@ -57,7 +57,7 @@ export class SyncService {
       }
     });
 
-    if (this.store && this.getOutbox().length > 0) {
+    if (this.store && (this.getOutbox().length > 0 || this.store.dirtySettings || this.store.dirtyPresets)) {
       this.store.hasUnsyncedChanges = true;
     }
 
@@ -617,7 +617,7 @@ export class SyncService {
         await this.runFullCloudBootstrap(user, meta);
         this.hasPerformedStartupCatchUp = true;
         this.lastFullCatchUpTime = Date.now();
-      } else if ((!pullOnly && hasPendingOutbox) || opts.reason === 'startup' || opts.reason === 'online' || (typeof window !== 'undefined' && !this.hasPerformedStartupCatchUp && !pullOnly && opts.reason !== 'local-change')) {
+      } else if ((!pullOnly && hasDirty) || opts.reason === 'startup' || opts.reason === 'online' || (typeof window !== 'undefined' && !this.hasPerformedStartupCatchUp && !pullOnly && opts.reason !== 'local-change')) {
         // STARTUP / RECONNECT / OUTBOX FLUSH ORDER:
         console.info('[SyncService] Startup Self-Heal: Mevcut cihaz için filtresiz Full Cloud Catch-up başlatılıyor...');
         this.hasPerformedStartupCatchUp = true;
@@ -780,7 +780,7 @@ export class SyncService {
       throw new Error(`user_settings okunamadı: ${settingsErr.message}`);
     }
 
-    if (cloudSettings) {
+    if (cloudSettings && !this.store?.dirtySettings) {
       this.store.state.settings = {
         ...this.store.state.settings,
         currency: cloudSettings.currency || 'TRY',
@@ -811,7 +811,7 @@ export class SyncService {
       throw new Error(`presets okunamadı: ${presetsErr.message}`);
     }
 
-    if (cloudPresets && cloudPresets.length > 0) {
+    if (cloudPresets && cloudPresets.length > 0 && !this.store?.dirtyPresets) {
       this.store.state.settings.presets = cloudPresets.map(cp => ({
         id: cp.preset_key,
         name: cp.name,
@@ -946,9 +946,9 @@ export class SyncService {
         if (pushPresetsErr) {
           throw new Error(`presets gönderilemedi: ${pushPresetsErr.message}`);
         }
-        this.store.dirtyPresets = false;
-        hasPushedData = true;
       }
+      this.store.dirtyPresets = false;
+      hasPushedData = true;
     }
 
     // ADIM 3: Soft-delete kuyruğu ve Outbox 'delete' PUSH
@@ -1096,7 +1096,7 @@ export class SyncService {
       const localSettingsUpdated = localSettings.updatedAt ? new Date(localSettings.updatedAt).getTime() : 0;
       const cloudSettingsUpdated = cloudSettings.updated_at ? new Date(cloudSettings.updated_at).getTime() : 0;
 
-      if (cloudSettingsUpdated >= localSettingsUpdated) {
+      if (!this.store?.dirtySettings && cloudSettingsUpdated >= localSettingsUpdated) {
         this.store.state.settings = {
           ...this.store.state.settings,
           currency: cloudSettings.currency || this.store.state.settings.currency,
@@ -1115,7 +1115,6 @@ export class SyncService {
           updatedAt: cloudSettingsUpdated
         };
         this.store.state.onboarded = Boolean(cloudSettings.onboarded);
-        if (this.store) this.store.dirtySettings = false;
       }
     }
 
@@ -1139,7 +1138,7 @@ export class SyncService {
         const localUpdated = lp.updatedAt ? new Date(lp.updatedAt).getTime() : (this.store.state.settings?.presetsUpdatedAt || 0);
         const cloudUpdated = cp?.updated_at ? new Date(cp.updated_at).getTime() : 0;
 
-        if (cp && cloudUpdated >= localUpdated) {
+        if (!this.store?.dirtyPresets && cp && cloudUpdated >= localUpdated) {
           mergedPresets.push({
             id: cp.preset_key,
             name: cp.name,
@@ -1168,7 +1167,6 @@ export class SyncService {
       }
 
       this.store.state.settings.presets = mergedPresets;
-      if (this.store) this.store.dirtyPresets = false;
     }
 
     // ADIM 3: transactions Çek: TÜM KAYITLAR (last_synced_at filtresi OLMADAN)
@@ -1344,7 +1342,7 @@ export class SyncService {
     const localSettingsUpdated = localSettings.updatedAt ? new Date(localSettings.updatedAt).getTime() : 0;
     const cloudSettingsUpdated = cloudSettings?.updated_at ? new Date(cloudSettings.updated_at).getTime() : 0;
 
-    if (cloudSettings && cloudSettingsUpdated > localSettingsUpdated) {
+    if (cloudSettings && !this.store?.dirtySettings && cloudSettingsUpdated > localSettingsUpdated) {
       // Buluttaki ayarlar daha güncel -> Yereli güncelle (Cloud updated_at korunur)
       this.store.state.settings = {
         ...this.store.state.settings,
@@ -1415,7 +1413,7 @@ export class SyncService {
       const localUpdated = lp.updatedAt ? new Date(lp.updatedAt).getTime() : (this.store.state.settings?.presetsUpdatedAt || 0);
       const cloudUpdated = cp?.updated_at ? new Date(cp.updated_at).getTime() : 0;
 
-      if (cp && cloudUpdated > localUpdated) {
+      if (cp && !this.store?.dirtyPresets && cloudUpdated > localUpdated) {
         // Buluttaki preset daha yeni
         mergedPresets.push({
           id: cp.preset_key,
@@ -1464,17 +1462,21 @@ export class SyncService {
     }
 
     this.store.state.settings.presets = mergedPresets;
-    if (this.store) this.store.dirtyPresets = false;
 
-    if (!pullOnly && presetsToPush.length > 0) {
-      const { error: pushPresetsErr } = await client
-        .from('presets')
-        .upsert(presetsToPush, { onConflict: 'user_id,preset_key' });
+    if (!pullOnly) {
+      if (presetsToPush.length > 0) {
+        const { error: pushPresetsErr } = await client
+          .from('presets')
+          .upsert(presetsToPush, { onConflict: 'user_id,preset_key' });
 
-      if (pushPresetsErr) {
-        throw new Error(`presets gönderilemedi: ${pushPresetsErr.message}`);
+        if (pushPresetsErr) {
+          throw new Error(`presets gönderilemedi: ${pushPresetsErr.message}`);
+        }
+        if (this.store) this.store.dirtyPresets = false;
+        hasPushedData = true;
+      } else {
+        if (this.store) this.store.dirtyPresets = false;
       }
-      hasPushedData = true;
     }
 
     // --- PULL: transactions (Delta: Sadece updated_at > lastSyncedAt olanlar veya tümü) ---
