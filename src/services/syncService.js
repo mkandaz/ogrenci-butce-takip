@@ -24,6 +24,10 @@ export class SyncService {
     this.lastSyncAttemptTime = 0;
     this.realtimeChannel = null;
     this.realtimeStatus = 'DISCONNECTED';
+    this.realtimeDisconnected = false;
+    this.realtimeDisconnectedAt = 0;
+    this.lastFullCatchUpTime = 0;
+    this.hasPerformedStartupCatchUp = false;
     this.pollingInterval = null;
     this.windowListenersAttached = false;
 
@@ -42,7 +46,7 @@ export class SyncService {
       if (user) {
         this.setupRealtimeSubscription(user);
         this.startForegroundPolling(120000);
-        if (event === 'SIGNED_IN') {
+        if (event === 'SIGNED_IN' || (typeof window !== 'undefined' && (event === 'INITIAL' || event === 'INITIAL_SESSION'))) {
           this.handleUserLogin(user);
         }
       } else {
@@ -51,6 +55,17 @@ export class SyncService {
         this.setStatus('idle');
       }
     });
+
+    if (typeof window !== 'undefined') {
+      const initialUser = (this.authService && typeof this.authService.getUser === 'function')
+        ? this.authService.getUser()
+        : (typeof authService !== 'undefined' && authService.getUser ? authService.getUser() : null);
+      if (initialUser && !this.hasPerformedStartupCatchUp) {
+        this.setupRealtimeSubscription(initialUser);
+        this.startForegroundPolling(120000);
+        this.handleUserLogin(initialUser);
+      }
+    }
   }
 
   scheduleDebouncedSync(delay = 1000) {
@@ -186,10 +201,19 @@ export class SyncService {
         this.realtimeStatus = status;
         if (status === 'SUBSCRIBED') {
           console.info(`[SyncService] Realtime kanalı başarıyla bağlandı (${status}): ${channelName}`);
-        } else if (status === 'CHANNEL_ERROR') {
-          console.warn(`[SyncService] Realtime kanal hatası (${status}):`, err);
-        } else if (status === 'TIMED_OUT') {
-          console.warn(`[SyncService] Realtime kanal zaman aşımı (${status}):`, err);
+          if (this.realtimeDisconnected) {
+            console.info('[SyncService] [Lifecycle] Realtime yeniden bağlandı (SUBSCRIBED). Reconnect Recovery ve Full Catch-up tetikleniyor...');
+            this.realtimeDisconnected = false;
+            this.realtimeDisconnectedAt = 0;
+            this.recoverAfterReconnect(user).catch(recErr => {
+              console.warn('[SyncService] Realtime reconnect recovery hatası:', recErr);
+            });
+          }
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          console.warn(`[SyncService] Realtime kanal hatası/kopukluk (${status}):`, err);
+          this.realtimeDisconnected = true;
+          this.realtimeDisconnectedAt = Date.now();
+          this.setStatus('syncing', 'Bağlantı yeniden kuruluyor...');
         }
       });
   }
@@ -211,8 +235,10 @@ export class SyncService {
 
   resubscribeRealtimeIfDisconnected(user) {
     if (!user || !user.id) return;
-    console.info('[SyncService] Realtime kanalı yeniden yapılandırılıyor/doğrulanıyor...');
-    this.setupRealtimeSubscription(user);
+    if (this.realtimeStatus !== 'SUBSCRIBED' || !this.realtimeChannel || this.realtimeDisconnected) {
+      console.info('[SyncService] Realtime kanalı kapalı/kopuk, yeniden abone olunuyor...');
+      this.setupRealtimeSubscription(user);
+    }
   }
 
   scheduleSafetyCatchUp(user, delayMs = 1500) {
@@ -273,19 +299,41 @@ export class SyncService {
     if (typeof window === 'undefined' || this.windowListenersAttached) return;
     this.windowListenersAttached = true;
 
-    const handleFocusOrVisible = (triggerName = 'Sekme görünür/odakta') => {
-      const user = authService.getUser();
+    const handleFocusOrVisible = async (triggerName = 'Sekme görünür/odakta') => {
+      const user = (this.authService && typeof this.authService.getUser === 'function')
+        ? this.authService.getUser()
+        : authService.getUser();
       if (!user) return;
       const now = Date.now();
       const elapsed = now - this.lastSyncAttemptTime;
-      if (elapsed < 5000 && (!this.store || !this.store.hasUnsyncedChanges)) {
+      if (elapsed < 3000 && (!this.store || !this.store.hasUnsyncedChanges)) {
         return;
       }
       if (this.store && this.store.hasUnsyncedChanges) {
         console.info(`[SyncService] ${triggerName} -> Bekleyen yerel değişiklikler push edilecek...`);
         this.scheduleDebouncedSync(300);
+        return;
+      }
+
+      // Realtime sağlıklı mı kontrolü
+      const isRealtimeHealthy = (this.realtimeStatus === 'SUBSCRIBED' && !this.realtimeDisconnected);
+      const timeSinceLastFullCatchUp = now - (this.lastFullCatchUpTime || 0);
+
+      // Realtime kapalıysa/kopuksa VEYA son full catch-up üzerinden 45 saniye geçmişse:
+      // Focus/visibility anında güvenli bir Full Catch-up çalıştır!
+      if (!isRealtimeHealthy || timeSinceLastFullCatchUp > 45000) {
+        console.info(`[SyncService] ${triggerName} -> Realtime sağlıksız veya son tam tarama > 45s -> Full Cloud Catch-up...`);
+        this.lastFullCatchUpTime = now;
+        this.lastSyncAttemptTime = now;
+        try {
+          await this.runFullCloudCatchUp(user);
+          this.setLastSyncedAt(new Date().toISOString());
+          this.setStatus('synced', 'Bulut ile başarıyla eşitlendi');
+        } catch (e) {
+          console.warn('[SyncService] Focus full catch-up uyarısı:', e);
+        }
       } else {
-        console.info(`[SyncService] ${triggerName} -> Delta pull kontrolü...`);
+        console.info(`[SyncService] ${triggerName} -> Realtime sağlıklı, delta pull kontrolü...`);
         this.scheduleRemoteDeltaSync(300);
       }
     };
@@ -316,6 +364,8 @@ export class SyncService {
 
     window.addEventListener('offline', () => {
       this.realtimeStatus = 'DISCONNECTED';
+      this.realtimeDisconnected = true;
+      this.realtimeDisconnectedAt = Date.now();
       this.setStatus('offline', 'Çevrimdışı Mod');
     });
   }
@@ -397,7 +447,7 @@ export class SyncService {
       return;
     }
     try {
-      await this.sync(user);
+      await this.sync({ user, reason: 'startup' });
       if (this.store.state.onboarded && typeof window !== 'undefined' && window.app?.modalManager) {
         window.app.modalManager.closeOnboardingModal();
       }
@@ -489,10 +539,33 @@ export class SyncService {
         // İLK MIGRATION (Bu hesap bulutta henüz ilklendirilmemiş)
         console.info('[SyncService] İlk bulut ilklendirmesi (Initial Migration) başlatılıyor...');
         await this.runInitialMigration(user);
+        this.hasPerformedStartupCatchUp = true;
+        this.lastFullCatchUpTime = Date.now();
       } else if (!localLastSyncedAt) {
         // FRESH DEVICE / EMPTY LOCALSTORAGE BOOTSTRAP
         console.info('[SyncService] Fresh device tespit edildi. Full Cloud Bootstrap başlatılıyor...');
         await this.runFullCloudBootstrap(user, meta);
+        this.hasPerformedStartupCatchUp = true;
+        this.lastFullCatchUpTime = Date.now();
+      } else if (opts.reason === 'startup' || (typeof window !== 'undefined' && !this.hasPerformedStartupCatchUp && !pullOnly && opts.reason !== 'local-change')) {
+        // STARTUP SELF-HEAL & POISONED CURSOR HEALING:
+        console.info('[SyncService] Startup Self-Heal: Mevcut cihaz için filtresiz Full Cloud Catch-up başlatılıyor...');
+        this.hasPerformedStartupCatchUp = true;
+        this.lastFullCatchUpTime = Date.now();
+
+        // Yerel dirty değişiklik varsa önce buluta push et
+        const hasDirty = Boolean(
+          (this.store && this.store.hasUnsyncedChanges) ||
+          (this.store && this.store.dirtySettings) ||
+          (this.store && this.store.dirtyPresets) ||
+          (this.getDeletedQueue().length > 0)
+        );
+        if (hasDirty) {
+          await this.pushLocalChanges(user, client);
+        }
+
+        // Filtresiz tüm kayıtları çek & LWW merge yap
+        await this.runFullCloudCatchUp(user, client);
       } else {
         // DELTA SYNC
         console.info(`[SyncService] Delta senkronizasyonu başlatılıyor (pullOnly: ${pullOnly})...`);
@@ -1045,6 +1118,7 @@ export class SyncService {
       applyRemoteData();
     }
 
+    this.lastFullCatchUpTime = Date.now();
     console.info(`[SyncService] Full Cloud Catch-up tamamlandı (${mergedTransactions.length} aktif işlem).`);
   }
 
@@ -1108,6 +1182,8 @@ export class SyncService {
       // E) Her iki adım da başarılı -> imleç güncelle, 'synced' durumuna geç
       const nowIso = new Date().toISOString();
       this.setLastSyncedAt(nowIso);
+      this.realtimeDisconnected = false;
+      this.lastFullCatchUpTime = Date.now();
       this.setStatus('synced', 'Bulut ile başarıyla eşitlendi');
 
       // F) Kademeli emniyet yoklaması (1.5s): Diğer cihazın olası geciken push'unu kaçırmamak için

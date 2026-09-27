@@ -140,9 +140,10 @@ export class UIManager {
       this.renderAuthBadge(this.authService.getUser());
       this.renderSyncStatus(this.syncService.getStatus());
     } else {
-      this.modalManager = options.modalManager || {
+      this.modalManager = {
         openOnboardingModal: () => {},
-        closeOnboardingModal: () => {}
+        closeOnboardingModal: () => {},
+        ...(options.modalManager || {})
       };
     }
 
@@ -180,10 +181,14 @@ export class UIManager {
     // 3. Karar anı:
     // Eğer cloud bootstrap veya yerel veriden onboarded true geldiyse onboarding açılmaz!
     if (this.store.state.onboarded) {
-      this.modalManager.closeOnboardingModal();
+      if (typeof this.modalManager?.closeOnboardingModal === 'function') {
+        this.modalManager.closeOnboardingModal();
+      }
     } else {
       // Sadece gerçekten onboarded=false olan (örn: anonymous veya yeni hesap) kullanıcı için aç
-      this.modalManager.openOnboardingModal();
+      if (typeof this.modalManager?.openOnboardingModal === 'function') {
+        this.modalManager.openOnboardingModal();
+      }
     }
 
     this.render();
