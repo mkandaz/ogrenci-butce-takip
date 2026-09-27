@@ -2565,6 +2565,484 @@ console.log('\n--- 13. FAZ 3 İŞLEM SIRALAMASI (TIE-BREAKER CREATED_AT) VE YERE
   assert(device1List.map(t => t.id).join(',') === device2List.map(t => t.id).join(','), 'TC-66 Çoklu cihazda sıra kesinlikle birebir aynı (invariant) oldu');
 }
 
+// --------------------------------------------------------------------------
+console.log('\n--- 14. FAZ 3 OFFLINE RECONNECT RECOVERY MİMARİSİ TESTLERİ (TC-67 - TC-76) ---');
+
+function createMockClientWithRealtime(handlers = {}) {
+  const base = createMockClient(handlers);
+  return {
+    ...base,
+    channel: (name) => {
+      const ch = {
+        name,
+        on: () => ch,
+        subscribe: (cb) => {
+          if (cb) cb('SUBSCRIBED');
+          return ch;
+        }
+      };
+      return ch;
+    },
+    removeChannel: () => {}
+  };
+}
+
+// TC-67: Çevrimdışıyken işlem ekleme, yerel kalıcılık ve hasUnsyncedChanges
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem('student_budget_deleted_queue');
+
+  const store = new BudgetStore();
+  const mockClient = createMockClientWithRealtime({});
+  const sync = new SyncService(store, mockClient);
+  sync.setStatus('offline', 'Çevrimdışı Mod');
+
+  const tx = store.addTransaction({
+    title: 'Offline Test',
+    amount: 77,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-27'
+  });
+
+  assert(store.getTransactions().length === 1, 'TC-67 Offline işlem yerel store\'a eklendi');
+  assert(store.getTransactions()[0].amount === 77, 'TC-67 Offline işlem tutarı 77 TL olarak kaydedildi');
+  assert(store.hasUnsyncedChanges === true, 'TC-67 Offline işlem sonrası store.hasUnsyncedChanges=true oldu');
+  assert(sync.getStatus() === 'offline', 'TC-67 Çevrimdışı modda durum offline olarak korundu');
+}
+
+// TC-68: Yazıcı Cihaz: recoverAfterReconnect ile yerel veriyi buluta PUSH etme ve synced olma
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem('student_budget_deleted_queue');
+
+  const store = new BudgetStore();
+  const fakeUser = { id: generateUUID() };
+  let pushedTransactions = [];
+  let metadataUpdated = false;
+
+  const mockClient = createMockClientWithRealtime({
+    user_settings: {
+      select: () => ({ data: null, error: null }),
+      upsert: (payload) => ({ data: payload, error: null })
+    },
+    presets: {
+      select: () => ({ data: [], error: null }),
+      upsert: (payload) => ({ data: payload, error: null })
+    },
+    transactions: {
+      select: () => ({ data: pushedTransactions, error: null }),
+      upsert: (payload) => {
+        pushedTransactions = payload;
+        return { data: payload, error: null };
+      }
+    },
+    user_sync_metadata: {
+      select: () => ({ data: { user_id: fakeUser.id, last_synced_at: '2026-09-26T20:00:00Z' }, error: null }),
+      update: () => {
+        metadataUpdated = true;
+        return { data: {}, error: null };
+      }
+    }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  sync.setLastSyncedAt('2026-09-26T20:00:00Z');
+
+  // Çevrimdışıyken eklenen "Offline Test" 77 TL
+  store.addTransaction({
+    title: 'Offline Test',
+    amount: 77,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-27'
+  });
+
+  assert(store.hasUnsyncedChanges === true, 'TC-68 Reconnect öncesi store dirty');
+
+  // Wi-Fi açıldı -> recoverAfterReconnect tetiklendi
+  const res = await sync.recoverAfterReconnect(fakeUser);
+
+  assert(res.success === true, 'TC-68 recoverAfterReconnect başarılı sonuç döndü');
+  assert(pushedTransactions.length === 1, 'TC-68 Yazıcı cihazın Offline Test işlemi buluta push edildi');
+  assert(pushedTransactions[0].title === 'Offline Test' && pushedTransactions[0].amount === 77, 'TC-68 Doğru işlem başlığı ve tutarı (77 TL) push edildi');
+  assert(pushedTransactions[0].date === '2026-09-27', 'TC-68 İşlem tarihi DATE-ONLY 2026-09-27 olarak push edildi');
+  assert(metadataUpdated === true, 'TC-68 user_sync_metadata last_synced_at güncellendi');
+  assert(store.hasUnsyncedChanges === false, 'TC-68 Başarılı recovery sonrası store.hasUnsyncedChanges=false oldu');
+  assert(sync.getStatus() === 'synced', 'TC-68 Yazıcı cihazın durumu "synced" oldu');
+}
+
+// TC-69: Alıcı Cihaz: Yerel değişikliği olmayan cihazın filtresiz Full Cloud Catch-up ile işlemi alması
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+
+  const receiverStore = new BudgetStore();
+  const fakeUser = { id: generateUUID() };
+  let cloudSelectGtUsed = false;
+
+  const cloudTransaction = {
+    id: generateUUID(),
+    user_id: fakeUser.id,
+    title: 'Offline Test',
+    amount: 77,
+    type: 'expense',
+    category_id: 'exp_food',
+    date: '2026-09-27',
+    is_deleted: false,
+    created_at: new Date('2026-09-27T00:30:00Z').toISOString(),
+    updated_at: new Date('2026-09-27T00:30:00Z').toISOString()
+  };
+
+  const receiverMockClient = createMockClientWithRealtime({
+    user_settings: {
+      select: () => ({ data: null, error: null })
+    },
+    presets: {
+      select: () => ({ data: [], error: null })
+    },
+    transactions: {
+      select: (state) => {
+        if (state.gtFilter) cloudSelectGtUsed = true;
+        return { data: [cloudTransaction], error: null };
+      }
+    },
+    user_sync_metadata: {
+      select: () => ({ data: { user_id: fakeUser.id }, error: null })
+    }
+  });
+
+  const receiverSync = new SyncService(receiverStore, receiverMockClient);
+  receiverSync.setLastSyncedAt('2026-09-27T00:00:00Z');
+
+  assert(receiverStore.getTransactions().length === 0, 'TC-69 Alıcı cihazda başlangıçta 0 işlem var');
+
+  // Alıcı cihaz Wi-Fi açılınca recoverAfterReconnect çalıştırır
+  const res = await receiverSync.recoverAfterReconnect(fakeUser);
+
+  assert(res.success === true, 'TC-69 Alıcı cihaz recoverAfterReconnect başarılı oldu');
+  assert(cloudSelectGtUsed === false, 'TC-69 Alıcı cihaz Full Cloud Catch-up sırasında .gt filtresi KULLANMADI (tüm aktif kayıtları taradı)');
+  assert(receiverStore.getTransactions().length === 1, 'TC-69 Alıcı cihaza Offline Test işlemi başarıyla yüklendi');
+  assert(receiverStore.getTransactions()[0].title === 'Offline Test' && receiverStore.getTransactions()[0].amount === 77, 'TC-69 Alıcı cihazdaki işlem başlık ve tutarı doğru');
+  assert(receiverStore.hasUnsyncedChanges === false, 'TC-69 Alıcı cihazda remote update sonrası hasUnsyncedChanges=false kaldı');
+  assert(receiverSync.getStatus() === 'synced', 'TC-69 Alıcı cihaz durumu "synced" oldu');
+}
+
+// TC-70: WebSocket Realtime Event Tamamen Düşse/Kaçırılsa Bile İki Cihazın Eşitlenmesi
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+
+  const storeA = new BudgetStore();
+  const storeB = new BudgetStore();
+  const fakeUser = { id: generateUUID() };
+  let sharedCloudDatabase = [];
+
+  const createSharedMock = (isWriter = false) => createMockClientWithRealtime({
+    user_settings: { select: () => ({ data: null, error: null }), upsert: () => ({ data: {}, error: null }) },
+    presets: { select: () => ({ data: [], error: null }), upsert: () => ({ data: {}, error: null }) },
+    transactions: {
+      select: () => ({ data: sharedCloudDatabase, error: null }),
+      upsert: (payload) => {
+        sharedCloudDatabase = payload;
+        return { data: payload, error: null };
+      }
+    },
+    user_sync_metadata: {
+      select: () => ({ data: { user_id: fakeUser.id }, error: null }),
+      update: () => ({ data: {}, error: null })
+    }
+  });
+
+  const syncA = new SyncService(storeA, createSharedMock(true));
+  const syncB = new SyncService(storeB, createSharedMock(false));
+
+  // Cihaz A çevrimdışıyken harcama girer
+  storeA.addTransaction({
+    title: 'Offline Test (Realtime Yokken)',
+    amount: 88,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-27'
+  });
+
+  // İnternet geri geldi: WebSocket eventleri HİÇ GELMEDİ (dropped)
+  // Cihaz A recover eder:
+  await syncA.recoverAfterReconnect(fakeUser);
+  // Cihaz B recover eder:
+  await syncB.recoverAfterReconnect(fakeUser);
+
+  // İki cihazın listelerini karşılaştır
+  assert(storeA.getTransactions().length === 1 && storeB.getTransactions().length === 1, 'TC-70 Realtime olmadan her iki cihazda da 1 işlem var');
+  assert(storeA.getTransactions()[0].id === storeB.getTransactions()[0].id, 'TC-70 Her iki cihazdaki işlem ID\'leri birebir aynı');
+  assert(storeB.getTransactions()[0].amount === 88, 'TC-70 Cihaz B işlemi 88 TL olarak eksiksiz aldı');
+}
+
+// TC-71: Staggered Safety Catch-Up: Alıcı Yazıcıdan Önce Bağlansa Bile Yarışı Çözme
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+
+  const receiverStore = new BudgetStore();
+  const fakeUser = { id: generateUUID() };
+  let cloudTxs = [];
+
+  const receiverMock = createMockClientWithRealtime({
+    user_settings: { select: () => ({ data: null, error: null }) },
+    presets: { select: () => ({ data: [], error: null }) },
+    transactions: { select: () => ({ data: cloudTxs, error: null }) },
+    user_sync_metadata: { select: () => ({ data: { user_id: fakeUser.id }, error: null }) }
+  });
+
+  const receiverSync = new SyncService(receiverStore, receiverMock);
+
+  // t=0: Alıcı recover çalıştırdı. Cloud henüz boş (yazıcı henüz yükleyemedi)
+  await receiverSync.recoverAfterReconnect(fakeUser);
+  assert(receiverStore.getTransactions().length === 0, 'TC-71 Alıcı ilk anda henüz yüklenmemiş buluttan 0 kayıt aldı');
+  assert(receiverSync.safetyCatchUpTimer !== null, 'TC-71 Alıcı için 1.5s emniyet catch-up zamanlayıcısı kuruldu');
+
+  // t=50ms: Yazıcı push işlemini tamamladı ve cloud doldu
+  cloudTxs = [{
+    id: generateUUID(),
+    user_id: fakeUser.id,
+    title: 'Geciken Offline Harcama',
+    amount: 110,
+    type: 'expense',
+    category_id: 'exp_food',
+    date: '2026-09-27',
+    is_deleted: false,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  }];
+
+  // 1.5s emniyet zamanlayıcısı devreye girer
+  await receiverSync.runFullCloudCatchUp(fakeUser);
+
+  assert(receiverStore.getTransactions().length === 1, 'TC-71 Emniyet yoklaması ile geciken işlem alıcı cihaza başarıyla çekildi');
+  assert(receiverStore.getTransactions()[0].title === 'Geciken Offline Harcama', 'TC-71 Çekilen işlem doğru');
+}
+
+// TC-72: LWW Koruması: Reconnect Sırasında Yereldeki Daha Yeni Unpushed Değişikliğin Ezilmemesi
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+
+  const store = new BudgetStore();
+  const fakeUser = { id: generateUUID() };
+  const txId = generateUUID();
+
+  // Yerelde çevrimdışıyken düzenlenmiş daha yeni bir kayıt
+  store.state.transactions = [{
+    id: txId,
+    title: 'Yerel Yeni Başlık',
+    amount: 99,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-27',
+    createdAt: 100000,
+    updatedAt: 300000 // Yerel daha yeni
+  }];
+
+  // Bulutta daha eski versiyonu var
+  const olderCloudTx = {
+    id: txId,
+    user_id: fakeUser.id,
+    title: 'Bulut Eski Başlık',
+    amount: 50,
+    type: 'expense',
+    category_id: 'exp_food',
+    date: '2026-09-27',
+    is_deleted: false,
+    created_at: new Date(100000).toISOString(),
+    updated_at: new Date(200000).toISOString() // Bulut daha eski
+  };
+
+  const mockClient = createMockClientWithRealtime({
+    user_settings: { select: () => ({ data: null, error: null }), upsert: () => ({ data: {}, error: null }) },
+    presets: { select: () => ({ data: [], error: null }), upsert: () => ({ data: {}, error: null }) },
+    transactions: { select: () => ({ data: [olderCloudTx], error: null }), upsert: () => ({ data: {}, error: null }) },
+    user_sync_metadata: { select: () => ({ data: { user_id: fakeUser.id }, error: null }), update: () => ({ data: {}, error: null }) }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  await sync.runFullCloudCatchUp(fakeUser);
+
+  const tx = store.getTransactions().find(t => t.id === txId);
+  assert(tx.title === 'Yerel Yeni Başlık', 'TC-72 Daha yeni yerel kayıt eski bulut verisiyle EZİLMEDİ (LWW korundu)');
+  assert(tx.amount === 99, 'TC-72 Yerel tutar (99 TL) korundu');
+}
+
+// TC-73: Reconnect Recovery Hata Durumu (500 / Ağ Hatası) ASLA 'synced' Göstermez
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+
+  const store = new BudgetStore();
+  const fakeUser = { id: generateUUID() };
+
+  store.addTransaction({
+    title: 'Hata Testi',
+    amount: 40,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-27'
+  });
+
+  const failingClient = createMockClientWithRealtime({
+    user_settings: { select: () => ({ data: null, error: null }) },
+    presets: { select: () => ({ data: [], error: null }) },
+    transactions: {
+      select: () => ({ data: null, error: new Error('Sunucu Hatası (HTTP 500)') }),
+      upsert: () => ({ data: null, error: new Error('Ağ Hatası (Push Failed)') })
+    },
+    user_sync_metadata: { select: () => ({ data: { user_id: fakeUser.id }, error: null }) }
+  });
+
+  const sync = new SyncService(store, failingClient);
+  const res = await sync.recoverAfterReconnect(fakeUser);
+
+  assert(res.success === false, 'TC-73 Hata oluşunca recovery başarısız (success: false) döndü');
+  assert(sync.getStatus() === 'error', 'TC-73 Hata oluşunca durum "error" oldu');
+  assert(sync.getStatus() !== 'synced', 'TC-73 Hata oluşunca durum ASLA "synced" olmadı');
+  assert(store.hasUnsyncedChanges === true, 'TC-73 Başarısız sync sonrası bekleyen yerel veriler (hasUnsyncedChanges=true) korundu');
+}
+
+// TC-74: Reconnect Sırasında Realtime Kanalının Yeniden Abone Olunması (Resubscribe)
+{
+  const store = new BudgetStore();
+  const fakeUser = { id: generateUUID() };
+  let subscribedChannels = [];
+
+  const mockClient = {
+    channel: (name) => {
+      subscribedChannels.push(name);
+      const ch = {
+        name,
+        on: () => ch,
+        subscribe: (cb) => {
+          if (cb) cb('SUBSCRIBED');
+          return ch;
+        }
+      };
+      return ch;
+    },
+    removeChannel: () => {},
+    from: createMockClient({
+      user_settings: { select: () => ({ data: null, error: null }) },
+      presets: { select: () => ({ data: [], error: null }) },
+      transactions: { select: () => ({ data: [], error: null }) },
+      user_sync_metadata: { select: () => ({ data: { user_id: fakeUser.id }, error: null }) }
+    }).from
+  };
+
+  const sync = new SyncService(store, mockClient);
+  sync.realtimeStatus = 'DISCONNECTED';
+  sync.realtimeChannel = null;
+
+  await sync.recoverAfterReconnect(fakeUser);
+
+  assert(subscribedChannels.includes(`db-user-${fakeUser.id}`), 'TC-74 Reconnect sonrası Realtime kanalı için yeniden abone olundu');
+  assert(sync.realtimeStatus === 'SUBSCRIBED', 'TC-74 Realtime kanal durumu "SUBSCRIBED" yapıldı');
+}
+
+// TC-75: Çevrimdışı Düzenleme ve Silme (Soft-Delete) Recovery Akışı
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem('student_budget_deleted_queue');
+
+  const store = new BudgetStore();
+  const fakeUser = { id: generateUUID() };
+
+  const tx1 = store.addTransaction({
+    title: 'Düzenlenecek İşlem',
+    amount: 100,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-27'
+  });
+  const tx2 = store.addTransaction({
+    title: 'Silinecek İşlem',
+    amount: 50,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-27'
+  });
+
+  // sync ile bir kez buluta gittiğini varsayalım
+  store.markSynced();
+
+  // Çevrimdışı moda geçildi
+  // tx1 düzenlendi
+  store.updateTransaction(tx1.id, { amount: 150, title: 'Düzenlendi (150 TL)' });
+  // tx2 silindi
+  store.deleteTransaction(tx2.id);
+
+  let updatedSoftDeleteId = null;
+  let upsertedTx = null;
+
+  const mockClient = createMockClientWithRealtime({
+    user_settings: { select: () => ({ data: null, error: null }), upsert: () => ({ data: {}, error: null }) },
+    presets: { select: () => ({ data: [], error: null }), upsert: () => ({ data: {}, error: null }) },
+    transactions: {
+      select: () => ({ data: [], error: null }),
+      upsert: (payload) => {
+        upsertedTx = payload[0];
+        return { data: payload, error: null };
+      },
+      update: (payload, eqs) => {
+        if (payload.is_deleted) {
+          updatedSoftDeleteId = eqs['id'];
+        }
+        return { data: {}, error: null };
+      }
+    },
+    user_sync_metadata: { select: () => ({ data: { user_id: fakeUser.id }, error: null }), update: () => ({ data: {}, error: null }) }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  sync.trackDeletedTransaction(tx2.id);
+  sync.setLastSyncedAt('2026-09-26T20:00:00Z');
+
+  await sync.recoverAfterReconnect(fakeUser);
+
+  assert(upsertedTx && upsertedTx.amount === 150, 'TC-75 Çevrimdışı düzenlenen işlem (150 TL) buluta upsert edildi');
+  assert(updatedSoftDeleteId === tx2.id, 'TC-75 Çevrimdışı silinen işlem soft-delete olarak bulutta UPDATE edildi');
+  assert(sync.getDeletedQueue().length === 0, 'TC-75 Başarılı recovery sonrası deletedQueue temizlendi');
+}
+
+// TC-76: Standart Delta Sync 10 Saniyelik Örtüşme Penceresi (Overlap Window) Testi
+{
+  const store = new BudgetStore();
+  const fakeUser = { id: generateUUID() };
+  let appliedGtFilter = null;
+
+  const mockClient = createMockClientWithRealtime({
+    user_settings: { select: () => ({ data: null, error: null }) },
+    presets: { select: () => ({ data: [], error: null }) },
+    transactions: {
+      select: (state) => {
+        if (state.gtFilter) {
+          appliedGtFilter = state.gtFilter.val;
+        }
+        return { data: [], error: null };
+      }
+    },
+    user_sync_metadata: { select: () => ({ data: { user_id: fakeUser.id }, error: null }) }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  const cursorIso = '2026-09-27T10:00:00.000Z';
+  sync.setLastSyncedAt(cursorIso);
+
+  await sync.runDeltaSync(fakeUser, { user_id: fakeUser.id }, { pullOnly: true });
+
+  const expectedOverlapIso = new Date(new Date(cursorIso).getTime() - 10000).toISOString();
+  assert(appliedGtFilter === expectedOverlapIso, `TC-76 Delta sorgusunda 10s örtüşme penceresi uygulandı (${appliedGtFilter} === ${expectedOverlapIso})`);
+}
+
 console.log('\n====================================================');
 console.log(`🏁 ENTEGRE TEST SONUCU: ${passed} PASSED, ${failed} FAILED`);
 console.log('====================================================');

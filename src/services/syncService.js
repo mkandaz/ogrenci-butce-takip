@@ -14,8 +14,10 @@ export class SyncService {
     this.syncStatus = 'idle'; // 'idle' | 'syncing' | 'pending' | 'synced' | 'offline' | 'error'
     this.statusListeners = [];
     this.isSyncing = false;
+    this.isRecovering = false;
     this.debounceTimer = null;
     this.remoteSyncTimer = null;
+    this.safetyCatchUpTimer = null;
     this.pendingSyncRequested = false;
     this.pendingRemotePullRequested = false;
     this.recentLocalWrites = new Map();
@@ -55,7 +57,7 @@ export class SyncService {
     const user = authService.getUser();
     if (!user) return;
 
-    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    if ((typeof navigator !== 'undefined' && navigator.onLine === false) || this.syncStatus === 'offline') {
       this.setStatus('offline', 'Çevrimdışı Mod');
       return;
     }
@@ -207,6 +209,38 @@ export class SyncService {
     }
   }
 
+  resubscribeRealtimeIfDisconnected(user) {
+    if (!user || !user.id) return;
+    console.info('[SyncService] Realtime kanalı yeniden yapılandırılıyor/doğrulanıyor...');
+    this.setupRealtimeSubscription(user);
+  }
+
+  scheduleSafetyCatchUp(user, delayMs = 1500) {
+    if (this.safetyCatchUpTimer) {
+      clearTimeout(this.safetyCatchUpTimer);
+      this.safetyCatchUpTimer = null;
+    }
+
+    this.safetyCatchUpTimer = setTimeout(async () => {
+      this.safetyCatchUpTimer = null;
+      try {
+        const currentUser = user || (this.authService ? this.authService.getUser() : authService.getUser());
+        if (!currentUser) return;
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+
+        console.info('[SyncService] Emniyet catch-up kontrolü (1.5s staggered check)...');
+        await this.runFullCloudCatchUp(currentUser);
+        this.setLastSyncedAt(new Date().toISOString());
+      } catch (err) {
+        console.warn('[SyncService] Emniyet catch-up uyarısı:', err);
+      }
+    }, delayMs);
+
+    if (this.safetyCatchUpTimer && typeof this.safetyCatchUpTimer.unref === 'function') {
+      this.safetyCatchUpTimer.unref();
+    }
+  }
+
   startForegroundPolling(intervalMs = 120000) {
     this.stopForegroundPolling();
     this.pollingInterval = setInterval(() => {
@@ -268,22 +302,20 @@ export class SyncService {
       handleFocusOrVisible('Pencere odaklandı (focus)');
     });
 
-    window.addEventListener('online', () => {
-      console.info('[SyncService] İnternet bağlantısı sağlandı -> Senkronizasyon tetikleniyor...');
-      const user = authService.getUser();
+    window.addEventListener('online', async () => {
+      console.info('[SyncService] İnternet bağlantısı sağlandı -> Reconnect Recovery başlatılıyor...');
+      const user = (this.authService && typeof this.authService.getUser === 'function')
+        ? this.authService.getUser()
+        : authService.getUser();
       if (user) {
-        if (this.store && this.store.hasUnsyncedChanges) {
-          this.setStatus('syncing', 'Bağlantı kuruldu, eşitleniyor...');
-          this.scheduleDebouncedSync(100);
-        } else {
-          this.scheduleRemoteDeltaSync(100);
-        }
+        await this.recoverAfterReconnect(user);
       } else {
         this.setStatus('idle');
       }
     });
 
     window.addEventListener('offline', () => {
+      this.realtimeStatus = 'DISCONNECTED';
       this.setStatus('offline', 'Çevrimdışı Mod');
     });
   }
@@ -408,6 +440,10 @@ export class SyncService {
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
       this.setStatus('offline', 'İnternet bağlantısı yok');
       return { success: false, reason: 'offline' };
+    }
+
+    if (opts.reason === 'online') {
+      return this.recoverAfterReconnect(user);
     }
 
     const pullOnly = Boolean(
@@ -699,6 +735,395 @@ export class SyncService {
     console.info(`[SyncService] Full Cloud Bootstrap başarıyla tamamlandı. (${activeCloudTxs.length} aktif işlem yüklendi)`);
   }
 
+  // 3.6. Bekleyen Yerel Değişiklikleri Buluta PUSH Etme
+  async pushLocalChanges(user, customClient = null) {
+    const client = customClient || this.getClient();
+    let hasPushedData = false;
+
+    // ADIM 1: user_settings PUSH (Sadece kirli ise)
+    if (this.store?.dirtySettings) {
+      const localSettings = this.store.state?.settings || {};
+      const initBudget = localSettings.initialBudget || {};
+      const localSettingsUpdated = localSettings.updatedAt ? new Date(localSettings.updatedAt).getTime() : Date.now();
+      const userSettingsPayload = {
+        user_id: user.id,
+        currency: localSettings.currency || 'TRY',
+        language: localSettings.language || 'tr',
+        target_month: localSettings.targetMonth || getCurrentYearMonth(),
+        month_start_day: localSettings.monthStartDay || 1,
+        warning_threshold_percent: localSettings.warningThresholdPercent || 15,
+        theme: localSettings.theme || 'light',
+        onboarded: Boolean(this.store.state?.onboarded),
+        initial_balance: Number(initBudget.initialBalance) || 0,
+        monthly_income: Number(initBudget.monthlyIncome) || 0,
+        initial_balance_tx_id: isValidUUID(initBudget.initialBalanceTxId) ? initBudget.initialBalanceTxId : null,
+        monthly_income_tx_id: isValidUUID(initBudget.monthlyIncomeTxId) ? initBudget.monthlyIncomeTxId : null,
+        updated_at: new Date(localSettingsUpdated).toISOString()
+      };
+
+      const { error: pushSettingsErr } = await client
+        .from('user_settings')
+        .upsert(userSettingsPayload);
+
+      if (pushSettingsErr) {
+        throw new Error(`user_settings gönderilemedi: ${pushSettingsErr.message}`);
+      }
+      this.store.dirtySettings = false;
+      hasPushedData = true;
+    }
+
+    // ADIM 2: presets PUSH (Sadece kirli ise)
+    if (this.store?.dirtyPresets) {
+      const localPresets = this.store.getPresets() || [];
+      if (localPresets.length > 0) {
+        const presetsPayload = localPresets.map(lp => ({
+          user_id: user.id,
+          preset_key: lp.id,
+          name: lp.name,
+          emoji: lp.emoji,
+          amount: Math.round(Number(lp.amount) * 100) / 100,
+          category_id: lp.categoryId,
+          updated_at: new Date(lp.updatedAt || Date.now()).toISOString()
+        }));
+
+        const { error: pushPresetsErr } = await client
+          .from('presets')
+          .upsert(presetsPayload, { onConflict: 'user_id,preset_key' });
+
+        if (pushPresetsErr) {
+          throw new Error(`presets gönderilemedi: ${pushPresetsErr.message}`);
+        }
+        this.store.dirtyPresets = false;
+        hasPushedData = true;
+      }
+    }
+
+    // ADIM 3: Soft-delete kuyruğu PUSH
+    const deletedQueue = this.getDeletedQueue();
+    if (deletedQueue.length > 0) {
+      const successfullyDeletedIds = [];
+      for (const item of deletedQueue) {
+        const { error: delErr } = await client
+          .from('transactions')
+          .update({
+            is_deleted: true,
+            deleted_at: item.deletedAt || new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', item.id)
+          .eq('user_id', user.id);
+
+        if (delErr) {
+          if (successfullyDeletedIds.length > 0) {
+            this.clearDeletedQueue(successfullyDeletedIds);
+          }
+          throw new Error(`Soft-delete güncellenemedi (${item.id}): ${delErr.message}`);
+        }
+        successfullyDeletedIds.push(item.id);
+      }
+
+      if (successfullyDeletedIds.length > 0) {
+        this.clearDeletedQueue(successfullyDeletedIds);
+        hasPushedData = true;
+      }
+    }
+
+    // ADIM 4: Yeni ve güncellenen işlemleri PUSH et
+    const localTxs = this.store?.getTransactions() || [];
+    const lastSyncedAt = this.getLastSyncedAt();
+    const lastSyncedTime = lastSyncedAt ? (new Date(lastSyncedAt).getTime() || 0) : 0;
+
+    let txToPush = [];
+    if (lastSyncedTime > 0) {
+      txToPush = localTxs.filter(t => !t.updatedAt || new Date(t.updatedAt).getTime() >= (lastSyncedTime - 5000));
+    } else {
+      txToPush = localTxs;
+    }
+
+    if (txToPush.length === 0 && this.store?.hasUnsyncedChanges) {
+      txToPush = localTxs;
+    }
+
+    if (txToPush.length > 0) {
+      const txPayload = txToPush.map(t => {
+        const upIso = t.updatedAt ? new Date(t.updatedAt).toISOString() : new Date().toISOString();
+        this.recordLocalWrite(t.id, upIso);
+        return {
+          id: t.id,
+          user_id: user.id,
+          title: t.title,
+          amount: Math.round(Number(t.amount) * 100) / 100,
+          type: t.type,
+          category_id: t.categoryId,
+          date: t.date,
+          notes: t.notes || null,
+          is_deleted: false,
+          created_at: t.createdAt ? new Date(t.createdAt).toISOString() : new Date().toISOString(),
+          updated_at: upIso
+        };
+      });
+
+      const { error: pushTxErr } = await client
+        .from('transactions')
+        .upsert(txPayload);
+
+      if (pushTxErr) {
+        throw new Error(`transactions gönderilemedi: ${pushTxErr.message}`);
+      }
+      hasPushedData = true;
+    }
+
+    // ADIM 5: user_sync_metadata güncellemesi
+    if (hasPushedData) {
+      const syncTimestamp = new Date().toISOString();
+      const { error: metaUpdateErr } = await client
+        .from('user_sync_metadata')
+        .update({
+          last_synced_at: syncTimestamp
+        })
+        .eq('user_id', user.id);
+
+      if (metaUpdateErr) {
+        console.warn(`[SyncService] user_sync_metadata güncellenemedi: ${metaUpdateErr.message}`);
+      }
+    }
+
+    if (this.store && typeof this.store.markSynced === 'function') {
+      this.store.markSynced();
+    }
+
+    return { hasPushedData };
+  }
+
+  // 3.7. Yeniden Bağlanma Tam Bulut Eşitlemesi (Full Cloud Catch-Up - Filtresiz)
+  async runFullCloudCatchUp(user, customClient = null) {
+    const client = customClient || this.getClient();
+
+    // ADIM 1: user_settings Çek & LWW Merge
+    const { data: cloudSettings, error: settingsErr } = await client
+      .from('user_settings')
+      .select('*')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (settingsErr) {
+      throw new Error(`user_settings okunamadı: ${settingsErr.message}`);
+    }
+
+    if (cloudSettings) {
+      const localSettings = this.store?.state?.settings || {};
+      const localSettingsUpdated = localSettings.updatedAt ? new Date(localSettings.updatedAt).getTime() : 0;
+      const cloudSettingsUpdated = cloudSettings.updated_at ? new Date(cloudSettings.updated_at).getTime() : 0;
+
+      if (cloudSettingsUpdated >= localSettingsUpdated) {
+        this.store.state.settings = {
+          ...this.store.state.settings,
+          currency: cloudSettings.currency || this.store.state.settings.currency,
+          language: cloudSettings.language || this.store.state.settings.language,
+          targetMonth: cloudSettings.target_month || this.store.state.settings.targetMonth,
+          monthStartDay: cloudSettings.month_start_day || this.store.state.settings.monthStartDay,
+          warningThresholdPercent: cloudSettings.warning_threshold_percent || this.store.state.settings.warningThresholdPercent,
+          theme: cloudSettings.theme || this.store.state.settings.theme,
+          initialBudget: {
+            initialBalance: Number(cloudSettings.initial_balance) || 0,
+            monthlyIncome: Number(cloudSettings.monthly_income) || 0,
+            targetMonth: cloudSettings.target_month,
+            initialBalanceTxId: cloudSettings.initial_balance_tx_id,
+            monthlyIncomeTxId: cloudSettings.monthly_income_tx_id
+          },
+          updatedAt: cloudSettingsUpdated
+        };
+        this.store.state.onboarded = Boolean(cloudSettings.onboarded);
+        if (this.store) this.store.dirtySettings = false;
+      }
+    }
+
+    // ADIM 2: presets Çek & LWW Merge
+    const { data: cloudPresets, error: presetsErr } = await client
+      .from('presets')
+      .select('*')
+      .eq('user_id', user.id);
+
+    if (presetsErr) {
+      throw new Error(`presets okunamadı: ${presetsErr.message}`);
+    }
+
+    if (cloudPresets) {
+      const localPresets = this.store?.getPresets() || [];
+      const cloudPresetMap = new Map((cloudPresets || []).map(cp => [cp.preset_key, cp]));
+      const mergedPresets = [];
+
+      for (const lp of localPresets) {
+        const cp = cloudPresetMap.get(lp.id);
+        const localUpdated = lp.updatedAt ? new Date(lp.updatedAt).getTime() : (this.store.state.settings?.presetsUpdatedAt || 0);
+        const cloudUpdated = cp?.updated_at ? new Date(cp.updated_at).getTime() : 0;
+
+        if (cp && cloudUpdated >= localUpdated) {
+          mergedPresets.push({
+            id: cp.preset_key,
+            name: cp.name,
+            emoji: cp.emoji,
+            amount: Number(cp.amount),
+            categoryId: cp.category_id,
+            updatedAt: cloudUpdated
+          });
+        } else {
+          mergedPresets.push(lp);
+        }
+      }
+
+      const localKeySet = new Set(localPresets.map(lp => lp.id));
+      for (const cp of cloudPresets) {
+        if (!localKeySet.has(cp.preset_key)) {
+          mergedPresets.push({
+            id: cp.preset_key,
+            name: cp.name,
+            emoji: cp.emoji,
+            amount: Number(cp.amount),
+            categoryId: cp.category_id,
+            updatedAt: new Date(cp.updated_at).getTime()
+          });
+        }
+      }
+
+      this.store.state.settings.presets = mergedPresets;
+      if (this.store) this.store.dirtyPresets = false;
+    }
+
+    // ADIM 3: transactions Çek: TÜM KAYITLAR (last_synced_at filtresi OLMADAN)
+    const { data: cloudTxs, error: cloudTxsErr } = await client
+      .from('transactions')
+      .select('*')
+      .eq('user_id', user.id);
+
+    if (cloudTxsErr) {
+      throw new Error(`transactions okunamadı: ${cloudTxsErr.message}`);
+    }
+
+    const localMap = new Map((this.store?.state?.transactions || []).map(t => [t.id, t]));
+
+    (cloudTxs || []).forEach(ctx => {
+      if (ctx.is_deleted) {
+        localMap.delete(ctx.id);
+      } else {
+        const localItem = localMap.get(ctx.id);
+        const cloudUpdated = ctx.updated_at ? new Date(ctx.updated_at).getTime() : 0;
+        const localUpdated = localItem?.updatedAt ? new Date(localItem.updatedAt).getTime() : 0;
+
+        // Last-write-wins: Bulut daha yeni veya eşitse, ya da yerelde henüz yoksa bulut verisini al
+        if (!localItem || cloudUpdated >= localUpdated) {
+          localMap.set(ctx.id, {
+            id: ctx.id,
+            title: ctx.title,
+            amount: Number(ctx.amount),
+            type: ctx.type,
+            categoryId: ctx.category_id,
+            date: ctx.date,
+            notes: ctx.notes || '',
+            createdAt: ctx.created_at ? new Date(ctx.created_at).getTime() : Date.now(),
+            updatedAt: ctx.updated_at ? new Date(ctx.updated_at).getTime() : Date.now()
+          });
+        }
+        // Eğer yerel daha yeniyse (localUpdated > cloudUpdated), yerel kaydı koru!
+      }
+    });
+
+    const mergedTransactions = Array.from(localMap.values());
+
+    const applyRemoteData = () => {
+      this.store.state.transactions = mergedTransactions;
+      if (typeof this.store.sortTransactions === 'function') {
+        this.store.sortTransactions('date-desc');
+      }
+      this.store.saveToStorage();
+      this.store.notify();
+    };
+
+    if (this.store && typeof this.store.withRemoteUpdate === 'function') {
+      this.store.withRemoteUpdate(applyRemoteData);
+    } else {
+      applyRemoteData();
+    }
+
+    console.info(`[SyncService] Full Cloud Catch-up tamamlandı (${mergedTransactions.length} aktif işlem).`);
+  }
+
+  // 3.8. Çevrimdışı Yeniden Bağlanma Kurtarma Akışı (Offline Reconnect Recovery)
+  async recoverAfterReconnect(user = null) {
+    const client = this.getClient();
+    if ((!this.client && !isSupabaseConfigured()) || !client) {
+      this.setStatus('offline', 'Supabase yapılandırılmamış');
+      return { success: false, reason: 'unconfigured' };
+    }
+
+    let currentUser = user;
+    if (!currentUser) {
+      currentUser = (this.authService && typeof this.authService.getUser === 'function')
+        ? this.authService.getUser()
+        : authService.getUser();
+    }
+
+    if (!currentUser) {
+      this.setStatus('idle');
+      return { success: false, reason: 'not_authenticated' };
+    }
+
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      this.setStatus('offline', 'İnternet bağlantısı yok');
+      return { success: false, reason: 'offline' };
+    }
+
+    if (this.isRecovering) {
+      console.info('[SyncService] Zaten bir Reconnect Recovery çalışıyor, bekleniyor...');
+      return { success: false, reason: 'already_recovering' };
+    }
+
+    this.isRecovering = true;
+    this.isSyncing = true;
+    this.lastSyncAttemptTime = Date.now();
+    this.setStatus('syncing', 'Yeniden bağlanıldı, veriler eşitleniyor...');
+
+    try {
+      // A) Realtime kanalını yeniden bağla / doğrula
+      this.resubscribeRealtimeIfDisconnected(currentUser);
+
+      // B) Bu cihazda yerel unpushed/dirty değişiklik var mı?
+      const hasDirty = Boolean(
+        (this.store && this.store.hasUnsyncedChanges) ||
+        (this.store && this.store.dirtySettings) ||
+        (this.store && this.store.dirtyPresets) ||
+        (this.getDeletedQueue().length > 0)
+      );
+
+      // C) Varsa önce PUSH et
+      if (hasDirty) {
+        console.info('[SyncService] [Recovery] Yerel bekleyen değişiklikler buluta PUSH ediliyor...');
+        await this.pushLocalChanges(currentUser, client);
+      }
+
+      // D) Buluttan filtresiz tam CATCH-UP yap
+      console.info('[SyncService] [Recovery] Buluttan tam CATCH-UP yapılıyor...');
+      await this.runFullCloudCatchUp(currentUser, client);
+
+      // E) Her iki adım da başarılı -> imleç güncelle, 'synced' durumuna geç
+      const nowIso = new Date().toISOString();
+      this.setLastSyncedAt(nowIso);
+      this.setStatus('synced', 'Bulut ile başarıyla eşitlendi');
+
+      // F) Kademeli emniyet yoklaması (1.5s): Diğer cihazın olası geciken push'unu kaçırmamak için
+      this.scheduleSafetyCatchUp(currentUser, 1500);
+
+      return { success: true };
+    } catch (err) {
+      console.error('[SyncService] Reconnect Recovery hatası:', err);
+      this.setStatus('error', err.message || 'Yeniden bağlanma senkronizasyonu başarısız');
+      return { success: false, error: err };
+    } finally {
+      this.isRecovering = false;
+      this.isSyncing = false;
+    }
+  }
+
   // 4. İki Yönlü Delta Senkronizasyonu (Pull + Push)
   async runDeltaSync(user, cloudMeta, { pullOnly = false } = {}) {
     const client = this.getClient();
@@ -861,7 +1286,9 @@ export class SyncService {
       .eq('user_id', user.id);
 
     if (lastSyncedAt) {
-      txQuery = txQuery.gt('updated_at', lastSyncedAt);
+      const overlapTime = Math.max(0, new Date(lastSyncedAt).getTime() - 10000);
+      const overlapIso = new Date(overlapTime).toISOString();
+      txQuery = txQuery.gt('updated_at', overlapIso);
     }
 
     const { data: cloudTxs, error: cloudTxsErr } = await txQuery;
