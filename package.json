@@ -10,6 +10,7 @@
     "test": "node tests/verify_logic.js"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.117.2",
     "chart.js": "^4.4.8",
     "lucide": "^0.477.0"
   },

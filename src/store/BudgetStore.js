@@ -1,12 +1,17 @@
 import { STORAGE_KEY, SCHEMA_VERSION, DEFAULT_CURRENCY, DEFAULT_LANGUAGE } from '../config/constants.js';
 import { DEFAULT_PRESETS, DEFAULT_SETTINGS, DEFAULT_CATEGORIES, DEFAULT_SEED_TRANSACTIONS } from '../config/defaultData.js';
 import { SafeStorage } from '../utils/storage.js';
-import { generateUUID, getCurrentYearMonth } from '../utils/helpers.js';
+import { generateUUID, getCurrentYearMonth, getLocalDateString, compareTransactions } from '../utils/helpers.js';
 import { normalizeCurrency } from '../utils/formatters.js';
 
 export class BudgetStore {
   constructor() {
     this.listeners = [];
+    this.localChangeListeners = [];
+    this.hasUnsyncedChanges = false;
+    this.dirtySettings = false;
+    this.dirtyPresets = false;
+    this.isApplyingRemote = false;
     this.state = this.loadState();
   }
 
@@ -52,11 +57,11 @@ export class BudgetStore {
               amount: Number(t.amount) || 0,
               type: t.type === 'income' ? 'income' : 'expense',
               categoryId: t.categoryId || (t.type === 'income' ? 'inc_other' : 'exp_other'),
-              date: t.date || new Date().toISOString().slice(0, 10),
+              date: t.date || getLocalDateString(),
               notes: t.notes ? String(t.notes).trim() : '',
-              createdAt: t.createdAt || Date.now(),
-              updatedAt: t.updatedAt || Date.now()
-            }))
+              createdAt: t.createdAt ? (typeof t.createdAt === 'number' ? t.createdAt : new Date(t.createdAt).getTime()) : null,
+              updatedAt: t.updatedAt ? (typeof t.updatedAt === 'number' ? t.updatedAt : new Date(t.updatedAt).getTime()) : null
+            })).sort((a, b) => compareTransactions(a, b, 'date-desc'))
           };
         }
       }
@@ -98,8 +103,51 @@ export class BudgetStore {
     });
   }
 
+  onLocalChange(listener) {
+    if (typeof listener === 'function') {
+      this.localChangeListeners.push(listener);
+    }
+    return () => {
+      this.localChangeListeners = this.localChangeListeners.filter(l => l !== listener);
+    };
+  }
+
+  emitLocalChange(type, detail = null) {
+    if (this.isApplyingRemote) return;
+    this.hasUnsyncedChanges = true;
+    this.localChangeListeners.forEach(fn => {
+      try {
+        fn({ type, detail, timestamp: Date.now() });
+      } catch (e) {
+        console.error('Local change listener hatası:', e);
+      }
+    });
+  }
+
+  markSynced() {
+    this.hasUnsyncedChanges = false;
+    this.dirtySettings = false;
+    this.dirtyPresets = false;
+  }
+
+  withRemoteUpdate(fn) {
+    const prev = this.isApplyingRemote;
+    this.isApplyingRemote = true;
+    try {
+      fn();
+    } finally {
+      this.isApplyingRemote = prev;
+    }
+  }
+
   getTransactions() {
     return this.state.transactions || [];
+  }
+
+  sortTransactions(sortOption = 'date-desc') {
+    if (Array.isArray(this.state.transactions)) {
+      this.state.transactions.sort((a, b) => compareTransactions(a, b, sortOption));
+    }
   }
 
   getCategories(type = null) {
@@ -121,8 +169,13 @@ export class BudgetStore {
     }
     this.state.settings = {
       ...this.state.settings,
-      ...partial
+      ...partial,
+      updatedAt: Date.now()
     };
+    if (!this.isApplyingRemote) {
+      this.dirtySettings = true;
+    }
+    this.emitLocalChange('settings:update', partial);
     this.notify();
   }
 
@@ -144,13 +197,15 @@ export class BudgetStore {
       amount,
       type: txData.type === 'income' ? 'income' : 'expense',
       categoryId: txData.categoryId,
-      date: txData.date || new Date().toISOString().slice(0, 10),
+      date: txData.date || getLocalDateString(),
       notes: txData.notes ? String(txData.notes).trim() : '',
-      createdAt: Date.now(),
-      updatedAt: Date.now()
+      createdAt: txData.createdAt ? (typeof txData.createdAt === 'number' ? txData.createdAt : new Date(txData.createdAt).getTime()) : Date.now(),
+      updatedAt: txData.updatedAt ? (typeof txData.updatedAt === 'number' ? txData.updatedAt : new Date(txData.updatedAt).getTime()) : Date.now()
     };
 
     this.state.transactions.unshift(newTx);
+    this.sortTransactions('date-desc');
+    this.emitLocalChange('transaction:add', newTx);
     this.notify();
     return newTx;
   }
@@ -171,10 +226,14 @@ export class BudgetStore {
     this.state.transactions[idx] = {
       ...existing,
       ...updatedFields,
+      createdAt: existing.createdAt, // createdAt ASLA değişmez!
       amount: newAmount,
       updatedAt: Date.now()
     };
 
+    this.sortTransactions('date-desc');
+    const updatedTx = this.state.transactions.find(t => t.id === id);
+    this.emitLocalChange('transaction:update', updatedTx);
     this.notify();
     return true;
   }
@@ -183,16 +242,33 @@ export class BudgetStore {
     const prevLen = this.state.transactions.length;
     this.state.transactions = this.state.transactions.filter(t => t.id !== id);
     if (this.state.transactions.length !== prevLen) {
+      this.trackDeleted(id);
+      this.emitLocalChange('transaction:delete', { id });
       this.notify();
       return true;
     }
     return false;
   }
 
+  trackDeleted(id) {
+    try {
+      const DELETED_QUEUE_KEY = 'student_budget_deleted_queue';
+      const queue = JSON.parse(SafeStorage.getItem(DELETED_QUEUE_KEY) || '[]');
+      if (!queue.some(item => item.id === id)) {
+        queue.push({ id, deletedAt: new Date().toISOString() });
+        SafeStorage.setItem(DELETED_QUEUE_KEY, JSON.stringify(queue));
+      }
+    } catch (e) {
+      // sessizce geç
+    }
+  }
+
   startWithDemo() {
     this.state.transactions = [...DEFAULT_SEED_TRANSACTIONS];
     this.state.categories = [...DEFAULT_CATEGORIES];
     this.state.onboarded = true;
+    this.state.settings.updatedAt = Date.now();
+    this.emitLocalChange('budget:startDemo', null);
     this.notify();
   }
 
@@ -245,7 +321,9 @@ export class BudgetStore {
       initialBalanceTxId: initBalId,
       monthlyIncomeTxId: monIncId
     };
+    this.state.settings.updatedAt = Date.now();
     this.state.onboarded = true;
+    this.emitLocalChange('budget:startCustom', { initialBalance, monthlyIncome, targetMonth });
     this.notify();
   }
 
@@ -352,7 +430,11 @@ export class BudgetStore {
       initialBalanceTxId: initBalId,
       monthlyIncomeTxId: monIncId
     };
-
+    this.state.settings.updatedAt = Date.now();
+    if (!this.isApplyingRemote) {
+      this.dirtySettings = true;
+    }
+    this.emitLocalChange('settings:initialBudget', this.state.settings.initialBudget);
     this.notify();
     return true;
   }
@@ -406,8 +488,28 @@ export class BudgetStore {
     if (!this.state.settings) {
       this.state.settings = { ...DEFAULT_SETTINGS };
     }
-    this.state.settings.presets = newPresets;
+    const timestamp = Date.now();
+    const currentPresets = this.state.settings.presets || [];
+    const currentMap = new Map(currentPresets.map(p => [p.id, p]));
+
+    this.state.settings.presets = newPresets.map(p => {
+      const old = currentMap.get(p.id);
+      const isChanged = !old || Number(old.amount) !== Number(p.amount) || old.name !== p.name || old.emoji !== p.emoji;
+      let updatedAt = p.updatedAt;
+      if (isChanged && (!p.updatedAt || (old && p.updatedAt === old.updatedAt))) {
+        updatedAt = timestamp;
+      }
+      return {
+        ...p,
+        updatedAt: updatedAt || timestamp
+      };
+    });
+    this.state.settings.presetsUpdatedAt = timestamp;
+    if (!this.isApplyingRemote) {
+      this.dirtyPresets = true;
+    }
     this.saveToStorage();
+    this.emitLocalChange('presets:update', newPresets);
     this.notify();
   }
 
@@ -440,10 +542,10 @@ export class BudgetStore {
         amount: Math.round(Number(t.amount) * 100) / 100,
         type: t.type === 'income' ? 'income' : 'expense',
         categoryId: t.categoryId || (t.type === 'income' ? 'inc_other' : 'exp_other'),
-        date: t.date || new Date().toISOString().slice(0, 10),
+        date: t.date || getLocalDateString(),
         notes: t.notes ? String(t.notes).trim() : '',
-        createdAt: t.createdAt || Date.now(),
-        updatedAt: t.updatedAt || Date.now()
+        createdAt: t.createdAt ? (typeof t.createdAt === 'number' ? t.createdAt : new Date(t.createdAt).getTime()) : null,
+        updatedAt: t.updatedAt ? (typeof t.updatedAt === 'number' ? t.updatedAt : new Date(t.updatedAt).getTime()) : null
       };
     });
 
@@ -464,8 +566,9 @@ export class BudgetStore {
       this.state.transactions = Array.from(txMap.values());
     }
 
-    this.state.transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+    this.sortTransactions('date-desc');
     this.state.onboarded = true;
+    this.emitLocalChange('data:import', null);
     this.notify();
     return true;
   }

@@ -31,7 +31,13 @@ import {
   CheckCircle,
   Edit3,
   Trash2,
-  Info
+  Info,
+  Cloud,
+  CloudOff,
+  RefreshCw,
+  LogOut,
+  User,
+  Mail
 } from 'lucide';
 
 const appIcons = {
@@ -66,11 +72,17 @@ const appIcons = {
   CheckCircle,
   Edit3,
   Trash2,
-  Info
+  Info,
+  Cloud,
+  CloudOff,
+  RefreshCw,
+  LogOut,
+  User,
+  Mail
 };
 import { calculateSummary } from '../store/calculations.js';
-import { formatCurrency, formatNumber, formatDate, formatMonthTitle, getCurrencySymbol } from '../utils/formatters.js';
-import { getCurrentYearMonth, getAdjacentMonth } from '../utils/helpers.js';
+import { formatCurrency, formatNumber, formatDate, formatTime, formatMonthTitle, getCurrencySymbol } from '../utils/formatters.js';
+import { getCurrentYearMonth, getAdjacentMonth, getLocalDateString, compareTransactions } from '../utils/helpers.js';
 import { escapeHtml } from '../utils/sanitize.js';
 import { t, getLanguage, setLanguage, onLanguageChange } from '../i18n/index.js';
 import { showToast } from './toastManager.js';
@@ -78,39 +90,105 @@ import { ChartManager } from '../charts/chartManager.js';
 import { ModalManager } from './modalManager.js';
 import { SUPPORTED_CURRENCIES, THEME_KEY } from '../config/constants.js';
 import { SafeStorage } from '../utils/storage.js';
+import { authService } from '../services/authService.js';
+import { SyncService } from '../services/syncService.js';
 
 export class UIManager {
-  constructor(store) {
+  constructor(store, options = {}) {
     this.store = store;
+    this.authService = options.authService || authService;
+    this.syncService = options.syncService || new SyncService(this.store);
     this.selectedMonth = this.store.state.settings.targetMonth || getCurrentYearMonth();
     this.activeFilter = 'all'; // 'all' | 'income' | 'expense'
     this.searchQuery = '';
     this.categoryFilter = '';
     this.sortOption = 'date-desc';
 
-    this.cacheElements();
-    this.modalManager = new ModalManager(this.store, this);
-    this.chartManager = new ChartManager(
-      this.categoryChartCanvas,
-      this.flowChartCanvas,
-      this.chartEmptyState,
-      this.flowChartEmptyState
-    );
+    if (typeof document !== 'undefined') {
+      this.cacheElements();
+      this.modalManager = options.modalManager || new ModalManager(this.store, this);
+      this.chartManager = new ChartManager(
+        this.categoryChartCanvas,
+        this.flowChartCanvas,
+        this.chartEmptyState,
+        this.flowChartEmptyState
+      );
 
-    this.initTheme();
-    this.bindEvents();
+      this.initTheme();
+      this.bindEvents();
 
-    this.store.subscribe(() => {
+      this.authService.onAuthStateChange((user) => {
+        this.renderAuthBadge(user);
+        if (user && this.store.state.onboarded) {
+          this.modalManager.closeOnboardingModal();
+        }
+      });
+
+      this.syncService.onStatusChange((status, message) => {
+        this.renderSyncStatus(status, message);
+      });
+
+      this.store.subscribe(() => {
+        this.render();
+      });
+
+      onLanguageChange(() => {
+        this.render();
+      });
+
       this.render();
-    });
+      this.renderAuthBadge(this.authService.getUser());
+      this.renderSyncStatus(this.syncService.getStatus());
+    } else {
+      this.modalManager = {
+        openOnboardingModal: () => {},
+        closeOnboardingModal: () => {},
+        ...(options.modalManager || {})
+      };
+    }
 
-    onLanguageChange(() => {
-      this.render();
-    });
+    // Başlangıç bootstrap & onboarding akışı (auth/cloud pending kontrolü)
+    this.initBootstrapPromise = this.initBootstrap();
+  }
 
-    // İlk açılış onboarding kontrolü
-    if (!this.store.state.onboarded) {
-      setTimeout(() => this.modalManager.openOnboardingModal(), 200);
+  async init() {
+    return this.initBootstrapPromise;
+  }
+
+  async initBootstrap() {
+    // 1. Eğer yerel veride kullanıcı zaten onboarded ise, onboarding gösterme
+    if (this.store.state.onboarded) {
+      return;
+    }
+
+    // 2. Supabase yapılandırılmışsa, session ve auth durumunu bekle
+    if (this.authService && this.authService.isConfigured()) {
+      try {
+        const user = await this.authService.waitForAuth();
+        if (user) {
+          this.renderAuthBadge(user);
+          this.renderSyncStatus('syncing', 'Bulut verileri eşitleniyor...');
+          await this.syncService.sync(user);
+          if (this.store.state.settings?.targetMonth) {
+            this.selectedMonth = this.store.state.settings.targetMonth;
+          }
+        }
+      } catch (err) {
+        console.warn('[UIManager] Başlangıç auth/sync uyarısı:', err);
+      }
+    }
+
+    // 3. Karar anı:
+    // Eğer cloud bootstrap veya yerel veriden onboarded true geldiyse onboarding açılmaz!
+    if (this.store.state.onboarded) {
+      if (typeof this.modalManager?.closeOnboardingModal === 'function') {
+        this.modalManager.closeOnboardingModal();
+      }
+    } else {
+      // Sadece gerçekten onboarded=false olan (örn: anonymous veya yeni hesap) kullanıcı için aç
+      if (typeof this.modalManager?.openOnboardingModal === 'function') {
+        this.modalManager.openOnboardingModal();
+      }
     }
 
     this.render();
@@ -133,6 +211,16 @@ export class UIManager {
     this.btnEditInitialBudget = document.getElementById('btn-edit-initial-budget');
     this.btnResetData = document.getElementById('btn-reset-data');
     this.btnOpenAddModal = document.getElementById('btn-open-add-modal');
+
+    // Cloud Sync & Auth
+    this.btnOpenAuth = document.getElementById('btn-open-auth');
+    this.userAuthBadge = document.getElementById('user-auth-badge');
+    this.syncStatusIndicator = document.getElementById('sync-status-indicator');
+    this.iconSyncCloud = document.getElementById('icon-sync-cloud');
+    this.syncStatusText = document.getElementById('sync-status-text');
+    this.userEmailText = document.getElementById('user-email-text');
+    this.btnSignOut = document.getElementById('btn-sign-out');
+    this.btnManualSync = document.getElementById('btn-manual-sync');
 
     // Language & Currency Selector (Header'a eklenecek)
     this.currencySelect = document.getElementById('currency-select');
@@ -276,6 +364,56 @@ export class UIManager {
       });
     }
 
+    // Bulut ile Eşitle / Giriş Yap
+    if (this.btnOpenAuth) {
+      this.btnOpenAuth.addEventListener('click', () => {
+        this.modalManager.openAuthModal();
+      });
+    }
+
+    // Çıkış Yap
+    if (this.btnSignOut) {
+      this.btnSignOut.addEventListener('click', () => {
+        this.modalManager.openConfirmModal({
+          title: t('auth.signOut'),
+          desc: 'Bulut oturumunuz kapatılacak. Bütçe verileriniz cihazınızda güvenle saklanmaya devam eder.',
+          actionText: t('auth.signOut'),
+          onConfirm: async () => {
+            await authService.signOut();
+            showToast('Oturum kapatıldı.', 'info');
+          }
+        });
+      });
+    }
+
+    // Manuel Şimdi Eşitle Butonu
+    if (this.btnManualSync) {
+      this.btnManualSync.addEventListener('click', async () => {
+        this.backupDropdown?.classList.add('hidden');
+        if (!authService.isLoggedIn()) {
+          this.modalManager.openAuthModal();
+        } else {
+          showToast('Bulut senkronizasyonu başlatılıyor...', 'info');
+          const res = await this.syncService.sync();
+          if (res.success) {
+            showToast('Verileriniz bulut ile başarıyla eşitlendi.', 'success');
+          } else {
+            showToast(res.error?.message || 'Senkronizasyon hatası.', 'error');
+          }
+        }
+      });
+    }
+
+    // Durum Göstergesine Tıklayınca Senkronizasyonu Tetikle
+    if (this.syncStatusIndicator) {
+      this.syncStatusIndicator.addEventListener('click', async () => {
+        if (authService.isLoggedIn()) {
+          showToast('Bulut senkronizasyonu tetiklendi...', 'info');
+          await this.syncService.sync();
+        }
+      });
+    }
+
     // Verileri Sıfırla (Yeni Başlangıç)
     if (this.btnResetData) {
       this.btnResetData.addEventListener('click', () => {
@@ -410,12 +548,13 @@ export class UIManager {
   getDefaultTransactionDate() {
     const currentYM = getCurrentYearMonth();
     if (this.selectedMonth === currentYM) {
-      return new Date().toISOString().slice(0, 10);
+      return getLocalDateString();
     }
     return `${this.selectedMonth}-01`;
   }
 
   render() {
+    if (typeof document === 'undefined') return;
     const transactions = this.store.getTransactions();
     const currentMonth = this.selectedMonth || getCurrentYearMonth();
     const summary = calculateSummary(transactions, new Date(), currentMonth);
@@ -542,7 +681,7 @@ export class UIManager {
   }
 
   renderQuickPresets(currency, lang) {
-    if (!this.quickPresetsContainer) return;
+    if (!this.quickPresetsContainer || typeof document === 'undefined') return;
     const presets = this.store.getPresets();
     this.quickPresetsContainer.innerHTML = '';
 
@@ -586,6 +725,54 @@ export class UIManager {
     });
   }
 
+  renderTransactionRowHtml(tx, lang = getLanguage(), currency = this.store.getSettings().currency) {
+    const cat = this.store.getCategoryById(tx.categoryId);
+    const isIncome = tx.type === 'income';
+    const translatedCat = t(`categories.${tx.categoryId}`);
+    const catName = (translatedCat !== `categories.${tx.categoryId}`) ? translatedCat : (cat ? cat.name : 'Genel');
+    const catColor = cat ? cat.color : '#94a3b8';
+    const timeStr = formatTime(tx.createdAt, lang);
+
+    return `
+      <div class="flex items-center space-x-3.5 min-w-0">
+        <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+          isIncome
+            ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400'
+            : 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400'
+        }">
+          <i data-lucide="${isIncome ? 'arrow-down-left' : 'arrow-up-right'}" class="w-5 h-5"></i>
+        </div>
+        <div class="min-w-0">
+          <div class="flex items-center space-x-2">
+            <span class="text-xs font-bold text-slate-900 dark:text-white truncate">${escapeHtml(tx.title)}</span>
+            <span class="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+              <span class="w-1.5 h-1.5 rounded-full" style="background-color: ${catColor};"></span>
+              <span>${escapeHtml(catName)}</span>
+            </span>
+          </div>
+          <div class="flex items-center flex-wrap gap-x-2 gap-y-0.5 mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+            <span>${formatDate(tx.date, lang)}${timeStr ? ` <span class="text-slate-400 dark:text-slate-500 font-mono text-[10px]">• ${timeStr}</span>` : ''}</span>
+            ${tx.notes ? `<span class="truncate max-w-[200px]">• ${escapeHtml(tx.notes)}</span>` : ''}
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center space-x-3 shrink-0">
+        <span class="text-xs sm:text-sm font-extrabold ${isIncome ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-900 dark:text-white'}">
+          ${isIncome ? '+' : '-'}${formatCurrency(tx.amount, currency, lang)}
+        </span>
+        <div class="flex items-center space-x-1">
+          <button type="button" data-action="edit" title="${t('history.edit')}" class="min-w-[36px] min-h-[36px] p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-slate-800 transition flex items-center justify-center">
+            <i data-lucide="edit-3" class="w-4 h-4"></i>
+          </button>
+          <button type="button" data-action="delete" title="${t('history.delete')}" class="min-w-[36px] min-h-[36px] p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-slate-800 transition flex items-center justify-center">
+            <i data-lucide="trash-2" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
   renderTransactions(currency, lang) {
     if (!this.transactionsContainer) return;
 
@@ -614,13 +801,7 @@ export class UIManager {
     }
 
     // Sıralama
-    list.sort((a, b) => {
-      if (this.sortOption === 'date-desc') return new Date(b.date) - new Date(a.date);
-      if (this.sortOption === 'date-asc') return new Date(a.date) - new Date(b.date);
-      if (this.sortOption === 'amount-desc') return b.amount - a.amount;
-      if (this.sortOption === 'amount-asc') return a.amount - b.amount;
-      return 0;
-    });
+    list.sort((a, b) => compareTransactions(a, b, this.sortOption));
 
     if (this.txCountBadge) {
       this.txCountBadge.textContent = t('history.txCount', { count: list.length });
@@ -636,63 +817,21 @@ export class UIManager {
     if (this.transactionsEmptyState) this.transactionsEmptyState.classList.add('hidden');
 
     list.forEach(tx => {
-      const cat = this.store.getCategoryById(tx.categoryId);
-      const isIncome = tx.type === 'income';
       const row = document.createElement('div');
       row.className = 'p-4 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition flex items-center justify-between gap-3';
-
-      const translatedCat = t(`categories.${tx.categoryId}`);
-      const catName = (translatedCat !== `categories.${tx.categoryId}`) ? translatedCat : (cat ? cat.name : 'Genel');
-      const catColor = cat ? cat.color : '#94a3b8';
-
-      row.innerHTML = `
-        <div class="flex items-center space-x-3.5 min-w-0">
-          <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-            isIncome
-              ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400'
-              : 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400'
-          }">
-            <i data-lucide="${isIncome ? 'arrow-down-left' : 'arrow-up-right'}" class="w-5 h-5"></i>
-          </div>
-          <div class="min-w-0">
-            <div class="flex items-center space-x-2">
-              <span class="text-xs font-bold text-slate-900 dark:text-white truncate">${escapeHtml(tx.title)}</span>
-              <span class="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                <span class="w-1.5 h-1.5 rounded-full" style="background-color: ${catColor};"></span>
-                <span>${escapeHtml(catName)}</span>
-              </span>
-            </div>
-            <div class="flex items-center space-x-2 mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
-              <span>${formatDate(tx.date, lang)}</span>
-              ${tx.notes ? `<span class="truncate max-w-[200px]">• ${escapeHtml(tx.notes)}</span>` : ''}
-            </div>
-          </div>
-        </div>
-
-        <div class="flex items-center space-x-3 shrink-0">
-          <span class="text-xs sm:text-sm font-extrabold ${isIncome ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-900 dark:text-white'}">
-            ${isIncome ? '+' : '-'}${formatCurrency(tx.amount, currency, lang)}
-          </span>
-          <div class="flex items-center space-x-1">
-            <button type="button" data-action="edit" title="${t('history.edit')}" class="min-w-[36px] min-h-[36px] p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-slate-800 transition flex items-center justify-center">
-              <i data-lucide="edit-3" class="w-4 h-4"></i>
-            </button>
-            <button type="button" data-action="delete" title="${t('history.delete')}" class="min-w-[36px] min-h-[36px] p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-slate-800 transition flex items-center justify-center">
-              <i data-lucide="trash-2" class="w-4 h-4"></i>
-            </button>
-          </div>
-        </div>
-      `;
+      row.innerHTML = this.renderTransactionRowHtml(tx, lang, currency);
 
       row.querySelector('button[data-action="edit"]').addEventListener('click', () => {
         this.modalManager.openTransactionModal('edit', tx);
       });
 
-      row.querySelector('button[data-action="delete"]').addEventListener('click', () => {
+      row.querySelector('button[data-action="delete"]').addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
         this.modalManager.openConfirmModal({
-          title: t('confirmModal.deleteTxTitle'),
-          desc: `"${tx.title}" (${formatCurrency(tx.amount, currency, lang)}) ${t('confirmModal.deleteTxDesc')}`,
-          actionText: t('history.delete'),
+          title: t('confirmModal.title'),
+          desc: t('confirmModal.desc'),
+          actionText: t('confirmModal.confirmDelete') || 'Sil / Onayla',
           onConfirm: () => {
             this.store.deleteTransaction(tx.id);
             showToast('İşlem başarıyla silindi.', 'info');
@@ -711,7 +850,13 @@ export class UIManager {
 
   updateStaticTranslations() {
     // Statik data-i18n etiketlerini güncelle
+    const isConfirmModalOpen = this.modalManager?.confirmModal && !this.modalManager.confirmModal.classList.contains('hidden');
+
     document.querySelectorAll('[data-i18n]').forEach(el => {
+      // Eğer onay modalı o anda açıksa içindeki dinamik metinleri ezme (flicker/flash önleme)
+      if (isConfirmModalOpen && el.closest('#confirm-modal')) {
+        return;
+      }
       const key = el.getAttribute('data-i18n');
       if (key) {
         el.textContent = t(key);
@@ -738,7 +883,7 @@ export class UIManager {
       const blob = new Blob([jsonStr], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      const today = new Date().toISOString().slice(0, 10);
+      const today = getLocalDateString();
       a.href = url;
       a.download = `student_budget_export_${today}.json`;
       document.body.appendChild(a);
@@ -751,7 +896,50 @@ export class UIManager {
     }
   }
 
+  renderAuthBadge(user) {
+    if (typeof document === 'undefined') return;
+    if (user) {
+      this.btnOpenAuth?.classList.add('hidden');
+      this.userAuthBadge?.classList.remove('hidden');
+      if (this.userEmailText) {
+        this.userEmailText.textContent = user.email || 'Kullanıcı';
+        this.userEmailText.title = user.email || '';
+      }
+    } else {
+      this.btnOpenAuth?.classList.remove('hidden');
+      this.userAuthBadge?.classList.add('hidden');
+    }
+    this.refreshIcons();
+  }
+
+  renderSyncStatus(status, message = null) {
+    if (typeof document === 'undefined') return;
+    if (!this.iconSyncCloud) return;
+
+    if (status === 'syncing') {
+      this.iconSyncCloud.className = 'w-4 h-4 text-amber-500 animate-spin';
+      if (this.syncStatusText) this.syncStatusText.textContent = t('auth.statusSyncing');
+    } else if (status === 'pending') {
+      this.iconSyncCloud.className = 'w-4 h-4 text-amber-500';
+      if (this.syncStatusText) this.syncStatusText.textContent = t('auth.statusPending');
+    } else if (status === 'synced') {
+      this.iconSyncCloud.className = 'w-4 h-4 text-emerald-500';
+      if (this.syncStatusText) this.syncStatusText.textContent = t('auth.statusSynced');
+    } else if (status === 'offline') {
+      this.iconSyncCloud.className = 'w-4 h-4 text-slate-400';
+      if (this.syncStatusText) this.syncStatusText.textContent = t('auth.statusOffline');
+    } else if (status === 'error') {
+      this.iconSyncCloud.className = 'w-4 h-4 text-rose-500';
+      if (this.syncStatusText) this.syncStatusText.textContent = t('auth.statusError');
+    } else {
+      this.iconSyncCloud.className = 'w-4 h-4 text-slate-400';
+      if (this.syncStatusText) this.syncStatusText.textContent = t('auth.statusOffline');
+    }
+    this.refreshIcons();
+  }
+
   refreshIcons() {
+    if (typeof document === 'undefined') return;
     createIcons({ icons: appIcons });
   }
 }
