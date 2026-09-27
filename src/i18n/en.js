@@ -139,6 +139,7 @@ export default {
     desc: 'This action cannot be undone. Are you sure you want to proceed?',
     cancel: 'Cancel',
     confirm: 'Yes, Confirm',
+    confirmDelete: 'Delete / Confirm',
     deleteTxTitle: 'Delete Transaction',
     deleteTxDesc: 'This transaction record will be permanently deleted. Do you wish to proceed?',
     resetTitle: 'Reset Data / Start Fresh',

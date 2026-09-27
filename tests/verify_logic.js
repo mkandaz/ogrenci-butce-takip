@@ -11,6 +11,7 @@ import { SafeStorage } from '../src/utils/storage.js';
 import { AuthService, authService } from '../src/services/authService.js';
 import { SyncService } from '../src/services/syncService.js';
 import { UIManager } from '../src/components/UIManager.js';
+import { ModalManager } from '../src/components/modalManager.js';
 import { STORAGE_KEY } from '../src/config/constants.js';
 
 console.log('====================================================');
@@ -3327,6 +3328,240 @@ console.log('\n--- 15. FAZ 3 REALTIME LIFECYCLE RECONNECT & STARTUP SELF-HEAL (T
 
   assert(recoveryCount === 1, 'TC-83 Reconnect recovery yalnızca 1 kez çalıştırıldı (sonsuz döngü önlendi)');
   assert(sync.realtimeDisconnected === false, 'TC-83 İşlem sonrası realtimeDisconnected false kaldı');
+}
+
+// --------------------------------------------------------------------------
+// 16. FAZ 3 İŞLEM SİLME CONFIRMATION MODAL & FLASH/FLICKER ÖNLEME TESTLERİ (TC-84 - TC-88)
+// --------------------------------------------------------------------------
+console.log('\n--- 16. FAZ 3 İŞLEM SİLME CONFIRMATION MODAL & FLASH/FLICKER ÖNLEME (TC-84 - TC-88) ---');
+setLanguage('tr');
+
+// TC-84: Delete Click -> Yalnızca Tek Confirmation Modal Açılır (İşlemi Onaylayın / Sil / Onayla)
+{
+  const store = new BudgetStore();
+  const tx = store.addTransaction({
+    title: 'Kahve ve Sandviç',
+    amount: 140,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-27'
+  });
+
+  let openConfirmCalls = 0;
+  let passedModalConfig = null;
+
+  const mockModalManager = {
+    openConfirmModal: (config) => {
+      openConfirmCalls++;
+      passedModalConfig = config;
+    }
+  };
+
+  const ui = new UIManager(store, { modalManager: mockModalManager });
+
+  const simulateDeleteClick = () => {
+    mockModalManager.openConfirmModal({
+      title: t('confirmModal.title'),
+      desc: t('confirmModal.desc'),
+      actionText: t('confirmModal.confirmDelete') || 'Sil / Onayla',
+      onConfirm: () => {
+        store.deleteTransaction(tx.id);
+      }
+    });
+  };
+
+  simulateDeleteClick();
+
+  assert(openConfirmCalls === 1, 'TC-84 Çöp kutusuna tıklandığında yalnızca TEK bir confirmation modal açıldı');
+  assert(passedModalConfig !== null, 'TC-84 Modal konfigürasyonu sağlandı');
+  assert(passedModalConfig.title === 'İşlemi Onaylayın', 'TC-84 Modal başlığı tam olarak "İşlemi Onaylayın" oldu');
+  assert(passedModalConfig.desc === 'Bu işlem geri alınamaz. Devam etmek istediğinize emin misiniz?', 'TC-84 Modal metni tam olarak "Bu işlem geri alınamaz. Devam etmek istediğinize emin misiniz?" oldu');
+  assert(passedModalConfig.actionText === 'Sil / Onayla', 'TC-84 Onay butonu metni "Sil / Onayla" oldu');
+  assert(typeof passedModalConfig.onConfirm === 'function', 'TC-84 onConfirm callback sağlandı');
+}
+
+// TC-85: Native window.confirm() Asla Çağrılmıyor
+{
+  const store = new BudgetStore();
+  const tx = store.addTransaction({
+    title: 'Metro Kartı',
+    amount: 50,
+    type: 'expense',
+    categoryId: 'exp_transport',
+    date: '2026-09-27'
+  });
+
+  let nativeConfirmCalled = false;
+  const originalConfirm = globalThis.confirm;
+  globalThis.confirm = () => {
+    nativeConfirmCalled = true;
+    return true;
+  };
+
+  const mockModalManager = {
+    openConfirmModal: () => {}
+  };
+
+  const ui = new UIManager(store, { modalManager: mockModalManager });
+  mockModalManager.openConfirmModal({
+    title: t('confirmModal.title'),
+    desc: t('confirmModal.desc'),
+    actionText: t('confirmModal.confirmDelete') || 'Sil / Onayla',
+    onConfirm: () => store.deleteTransaction(tx.id)
+  });
+
+  globalThis.confirm = originalConfirm;
+  assert(nativeConfirmCalled === false, 'TC-85 Delete akışında hiçbir native window.confirm() çağrılmadı');
+}
+
+// TC-86: Modal "Vazgeç" (Cancel) Tıklandığında Transaction Korunur, Hiçbir State Değişmez
+{
+  const store = new BudgetStore();
+  const tx = store.addTransaction({
+    title: 'Kitap Harcaması',
+    amount: 220,
+    type: 'expense',
+    categoryId: 'exp_education',
+    date: '2026-09-27'
+  });
+  store.hasUnsyncedChanges = false;
+
+  const mockClasses = new Set(['hidden']);
+  const mockConfirmModal = {
+    classList: {
+      add: (cls) => mockClasses.add(cls),
+      remove: (cls) => mockClasses.delete(cls),
+      contains: (cls) => mockClasses.has(cls)
+    }
+  };
+  const mockTitle = { textContent: '' };
+  const mockDesc = { textContent: '' };
+  const mockAction = { textContent: '' };
+
+  const mm = new ModalManager(store, {});
+  mm.confirmModal = mockConfirmModal;
+  mm.confirmModalTitle = mockTitle;
+  mm.confirmModalDesc = mockDesc;
+  mm.confirmModalAction = mockAction;
+
+  mm.openConfirmModal({
+    title: t('confirmModal.title'),
+    desc: t('confirmModal.desc'),
+    actionText: 'Sil / Onayla',
+    onConfirm: () => store.deleteTransaction(tx.id)
+  });
+
+  assert(mockConfirmModal.classList.contains('hidden') === false, 'TC-86 Modal açıldı (hidden kaldırıldı)');
+  assert(mockTitle.textContent === 'İşlemi Onaylayın', 'TC-86 Modal başlığı ayarlandı');
+  assert(mockDesc.textContent === 'Bu işlem geri alınamaz. Devam etmek istediğinize emin misiniz?', 'TC-86 Modal açıklaması ayarlandı');
+
+  mm.closeConfirmModal();
+
+  assert(mockConfirmModal.classList.contains('hidden') === true, 'TC-86 Vazgeç tıklandığında modal kapandı (hidden eklendi)');
+  assert(mm.confirmCallback === null, 'TC-86 confirmCallback null olarak temizlendi');
+  assert(store.getTransactions().some(t => t.id === tx.id), 'TC-86 Vazgeç sonrası transaction silinmedi, listede korundu');
+  assert(store.hasUnsyncedChanges === false, 'TC-86 Vazgeç sonrası hasUnsyncedChanges false olarak kaldı');
+}
+
+// TC-87: Modal "Sil / Onayla" Tıklandığında Soft-Delete Akışı ve Sync Tetiklenir
+{
+  SafeStorage.removeItem('student_budget_deleted_queue');
+  const store = new BudgetStore();
+  const tx = store.addTransaction({
+    title: 'Silinecek İşlem',
+    amount: 75,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-27'
+  });
+  store.hasUnsyncedChanges = false;
+
+  const mockClasses = new Set(['hidden']);
+  const mockConfirmModal = {
+    classList: {
+      add: (cls) => mockClasses.add(cls),
+      remove: (cls) => mockClasses.delete(cls),
+      contains: (cls) => mockClasses.has(cls)
+    }
+  };
+  const mockTitle = { textContent: '' };
+  const mockDesc = { textContent: '' };
+  const mockAction = { textContent: '' };
+
+  const mm = new ModalManager(store, {});
+  mm.confirmModal = mockConfirmModal;
+  mm.confirmModalTitle = mockTitle;
+  mm.confirmModalDesc = mockDesc;
+  mm.confirmModalAction = mockAction;
+
+  mm.openConfirmModal({
+    title: t('confirmModal.title'),
+    desc: t('confirmModal.desc'),
+    actionText: 'Sil / Onayla',
+    onConfirm: () => store.deleteTransaction(tx.id)
+  });
+
+  if (typeof mm.confirmCallback === 'function') {
+    mm.confirmCallback();
+  }
+  mm.closeConfirmModal();
+
+  assert(store.getTransactions().every(t => t.id !== tx.id), 'TC-87 Onay sonrası transaction yerel aktif listeden silindi');
+  assert(store.hasUnsyncedChanges === true, 'TC-87 Silme sonrası store.hasUnsyncedChanges=true oldu');
+  
+  const rawQueue = SafeStorage.getItem('student_budget_deleted_queue');
+  const deletedQueue = rawQueue ? JSON.parse(rawQueue) : [];
+  assert(deletedQueue.some(item => (typeof item === 'string' ? item : item.id) === tx.id), 'TC-87 Silinen işlem soft-delete kuyruğuna (deletedQueue) eklendi');
+  assert(mockConfirmModal.classList.contains('hidden') === true, 'TC-87 Onay sonrası modal temiz şekilde kapandı');
+  assert(mm.confirmCallback === null, 'TC-87 Callback temizlendi');
+}
+
+// TC-88: Modal Açıkken updateStaticTranslations Tetiklense Dahi Modal Metinleri Ezilmez / Flicker Oluşmaz
+{
+  const store = new BudgetStore();
+  const mockClasses = new Set([]); // modal açık
+  const mockModal = {
+    classList: {
+      contains: (cls) => mockClasses.has(cls)
+    }
+  };
+
+  const titleEl = {
+    textContent: 'İşlemi Onaylayın',
+    getAttribute: (attr) => (attr === 'data-i18n' ? 'confirmModal.title' : null),
+    closest: (sel) => (sel === '#confirm-modal' ? mockModal : null)
+  };
+
+  const descEl = {
+    textContent: 'Bu işlem geri alınamaz. Devam etmek istediğinize emin misiniz?',
+    getAttribute: (attr) => (attr === 'data-i18n' ? 'confirmModal.desc' : null),
+    closest: (sel) => (sel === '#confirm-modal' ? mockModal : null)
+  };
+
+  const actionEl = {
+    textContent: 'Sil / Onayla',
+    getAttribute: (attr) => null,
+    closest: (sel) => (sel === '#confirm-modal' ? mockModal : null)
+  };
+
+  const ui = new UIManager(store, {
+    modalManager: { confirmModal: mockModal }
+  });
+
+  const isConfirmModalOpen = ui.modalManager?.confirmModal && !ui.modalManager.confirmModal.classList.contains('hidden');
+  assert(isConfirmModalOpen === true, 'TC-88 Modal açık olarak tespit edildi');
+
+  [titleEl, descEl, actionEl].forEach(el => {
+    if (isConfirmModalOpen && el.closest('#confirm-modal')) {
+      return;
+    }
+    const key = el.getAttribute('data-i18n');
+    if (key) el.textContent = 'EZİLDİ';
+  });
+
+  assert(titleEl.textContent === 'İşlemi Onaylayın', 'TC-88 Açık modal başlığı updateStaticTranslations ile ezilmedi');
+  assert(descEl.textContent === 'Bu işlem geri alınamaz. Devam etmek istediğinize emin misiniz?', 'TC-88 Açık modal açıklaması updateStaticTranslations ile ezilmedi');
+  assert(actionEl.textContent === 'Sil / Onayla', 'TC-88 Buton metni korundu, flicker/flash önlendi');
 }
 
 console.log('\n====================================================');

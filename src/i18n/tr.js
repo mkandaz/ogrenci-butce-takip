@@ -139,6 +139,7 @@ export default {
     desc: 'Bu işlem geri alınamaz. Devam etmek istediğinize emin misiniz?',
     cancel: 'Vazgeç',
     confirm: 'Evet, Onaylıyorum',
+    confirmDelete: 'Sil / Onayla',
     deleteTxTitle: 'İşlemi Sil',
     deleteTxDesc: 'Bu işlem kaydı kalıcı olarak silinecektir. Devam etmek istiyor musunuz?',
     resetTitle: 'Verileri Sıfırla / Yeni Başlangıç Yap',

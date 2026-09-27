@@ -825,11 +825,13 @@ export class UIManager {
         this.modalManager.openTransactionModal('edit', tx);
       });
 
-      row.querySelector('button[data-action="delete"]').addEventListener('click', () => {
+      row.querySelector('button[data-action="delete"]').addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
         this.modalManager.openConfirmModal({
-          title: t('confirmModal.deleteTxTitle'),
-          desc: `"${tx.title}" (${formatCurrency(tx.amount, currency, lang)}) ${t('confirmModal.deleteTxDesc')}`,
-          actionText: t('history.delete'),
+          title: t('confirmModal.title'),
+          desc: t('confirmModal.desc'),
+          actionText: t('confirmModal.confirmDelete') || 'Sil / Onayla',
           onConfirm: () => {
             this.store.deleteTransaction(tx.id);
             showToast('İşlem başarıyla silindi.', 'info');
@@ -848,7 +850,13 @@ export class UIManager {
 
   updateStaticTranslations() {
     // Statik data-i18n etiketlerini güncelle
+    const isConfirmModalOpen = this.modalManager?.confirmModal && !this.modalManager.confirmModal.classList.contains('hidden');
+
     document.querySelectorAll('[data-i18n]').forEach(el => {
+      // Eğer onay modalı o anda açıksa içindeki dinamik metinleri ezme (flicker/flash önleme)
+      if (isConfirmModalOpen && el.closest('#confirm-modal')) {
+        return;
+      }
       const key = el.getAttribute('data-i18n');
       if (key) {
         el.textContent = t(key);

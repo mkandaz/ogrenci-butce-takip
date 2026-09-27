@@ -13,8 +13,10 @@ export class ModalManager {
     this.lastFocusedElement = null;
     this.confirmCallback = null;
 
-    this.cacheElements();
-    this.bindEvents();
+    if (typeof document !== 'undefined') {
+      this.cacheElements();
+      this.bindEvents();
+    }
   }
 
   cacheElements() {
@@ -546,10 +548,10 @@ export class ModalManager {
   }
 
   // --- Confirm Modal Methods ---
-  openConfirmModal({ title, desc, onConfirm, actionText = 'Evet, Onaylıyorum' }) {
-    this.lastFocusedElement = document.activeElement;
-    if (this.confirmModalTitle) this.confirmModalTitle.textContent = title;
-    if (this.confirmModalDesc) this.confirmModalDesc.textContent = desc;
+  openConfirmModal({ title, desc, onConfirm, actionText = (t('confirmModal.confirmDelete') || 'Sil / Onayla') }) {
+    this.lastFocusedElement = typeof document !== 'undefined' ? document.activeElement : null;
+    if (this.confirmModalTitle) this.confirmModalTitle.textContent = title || t('confirmModal.title');
+    if (this.confirmModalDesc) this.confirmModalDesc.textContent = desc || t('confirmModal.desc');
     if (this.confirmModalAction) this.confirmModalAction.textContent = actionText;
     this.confirmCallback = onConfirm;
     if (this.confirmModal) this.confirmModal.classList.remove('hidden');
@@ -558,6 +560,9 @@ export class ModalManager {
   closeConfirmModal() {
     if (this.confirmModal) this.confirmModal.classList.add('hidden');
     this.confirmCallback = null;
+    if (this.confirmModalTitle) this.confirmModalTitle.textContent = t('confirmModal.title');
+    if (this.confirmModalDesc) this.confirmModalDesc.textContent = t('confirmModal.desc');
+    if (this.confirmModalAction) this.confirmModalAction.textContent = t('confirmModal.confirmDelete') || 'Sil / Onayla';
     if (this.lastFocusedElement && typeof this.lastFocusedElement.focus === 'function') {
       this.lastFocusedElement.focus();
     }
