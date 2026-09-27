@@ -112,6 +112,26 @@ export class AuthService {
     return Promise.race([waitPromise, timeoutPromise]);
   }
 
+  async signInWithGoogle() {
+    const client = this.getClient();
+    if (!this.isConfigured() || !client) {
+      throw new Error('Supabase bağlantısı henüz yapılandırılmamış.');
+    }
+
+    const redirectTo = typeof window !== 'undefined' ? window.location.origin : '';
+    const { data, error } = await client.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo
+      }
+    });
+
+    if (error) {
+      throw error;
+    }
+    return data;
+  }
+
   async signInWithMagicLink(email) {
     const cleanEmail = String(email || '').trim().toLowerCase();
     if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {

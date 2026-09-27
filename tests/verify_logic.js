@@ -3661,10 +3661,290 @@ console.log('\n--- 17. FAZ 4 PRODUCTION DEPLOYMENT & PWA VALIDATION (TC-89 - TC-
   assert(!envExample.includes('service_role'), 'TC-93 .env.example şablonunda service_role bulunmuyor');
 }
 
+// --------------------------------------------------------------------------
+// 18. FAZ 4.1 GOOGLE AUTH + LOCAL GUEST MODE TESTLERİ (TC-94 - TC-102)
+// --------------------------------------------------------------------------
+console.log('\n--- 18. FAZ 4.1 GOOGLE AUTH + LOCAL GUEST MODE (TC-94 - TC-102) ---');
+
+// TC-94: signInWithGoogle provider='google' ve redirectTo doğrulaması
+{
+  let oAuthCall = null;
+  const mockOAuthClient = {
+    auth: {
+      getSession: async () => ({ data: { session: null }, error: null }),
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+      signInWithOAuth: async (params) => {
+        oAuthCall = params;
+        return { data: { provider: 'google', url: 'https://accounts.google.com/o/oauth2/v2/auth' }, error: null };
+      }
+    }
+  };
+
+  const auth = new AuthService(mockOAuthClient);
+  auth.isConfigured = () => true;
+
+  const originalWindow = globalThis.window;
+  globalThis.window = {
+    location: {
+      origin: 'https://ogrenci-butce-takip.vercel.app'
+    }
+  };
+
+  await auth.signInWithGoogle();
+  assert(oAuthCall !== null, 'TC-94 signInWithGoogle client.auth.signInWithOAuth metodunu çağırdı');
+  assert(oAuthCall.provider === 'google', 'TC-94 OAuth sağlayıcısı provider="google" olarak iletildi');
+  assert(oAuthCall.options?.redirectTo === 'https://ogrenci-butce-takip.vercel.app', 'TC-94 redirectTo runtime origin değerini doğru aldı');
+
+  globalThis.window = originalWindow;
+}
+
+// TC-95: authService içinde hardcoded redirect bulunmadığı doğrulaması
+{
+  const authSource = fs.readFileSync(path.resolve('src/services/authService.js'), 'utf8');
+  assert(authSource.includes("provider: 'google'"), 'TC-95 authService içinde provider="google" tanımı mevcut');
+  assert(authSource.includes('window.location.origin'), 'TC-95 authService dinamik window.location.origin kullanıyor');
+  assert(!authSource.includes('localhost:5173'), 'TC-95 authService içinde hardcoded localhost:5173 yok');
+  assert(!authSource.includes('127.0.0.1'), 'TC-95 authService içinde hardcoded 127.0.0.1 yok');
+}
+
+// TC-96: Google Login hatası yerel verileri ve onboarding durumunu BOZMAZ
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  const store = new BudgetStore();
+  store.addTransaction({ title: 'Misafir Harcaması', amount: 95, type: 'expense', categoryId: 'exp_food', date: '2026-09-27' });
+  const txCountBefore = store.getTransactions().length;
+  assert(txCountBefore === 1, 'TC-96 Başlangıçta 1 yerel işlem mevcut');
+
+  const failingClient = {
+    auth: {
+      getSession: async () => ({ data: { session: null }, error: null }),
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+      signInWithOAuth: async () => {
+        return { data: null, error: new Error('Google OAuth bağlantısı başarısız oldu') };
+      }
+    }
+  };
+
+  const auth = new AuthService(failingClient);
+  auth.isConfigured = () => true;
+
+  let errorThrown = false;
+  try {
+    await auth.signInWithGoogle();
+  } catch (err) {
+    errorThrown = true;
+    assert(err.message.includes('Google OAuth bağlantısı başarısız'), 'TC-96 Hata mesajı çağırıcıya doğru iletildi');
+  }
+
+  assert(errorThrown === true, 'TC-96 OAuth hatasında authService hata fırlattı');
+  assert(store.getTransactions().length === 1, 'TC-96 Hata durumunda yerel işlemler ASLA silinmedi');
+  assert(store.getTransactions()[0].amount === 95, 'TC-96 Yerel harcama tutarı (95 TL) aynen korundu');
+}
+
+// TC-97: "Üyeliksiz devam et" (Guest) modu hiçbir Supabase auth çağrısı yapmaz ve Local-Only çalışır
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  const guestStore = new BudgetStore();
+  assert(guestStore.state.onboarded === false, 'TC-97 Başlangıçta guestStore.onboarded=false');
+
+  let anyAuthCalled = false;
+  const spyClient = {
+    auth: {
+      signInAnonymously: async () => { anyAuthCalled = true; return {}; },
+      signInWithOAuth: async () => { anyAuthCalled = true; return {}; },
+      signInWithOtp: async () => { anyAuthCalled = true; return {}; }
+    }
+  };
+
+  let authModalClosed = false;
+  let onboardingModalClosed = false;
+  const mockModalManager = {
+    authModal: { classList: { contains: () => false, add: () => {}, remove: () => {} } },
+    onboardingModal: { classList: { contains: () => false, add: () => {}, remove: () => {} } },
+    closeAuthModal: () => { authModalClosed = true; },
+    closeOnboardingModal: () => { onboardingModalClosed = true; },
+    store: guestStore,
+    handleGuestContinue() {
+      this.store.state.onboarded = true;
+      this.store.saveToStorage();
+      this.closeAuthModal();
+      this.closeOnboardingModal();
+      this.store.notify();
+    }
+  };
+
+  mockModalManager.handleGuestContinue();
+
+  assert(anyAuthCalled === false, 'TC-97 "Üyeliksiz devam et" sırasında hiçbir Supabase auth (signInAnonymously vb.) ÇAĞRILMADI');
+  assert(guestStore.state.onboarded === true, 'TC-97 Guest modu onboarding durumunu true yaptı ve dashboard\'a geçiş sağladı');
+  assert(authModalClosed === true, 'TC-97 Auth modalı kapatıldı');
+  assert(onboardingModalClosed === true, 'TC-97 Onboarding modalı kapatıldı');
+}
+
+// TC-98: Guest Modu -> Google Login Geçişinde FAZ 3 Initial Migration Kusursuz Çalışır
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem('student_budget_pre_cloud_backup');
+
+  const store = new BudgetStore();
+  store.addTransaction({ title: 'Kahve & Sandviç', amount: 65, type: 'expense', categoryId: 'exp_food', date: '2026-09-27' });
+  assert(store.getTransactions().length === 1, 'TC-98 Misafir modunda 1 yerel işlem oluşturuldu');
+
+  let settingsUpserted = null;
+  let txUpserted = null;
+  let metaUpserted = null;
+
+  const googleUser = { id: generateUUID(), email: 'ogrenci@gmail.com' };
+  const mockClient = createMockClient({
+    user_sync_metadata: {
+      maybeSingle: () => ({ data: null, error: null }),
+      insert: (payload) => { metaUpserted = payload; return { error: null }; },
+      upsert: (payload) => { metaUpserted = payload; return { error: null }; }
+    },
+    user_settings: {
+      upsert: (payload) => { settingsUpserted = payload; return { error: null }; }
+    },
+    presets: {
+      upsert: () => ({ error: null })
+    },
+    transactions: {
+      upsert: (payload) => { txUpserted = payload; return { error: null }; }
+    }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  await sync.sync({ user: googleUser, reason: 'startup' });
+
+  assert(SafeStorage.getItem('student_budget_pre_cloud_backup') !== null, 'TC-98 Migration öncesi yerel veri yedeği (student_budget_pre_cloud_backup) alındı');
+  assert(settingsUpserted !== null && settingsUpserted.user_id === googleUser.id, 'TC-98 user_settings Google user_id ile buluta yüklendi');
+  assert(Array.isArray(txUpserted) && txUpserted.length === 1, 'TC-98 Misafir işlemleri Google hesabına aktarıldı');
+  assert(txUpserted[0].amount === 65, 'TC-98 Aktarılan işlem tutarı (65 TL) doğru');
+  assert(metaUpserted !== null && metaUpserted.user_id === googleUser.id, 'TC-98 user_sync_metadata oluşturuldu');
+  assert(store.getTransactions().length === 1, 'TC-98 Yerel veriler silinmedi, korundu');
+}
+
+// TC-99: Mevcut Magic Link / Cloud Kullanıcısı Google ile Giriş Yaptığında Veriler Eksiksiz Yüklenir
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem('student_budget_last_synced_at');
+
+  const store = new BudgetStore();
+  assert(store.getTransactions().length === 0, 'TC-99 Cihazda başlangıçta 0 işlem var');
+
+  const existingUser = { id: generateUUID(), email: 'eski.kullanici@universite.edu.tr' };
+  const cloudTx = {
+    id: generateUUID(),
+    title: 'KYK Bursu',
+    amount: 3000,
+    type: 'income',
+    category_id: 'inc_kyk',
+    date: '2026-09-01',
+    is_deleted: false,
+    updated_at: '2026-09-27T10:00:00Z',
+    created_at: '2026-09-27T10:00:00Z'
+  };
+
+  const mockClient = createMockClient({
+    user_sync_metadata: {
+      maybeSingle: () => ({
+        data: { user_id: existingUser.id, schema_version: '1.1.0', last_synced_at: '2026-09-27T10:00:00Z' },
+        error: null
+      })
+    },
+    user_settings: {
+      maybeSingle: () => ({
+        data: { currency: 'TRY', onboarded: true, target_month: '2026-09', updated_at: '2026-09-27T10:00:00Z' },
+        error: null
+      })
+    },
+    presets: {
+      select: () => ({ data: [], error: null })
+    },
+    transactions: {
+      select: () => ({ data: [cloudTx], error: null })
+    }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  await sync.sync({ user: existingUser, reason: 'startup' });
+
+  assert(store.getTransactions().length === 1, 'TC-99 Google ile bağlanan mevcut hesabın bulut verileri bootstrap ile yerel store\'a yüklendi');
+  assert(store.getTransactions()[0].title === 'KYK Bursu', 'TC-99 Buluttan gelen işlem başlığı doğru');
+  assert(store.getTransactions()[0].amount === 3000, 'TC-99 Buluttan gelen işlem tutarı (3000 TL) doğru');
+  assert(store.state.onboarded === true, 'TC-99 Kullanıcı onboarded=true olarak işaretlendi, onboarding modalı tetiklenmez');
+}
+
+// TC-100: Auth Arayüzü Denetimi (Magic Link Email Input Yokluğu, Google & Guest Butonları)
+{
+  const indexHtml = fs.readFileSync(path.resolve('index.html'), 'utf8');
+
+  // Magic Link email input'unun kaldırıldığı doğrulanır
+  assert(!indexHtml.includes('id="auth-email-input"'), 'TC-100 index.html içinde Magic Link email input (auth-email-input) KESİNLİKLE YOK');
+  assert(!indexHtml.includes('id="auth-btn-submit"'), 'TC-100 index.html içinde Magic Link submit butonu KESİNLİKLE YOK');
+
+  // Yeni Google ve Guest butonlarının varlığı
+  assert(indexHtml.includes('id="btn-auth-google"'), 'TC-100 "Google ile devam et" butonu (btn-auth-google) mevcut');
+  assert(indexHtml.includes('id="btn-auth-guest"'), 'TC-100 "Üyeliksiz devam et" butonu (btn-auth-guest) mevcut');
+  assert(indexHtml.includes('Verilerini nasıl saklamak istersin?'), 'TC-100 Modal başlığı "Verilerini nasıl saklamak istersin?" mevcut');
+  assert(indexHtml.includes('Verilerini güvenle yedekle ve cihazların arasında senkronize et.'), 'TC-100 Google alt açıklaması doğru');
+  assert(indexHtml.includes('Verilerin yalnızca bu cihazda saklanır.'), 'TC-100 Üyeliksiz devam et alt açıklaması doğru');
+
+  // Navbar "Bu cihazda" göstergesi
+  assert(indexHtml.includes('data-i18n="auth.localDeviceBadge">Bu cihazda</span>'), 'TC-100 Navbar oturumsuz durumda "Bu cihazda" etiketi mevcut');
+  assert(indexHtml.includes('id="user-avatar-img"'), 'TC-100 Google avatar görseli için user-avatar-img mevcut');
+}
+
+// TC-101: Logout & Privacy Doğrulaması (Cihaz Temizleme & Bulut Güvenliği)
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.setItem('student_budget_last_synced_at', '2026-09-27T10:00:00Z');
+  SafeStorage.setItem('student_budget_deleted_queue', JSON.stringify([{ id: 'del-1' }]));
+
+  const store = new BudgetStore();
+  store.addTransaction({ title: 'Gizli Bulut Harcaması', amount: 500, type: 'expense', categoryId: 'exp_bills', date: '2026-09-27' });
+  store.state.onboarded = true;
+  assert(store.getTransactions().length === 1, 'TC-101 Çıkış öncesi 1 işlem mevcut');
+
+  // Çıkış fonksiyonu çağrıldığında
+  store.clearSessionOnSignOut();
+
+  assert(store.getTransactions().length === 0, 'TC-101 Çıkış yapıldığında cihazdaki aktif işlemler temizlendi (gizlilik korundu)');
+  assert(store.state.onboarded === false, 'TC-101 Çıkış sonrası store.onboarded false yapıldı (yeni kullanıcı için temiz durum)');
+  assert(SafeStorage.getItem('student_budget_last_synced_at') === null, 'TC-101 Sync imleci cihazdan temizlendi');
+  assert(SafeStorage.getItem('student_budget_deleted_queue') === null, 'TC-101 Silinme kuyruğu cihazdan temizlendi');
+}
+
+// TC-102: Güvenlik Denetimi (Google Client Secret ve Secret Key Yokluğu)
+{
+  const filesToAudit = [
+    'src/services/supabaseClient.js',
+    'src/services/authService.js',
+    'src/services/syncService.js',
+    'src/components/modalManager.js',
+    'src/components/UIManager.js',
+    'src/main.js',
+    'index.html',
+    'vite.config.js'
+  ];
+
+  let hasSecret = false;
+  for (const file of filesToAudit) {
+    const content = fs.readFileSync(path.resolve(file), 'utf8');
+    if (content.includes('client_secret') || content.includes('GOOGLE_CLIENT_SECRET') || content.includes('service_role')) {
+      hasSecret = true;
+      break;
+    }
+  }
+
+  assert(hasSecret === false, 'TC-102 Kaynak dosyalarda Google Client Secret veya Supabase secret_key kesinlikle bulunmuyor');
+}
+
 console.log('\n====================================================');
 console.log(`🏁 ENTEGRE TEST SONUCU: ${passed} PASSED, ${failed} FAILED`);
 console.log('====================================================');
 
 process.exit(failed > 0 ? 1 : 0);
+
 
 

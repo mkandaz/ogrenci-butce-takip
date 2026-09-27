@@ -82,13 +82,17 @@ export class ModalManager {
     this.editMonthlyIncome = document.getElementById('edit-monthly-income');
     this.editTargetMonth = document.getElementById('edit-target-month');
 
-    // Auth Modal
+    // Auth Modal (Google & Guest)
     this.authModal = document.getElementById('auth-modal');
     this.authModalClose = document.getElementById('auth-modal-close');
     this.authModalCancel = document.getElementById('auth-modal-cancel');
+    this.btnAuthGoogle = document.getElementById('btn-auth-google');
+    this.btnAuthGoogleText = document.getElementById('btn-auth-google-text');
+    this.btnAuthGuest = document.getElementById('btn-auth-guest');
+    this.authErrorBox = document.getElementById('auth-error-box');
+    this.authErrorMsg = document.getElementById('auth-error-msg');
     this.authForm = document.getElementById('auth-form');
     this.authEmailInput = document.getElementById('auth-email-input');
-    this.authErrorMsg = document.getElementById('auth-error-msg');
     this.authSuccessBox = document.getElementById('auth-success-box');
     this.authBtnSubmit = document.getElementById('auth-btn-submit');
     this.authBtnText = document.getElementById('auth-btn-text');
@@ -170,9 +174,15 @@ export class ModalManager {
       });
     }
 
-    // Auth Modal
+    // Auth Modal (Google & Guest)
     if (this.authModalClose) this.authModalClose.addEventListener('click', () => this.closeAuthModal());
     if (this.authModalCancel) this.authModalCancel.addEventListener('click', () => this.closeAuthModal());
+    if (this.btnAuthGoogle) {
+      this.btnAuthGoogle.addEventListener('click', () => this.handleGoogleSignIn());
+    }
+    if (this.btnAuthGuest) {
+      this.btnAuthGuest.addEventListener('click', () => this.handleGuestContinue());
+    }
     if (this.authForm) {
       this.authForm.addEventListener('submit', (e) => {
         e.preventDefault();
@@ -570,15 +580,14 @@ export class ModalManager {
 
   // --- Onboarding Modal Methods ---
   openOnboardingModal() {
+    this.openAuthModal();
     if (this.onboardingModal) {
-      this.onboardingModal.classList.remove('hidden');
-      if (this.onboardTargetMonth) {
-        this.onboardTargetMonth.value = this.store.state.settings.targetMonth || getCurrentYearMonth();
-      }
+      this.onboardingModal.classList.add('hidden');
     }
   }
 
   closeOnboardingModal() {
+    this.closeAuthModal();
     if (this.onboardingModal) {
       this.onboardingModal.classList.add('hidden');
     }
@@ -629,22 +638,18 @@ export class ModalManager {
     showToast(t('initialBudgetModal.success'), 'success');
   }
 
-  // --- Auth Modal Methods ---
+  // --- Auth Modal Methods (Google & Guest) ---
   openAuthModal() {
     this.lastFocusedElement = document.activeElement;
     if (!this.authModal) return;
 
-    if (this.authEmailInput) this.authEmailInput.value = '';
-    if (this.authErrorMsg) {
-      this.authErrorMsg.textContent = '';
-      this.authErrorMsg.classList.add('hidden');
-    }
-    if (this.authSuccessBox) this.authSuccessBox.classList.add('hidden');
-    if (this.authBtnSubmit) this.authBtnSubmit.disabled = false;
-    if (this.authBtnText) this.authBtnText.textContent = t('auth.sendMagicLink');
+    if (this.authErrorBox) this.authErrorBox.classList.add('hidden');
+    if (this.authErrorMsg) this.authErrorMsg.textContent = '';
+    if (this.btnAuthGoogle) this.btnAuthGoogle.disabled = false;
+    if (this.btnAuthGoogleText) this.btnAuthGoogleText.textContent = t('auth.googleBtn');
 
     this.authModal.classList.remove('hidden');
-    if (this.authEmailInput) setTimeout(() => this.authEmailInput.focus(), 50);
+    if (this.btnAuthGoogle) setTimeout(() => this.btnAuthGoogle.focus(), 50);
   }
 
   closeAuthModal() {
@@ -652,6 +657,33 @@ export class ModalManager {
     if (this.lastFocusedElement && typeof this.lastFocusedElement.focus === 'function') {
       this.lastFocusedElement.focus();
     }
+  }
+
+  async handleGoogleSignIn() {
+    try {
+      if (this.btnAuthGoogle) this.btnAuthGoogle.disabled = true;
+      if (this.btnAuthGoogleText) this.btnAuthGoogleText.textContent = t('auth.redirecting') || 'Yönlendiriliyor...';
+      if (this.authErrorBox) this.authErrorBox.classList.add('hidden');
+
+      await authService.signInWithGoogle();
+    } catch (err) {
+      if (this.btnAuthGoogle) this.btnAuthGoogle.disabled = false;
+      if (this.btnAuthGoogleText) this.btnAuthGoogleText.textContent = t('auth.googleBtn');
+      if (this.authErrorMsg) {
+        this.authErrorMsg.textContent = err.message || 'Google ile giriş başlatılamadı.';
+      }
+      if (this.authErrorBox) this.authErrorBox.classList.remove('hidden');
+      showToast(err.message || 'Google girişi başlatılamadı.', 'error');
+    }
+  }
+
+  handleGuestContinue() {
+    this.store.state.onboarded = true;
+    this.store.saveToStorage();
+    this.closeAuthModal();
+    this.closeOnboardingModal();
+    this.store.notify();
+    showToast(t('auth.guestSubtext') || 'Verileriniz yalnızca bu cihazda saklanır.', 'info');
   }
 
   async handleAuthFormSubmit() {

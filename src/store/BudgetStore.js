@@ -446,6 +446,16 @@ export class BudgetStore {
     this.notify();
   }
 
+  clearSessionOnSignOut() {
+    this.state.transactions = [];
+    this.state.onboarded = false;
+    this.state.hasUnsyncedChanges = false;
+    SafeStorage.removeItem('student_budget_last_synced_at');
+    SafeStorage.removeItem('student_budget_deleted_queue');
+    this.saveToStorage();
+    this.notify();
+  }
+
   loadDemoSeedData() {
     this.state.transactions = [...DEFAULT_SEED_TRANSACTIONS];
     this.state.categories = [...DEFAULT_CATEGORIES];
