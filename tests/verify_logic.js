@@ -23,6 +23,13 @@ import {
   MTD_WEIGHT
 } from '../src/services/forecastEngine.js';
 import { generateInsights, RULE_THRESHOLDS } from '../src/services/insightEngine.js';
+import {
+  simulateWhatIf,
+  compareScenarios,
+  validateScenario,
+  SCENARIO_TYPES,
+  SCENARIO_ASSUMPTIONS
+} from '../src/services/whatIfEngine.js';
 
 console.log('====================================================');
 console.log('🚀 ÖĞRENCİ BÜTÇE TAKİP - ENTEGRE TEST PAKETİ (FAZ 2 & 3)');
@@ -5938,6 +5945,340 @@ console.log('\n--- 22. FAZ 5.3 — DETERMINISTIC INSIGHT / RULE ENGINE ---');
   assert(resMeta.metadata.triggeredRuleCount >= 3, 'TC-204 triggeredRuleCount >= returnedInsightCount');
   assert(typeof resMeta.metadata.suppressedRuleCount === 'number', 'TC-204 suppressedRuleCount sayı');
   assert(typeof resMeta.metadata.evaluatedRuleCount === 'number', 'TC-204 evaluatedRuleCount sayı');
+}
+
+// --------------------------------------------------------------------------
+// 23. FAZ 5.4 — DETERMINISTIC WHAT-IF FINANCIAL SIMULATOR (TC-205 - TC-239)
+// --------------------------------------------------------------------------
+console.log('\n--- 23. FAZ 5.4 — DETERMINISTIC WHAT-IF FINANCIAL SIMULATOR ---');
+
+const whatIfBaseTxs = [
+  { id: 'tx-w1', amount: 3000, type: 'expense', categoryId: 'exp_rent', date: '2026-09-05' },
+  { id: 'tx-w2', amount: 1600, type: 'expense', categoryId: 'exp_food', date: '2026-09-15' }
+];
+const whatIfOpts = { year: 2026, month: 9, now: sept18Now, currentAvailableBalance: 10000 };
+
+// TC-205: ONE_TIME_EXPENSE balance delta doğru
+{
+  const scenario = { type: SCENARIO_TYPES.ONE_TIME_EXPENSE, amount: 2500, label: 'Kulaklık' };
+  const res = simulateWhatIf({ transactions: whatIfBaseTxs, options: whatIfOpts, scenario });
+  assert(res.delta.projectedEndBalance === -2500, 'TC-205 ONE_TIME_EXPENSE balance delta doğru');
+  assert(res.simulated.projectedEndBalance === roundMetric(res.baseline.projectedEndBalance - 2500), 'TC-205 simulated balance 2500 TL azaldı');
+}
+
+// TC-206: ONE_TIME_EXPENSE projected outflow artar
+{
+  const scenario = { type: SCENARIO_TYPES.ONE_TIME_EXPENSE, amount: 2500, label: 'Kulaklık' };
+  const res = simulateWhatIf({ transactions: whatIfBaseTxs, options: whatIfOpts, scenario });
+  assert(res.delta.projectedExpense === 2500, 'TC-206 ONE_TIME_EXPENSE projected outflow artar');
+  assert(res.simulated.projectedExpense === roundMetric(res.baseline.projectedExpense + 2500), 'TC-206 simulated total expense 2500 TL arttı');
+}
+
+// TC-207: ONE_TIME_EXPENSE baseline daily forecast rate'i değiştirmez
+{
+  const scenario = { type: SCENARIO_TYPES.ONE_TIME_EXPENSE, amount: 2500 };
+  const res = simulateWhatIf({ transactions: whatIfBaseTxs, options: whatIfOpts, scenario });
+  assert(res.simulated.dailyRate === res.baseline.dailyRate, 'TC-207 ONE_TIME_EXPENSE baseline daily forecast rate\'i değiştirmez');
+  assert(res.delta.dailyRate === 0, 'TC-207 delta.dailyRate sıfır');
+  assert(res.simulated.projectedRemainingExpense === res.baseline.projectedRemainingExpense, 'TC-207 simulated remaining expense davranışsal olarak değişmedi');
+  assert(res.delta.projectedRemainingExpense === 0, 'TC-207 delta.projectedRemainingExpense sıfır');
+}
+
+// TC-208: ONE_TIME_INCOME balance delta doğru
+{
+  const scenario = { type: SCENARIO_TYPES.ONE_TIME_INCOME, amount: 3000, label: 'Burs' };
+  const res = simulateWhatIf({ transactions: whatIfBaseTxs, options: whatIfOpts, scenario });
+  assert(res.delta.projectedEndBalance === 3000, 'TC-208 ONE_TIME_INCOME balance delta doğru');
+  assert(res.simulated.projectedEndBalance === roundMetric(res.baseline.projectedEndBalance + 3000), 'TC-208 simulated balance 3000 TL arttı');
+}
+
+// TC-209: ONE_TIME_INCOME expense forecast değiştirmez
+{
+  const scenario = { type: SCENARIO_TYPES.ONE_TIME_INCOME, amount: 3000 };
+  const res = simulateWhatIf({ transactions: whatIfBaseTxs, options: whatIfOpts, scenario });
+  assert(res.delta.projectedExpense === 0, 'TC-209 ONE_TIME_INCOME expense forecast değiştirmez');
+  assert(res.delta.projectedRemainingExpense === 0, 'TC-209 delta remaining expense sıfır');
+  assert(res.delta.dailyRate === 0, 'TC-209 delta dailyRate sıfır');
+  assert(res.simulated.projectedExpense === res.baseline.projectedExpense, 'TC-209 simulated projected expense baseline ile aynı');
+}
+
+// TC-210: FUTURE_SPEND_PERCENT_CHANGE -20 doğru
+{
+  const scenario = { type: SCENARIO_TYPES.FUTURE_SPEND_PERCENT_CHANGE, percent: -20 };
+  const res = simulateWhatIf({ transactions: whatIfBaseTxs, options: whatIfOpts, scenario });
+  const expectedRate = roundMetric(res.baseline.dailyRate * 0.8);
+  const expectedRemaining = roundMetric(expectedRate * 12);
+  assert(res.simulated.dailyRate === expectedRate, 'TC-210 FUTURE_SPEND_PERCENT_CHANGE -20 doğru dailyRate');
+  assert(res.simulated.projectedRemainingExpense === expectedRemaining, 'TC-210 FUTURE_SPEND_PERCENT_CHANGE -20 doğru remainingExpense');
+  assert(res.delta.projectedRemainingExpense === roundMetric(expectedRemaining - res.baseline.projectedRemainingExpense), 'TC-210 delta remaining expense tutarlı');
+  assert(res.delta.projectedEndBalance === roundMetric(res.simulated.projectedEndBalance - res.baseline.projectedEndBalance), 'TC-210 delta balance tasarrufla tutarlı');
+}
+
+// TC-211: FUTURE_SPEND_PERCENT_CHANGE +20 doğru
+{
+  const scenario = { type: SCENARIO_TYPES.FUTURE_SPEND_PERCENT_CHANGE, percent: 20 };
+  const res = simulateWhatIf({ transactions: whatIfBaseTxs, options: whatIfOpts, scenario });
+  const expectedRate = roundMetric(res.baseline.dailyRate * 1.2);
+  assert(res.simulated.dailyRate === expectedRate, 'TC-211 FUTURE_SPEND_PERCENT_CHANGE +20 doğru');
+  assert(res.delta.projectedRemainingExpense > 0, 'TC-211 delta remaining expense pozitif (daha fazla harcama)');
+  assert(res.delta.projectedEndBalance < 0, 'TC-211 delta balance negatif (bakiye azalır)');
+}
+
+// TC-212: -%100 remaining expense = 0
+{
+  const scenario = { type: SCENARIO_TYPES.FUTURE_SPEND_PERCENT_CHANGE, percent: -100 };
+  const res = simulateWhatIf({ transactions: whatIfBaseTxs, options: whatIfOpts, scenario });
+  assert(res.simulated.dailyRate === 0, 'TC-212 -%100 daily rate = 0');
+  assert(res.simulated.projectedRemainingExpense === 0, 'TC-212 -%100 remaining expense = 0');
+  assert(res.simulated.projectedExpense === 4600, 'TC-212 projected expense sadece gerçekleşen harcamaya eşit');
+}
+
+// TC-213: FUTURE_DAILY_SPEND_CHANGE -100 doğru
+{
+  const scenario = { type: SCENARIO_TYPES.FUTURE_DAILY_SPEND_CHANGE, amountPerDay: -100 };
+  const res = simulateWhatIf({ transactions: whatIfBaseTxs, options: whatIfOpts, scenario });
+  const expectedDaily = roundMetric(Math.max(0, res.baseline.dailyRate - 100));
+  assert(res.simulated.dailyRate === expectedDaily, 'TC-213 FUTURE_DAILY_SPEND_CHANGE -100 doğru');
+  assert(res.simulated.projectedRemainingExpense === roundMetric(expectedDaily * 12), 'TC-213 kalan gün harcaması doğru');
+}
+
+// TC-214: daily rate 0'ın altına clamp edilir
+{
+  const scenario = { type: SCENARIO_TYPES.FUTURE_DAILY_SPEND_CHANGE, amountPerDay: -50000 };
+  const res = simulateWhatIf({ transactions: whatIfBaseTxs, options: whatIfOpts, scenario });
+  assert(res.simulated.dailyRate === 0, 'TC-214 daily rate 0\'ın altına clamp edilir');
+  assert(res.simulated.projectedRemainingExpense === 0, 'TC-214 remaining expense 0 oldu');
+}
+
+// TC-215: positive daily change doğru
+{
+  const scenario = { type: SCENARIO_TYPES.FUTURE_DAILY_SPEND_CHANGE, amountPerDay: 150 };
+  const res = simulateWhatIf({ transactions: whatIfBaseTxs, options: whatIfOpts, scenario });
+  assert(res.simulated.dailyRate === roundMetric(res.baseline.dailyRate + 150), 'TC-215 positive daily change doğru');
+  assert(res.delta.projectedEndBalance < 0, 'TC-215 balance azaldı');
+  assert(res.delta.projectedExpense > 0, 'TC-215 harcama arttı');
+}
+
+// TC-216: historical actual expense unchanged
+{
+  const beforeActual = 4600;
+  const res = simulateWhatIf({ transactions: whatIfBaseTxs, options: whatIfOpts, scenario: { type: SCENARIO_TYPES.ONE_TIME_EXPENSE, amount: 1000 } });
+  assert(whatIfBaseTxs.reduce((s, t) => s + t.amount, 0) === beforeActual, 'TC-216 historical actual expense unchanged');
+}
+
+// TC-217: baseline result unchanged
+{
+  const baseForecast = forecastMonth(whatIfBaseTxs, whatIfOpts);
+  const sim = simulateWhatIf({ transactions: whatIfBaseTxs, options: whatIfOpts, scenario: { type: SCENARIO_TYPES.ONE_TIME_EXPENSE, amount: 2000 } });
+  assert(sim.baseline.projectedExpense === baseForecast.forecast.projectedExpense, 'TC-217 baseline result unchanged');
+  assert(sim.baseline.dailyRate === baseForecast.dailyRates.blended, 'TC-217 baseline daily rate unchanged');
+}
+
+// TC-218: real transaction input immutable
+{
+  const frozenTxs = Object.freeze([
+    Object.freeze({ id: 'f1', amount: 500, type: 'expense', categoryId: 'exp_food', date: '2026-09-02' }),
+    Object.freeze({ id: 'f2', amount: 800, type: 'expense', categoryId: 'exp_transport', date: '2026-09-10' })
+  ]);
+  let mutated = false;
+  try {
+    simulateWhatIf({ transactions: frozenTxs, options: whatIfOpts, scenario: { type: SCENARIO_TYPES.ONE_TIME_EXPENSE, amount: 500 } });
+  } catch (e) {
+    mutated = true;
+  }
+  assert(!mutated, 'TC-218 real transaction input immutable');
+}
+
+// TC-219: scenario input immutable
+{
+  const frozenScenario = Object.freeze({ type: SCENARIO_TYPES.ONE_TIME_EXPENSE, amount: 1200, label: 'Kitap' });
+  let mutated = false;
+  try {
+    simulateWhatIf({ transactions: whatIfBaseTxs, options: whatIfOpts, scenario: frozenScenario });
+  } catch (e) {
+    mutated = true;
+  }
+  assert(!mutated, 'TC-219 scenario input immutable');
+}
+
+// TC-220: missing currentAvailableBalance -> balance null, other simulation metrics valid
+{
+  const resNoBal = simulateWhatIf({
+    transactions: whatIfBaseTxs,
+    options: { year: 2026, month: 9, now: sept18Now },
+    scenario: { type: SCENARIO_TYPES.ONE_TIME_EXPENSE, amount: 1000 }
+  });
+  assert(resNoBal.baseline.projectedEndBalance === null, 'TC-220 missing balance baseline null');
+  assert(resNoBal.simulated.projectedEndBalance === null, 'TC-220 missing balance simulated null');
+  assert(resNoBal.delta.projectedEndBalance === null, 'TC-220 missing balance delta null');
+  assert(typeof resNoBal.simulated.projectedExpense === 'number' && !isNaN(resNoBal.simulated.projectedExpense), 'TC-220 other simulation metrics valid');
+}
+
+// TC-221: negative scenario projected balance preserved
+{
+  const lowBalanceOpts = { year: 2026, month: 9, now: sept18Now, currentAvailableBalance: 1000 };
+  const resNeg = simulateWhatIf({
+    transactions: whatIfBaseTxs,
+    options: lowBalanceOpts,
+    scenario: { type: SCENARIO_TYPES.ONE_TIME_EXPENSE, amount: 5000 }
+  });
+  assert(resNeg.simulated.projectedEndBalance < 0, 'TC-221 negative scenario projected balance preserved');
+  assert(resNeg.simulated.projectedEndBalance === roundMetric(resNeg.baseline.projectedEndBalance - 5000), 'TC-221 negative balance not clamped to 0');
+}
+
+// TC-222: delta calculations exact
+{
+  const res = simulateWhatIf({
+    transactions: whatIfBaseTxs,
+    options: whatIfOpts,
+    scenario: { type: SCENARIO_TYPES.FUTURE_SPEND_PERCENT_CHANGE, percent: -15 }
+  });
+  assert(res.delta.projectedExpense === roundMetric(res.simulated.projectedExpense - res.baseline.projectedExpense), 'TC-222 delta expense exact');
+  assert(res.delta.projectedRemainingExpense === roundMetric(res.simulated.projectedRemainingExpense - res.baseline.projectedRemainingExpense), 'TC-222 delta remaining expense exact');
+  assert(res.delta.dailyRate === roundMetric(res.simulated.dailyRate - res.baseline.dailyRate), 'TC-222 delta daily rate exact');
+}
+
+// TC-223: impact positive
+{
+  const resInc = simulateWhatIf({ transactions: whatIfBaseTxs, options: whatIfOpts, scenario: { type: SCENARIO_TYPES.ONE_TIME_INCOME, amount: 2000 } });
+  assert(resInc.impact.direction === 'positive', 'TC-223 impact positive');
+  assert(resInc.impact.magnitude === 2000, 'TC-223 impact magnitude doğru');
+}
+
+// TC-224: impact negative
+{
+  const resExp = simulateWhatIf({ transactions: whatIfBaseTxs, options: whatIfOpts, scenario: { type: SCENARIO_TYPES.ONE_TIME_EXPENSE, amount: 2000 } });
+  assert(resExp.impact.direction === 'negative', 'TC-224 impact negative');
+  assert(resExp.impact.magnitude === 2000, 'TC-224 impact magnitude doğru');
+}
+
+// TC-225: impact neutral
+{
+  const resNeu = simulateWhatIf({ transactions: whatIfBaseTxs, options: whatIfOpts, scenario: { type: SCENARIO_TYPES.FUTURE_SPEND_PERCENT_CHANGE, percent: 0 } });
+  assert(resNeu.impact.direction === 'neutral', 'TC-225 impact neutral');
+  assert(resNeu.impact.magnitude === 0, 'TC-225 impact magnitude zero');
+}
+
+// TC-226: scenario assumptions correct
+{
+  const resExp = simulateWhatIf({ transactions: whatIfBaseTxs, options: whatIfOpts, scenario: { type: SCENARIO_TYPES.ONE_TIME_EXPENSE, amount: 1000 } });
+  assert(resExp.metadata.assumptions.includes('BASELINE_FORECAST_UNCHANGED'), 'TC-226 assumptions BASELINE_FORECAST_UNCHANGED');
+  assert(resExp.metadata.assumptions.includes('ONE_TIME_EVENT'), 'TC-226 assumptions ONE_TIME_EVENT');
+}
+
+// TC-227: invalid zero amount rejected
+{
+  const v = validateScenario({ type: SCENARIO_TYPES.ONE_TIME_EXPENSE, amount: 0 });
+  assert(!v.isValid, 'TC-227 validateScenario zero amount invalid');
+  const sim = simulateWhatIf({ transactions: whatIfBaseTxs, options: whatIfOpts, scenario: { type: SCENARIO_TYPES.ONE_TIME_EXPENSE, amount: 0 } });
+  assert(!sim.isValid && !sim.metadata.isApplicable, 'TC-227 invalid zero amount rejected');
+}
+
+// TC-228: negative one-time amount rejected
+{
+  const v = validateScenario({ type: SCENARIO_TYPES.ONE_TIME_EXPENSE, amount: -100 });
+  assert(!v.isValid, 'TC-228 validateScenario negative amount invalid');
+  const sim = simulateWhatIf({ transactions: whatIfBaseTxs, options: whatIfOpts, scenario: { type: SCENARIO_TYPES.ONE_TIME_EXPENSE, amount: -100 } });
+  assert(!sim.isValid && !sim.metadata.isApplicable, 'TC-228 negative one-time amount rejected');
+}
+
+// TC-229: NaN/Infinity rejected
+{
+  assert(!validateScenario({ type: SCENARIO_TYPES.ONE_TIME_EXPENSE, amount: NaN }).isValid, 'TC-229 NaN rejected');
+  assert(!validateScenario({ type: SCENARIO_TYPES.ONE_TIME_EXPENSE, amount: Infinity }).isValid, 'TC-229 Infinity rejected');
+  assert(!validateScenario({ type: SCENARIO_TYPES.ONE_TIME_EXPENSE, amount: '500' }).isValid, 'TC-229 string amount rejected');
+  const sim = simulateWhatIf({ transactions: whatIfBaseTxs, options: whatIfOpts, scenario: { type: SCENARIO_TYPES.ONE_TIME_EXPENSE, amount: NaN } });
+  assert(!sim.isValid, 'TC-229 simulateWhatIf rejected NaN');
+}
+
+// TC-230: percent below -100 rejected
+{
+  assert(!validateScenario({ type: SCENARIO_TYPES.FUTURE_SPEND_PERCENT_CHANGE, percent: -101 }).isValid, 'TC-230 percent below -100 rejected');
+  assert(!validateScenario({ type: SCENARIO_TYPES.FUTURE_SPEND_PERCENT_CHANGE, percent: 1200 }).isValid, 'TC-230 percent above 1000 rejected');
+}
+
+// TC-231: projection float rounding clean
+{
+  const res = simulateWhatIf({ transactions: whatIfBaseTxs, options: whatIfOpts, scenario: { type: SCENARIO_TYPES.FUTURE_SPEND_PERCENT_CHANGE, percent: -33.33 } });
+  const str = String(res.simulated.projectedExpense);
+  const decimals = str.includes('.') ? str.split('.')[1].length : 0;
+  assert(decimals <= 2, 'TC-231 projection float rounding clean (max 2 decimals)');
+}
+
+// TC-232: compareScenarios uses identical baseline
+{
+  const scenarios = [
+    { id: 's1', type: SCENARIO_TYPES.ONE_TIME_EXPENSE, amount: 2000 },
+    { id: 's2', type: SCENARIO_TYPES.FUTURE_SPEND_PERCENT_CHANGE, percent: -20 }
+  ];
+  const comp = compareScenarios({ transactions: whatIfBaseTxs, options: whatIfOpts, scenarios });
+  assert(comp.scenarios.length === 2, 'TC-232 compareScenarios 2 senaryo döndürdü');
+  const single1 = simulateWhatIf({ transactions: whatIfBaseTxs, options: whatIfOpts, scenario: scenarios[0] });
+  assert(comp.baseline.projectedExpense === single1.baseline.projectedExpense, 'TC-232 compareScenarios uses identical baseline');
+}
+
+// TC-233: compareScenarios scenarios don't affect each other
+{
+  const scenarios = [
+    { id: 's1', type: SCENARIO_TYPES.ONE_TIME_EXPENSE, amount: 2000 },
+    { id: 's2', type: SCENARIO_TYPES.FUTURE_SPEND_PERCENT_CHANGE, percent: -20 }
+  ];
+  const comp = compareScenarios({ transactions: whatIfBaseTxs, options: whatIfOpts, scenarios });
+  const single2 = simulateWhatIf({ transactions: whatIfBaseTxs, options: whatIfOpts, scenario: scenarios[1] });
+  assert(comp.scenarios[1].simulated.projectedExpense === single2.simulated.projectedExpense, 'TC-233 compareScenarios scenarios don\'t affect each other');
+  assert(comp.scenarios[1].delta.projectedExpense === single2.delta.projectedExpense, 'TC-233 delta eşleşti');
+}
+
+// TC-234: compareScenarios ordering stable
+{
+  const scenarios = [
+    { id: 'alpha', type: SCENARIO_TYPES.ONE_TIME_INCOME, amount: 1000 },
+    { id: 'beta', type: SCENARIO_TYPES.ONE_TIME_EXPENSE, amount: 500 }
+  ];
+  const comp = compareScenarios({ transactions: whatIfBaseTxs, options: whatIfOpts, scenarios });
+  assert(comp.scenarios[0].id === 'alpha', 'TC-234 İlk senaryo sırası korundu');
+  assert(comp.scenarios[1].id === 'beta', 'TC-234 İkinci senaryo sırası korundu');
+}
+
+// TC-235: historical/future month applicability safe
+{
+  const histOpts = { year: 2026, month: 8, now: sept18Now, currentAvailableBalance: 10000 };
+  const resHist = simulateWhatIf({ transactions: whatIfBaseTxs, options: histOpts, scenario: { type: SCENARIO_TYPES.ONE_TIME_EXPENSE, amount: 500 } });
+  assert(resHist.metadata.isApplicable === false, 'TC-235 historical month applicability false');
+  assert(resHist.metadata.reason === 'HISTORICAL_MONTH_CLOSED', 'TC-235 reason HISTORICAL_MONTH_CLOSED');
+}
+
+// TC-236: zero expense baseline safe
+{
+  const resZero = simulateWhatIf({ transactions: [], options: whatIfOpts, scenario: { type: SCENARIO_TYPES.ONE_TIME_EXPENSE, amount: 1000 } });
+  assert(resZero.isValid === true, 'TC-236 zero expense baseline safe');
+  assert(!isNaN(resZero.simulated.projectedExpense), 'TC-236 no NaN on zero expense baseline');
+}
+
+// TC-237: zero remaining days safe
+{
+  const endOfMonthNow = new Date(2026, 8, 30, 23, 59, 59);
+  const endOpts = { year: 2026, month: 9, now: endOfMonthNow, currentAvailableBalance: 10000 };
+  const resEnd = simulateWhatIf({ transactions: whatIfBaseTxs, options: endOpts, scenario: { type: SCENARIO_TYPES.FUTURE_SPEND_PERCENT_CHANGE, percent: -20 } });
+  assert(resEnd.simulated.projectedRemainingExpense === 0, 'TC-237 zero remaining days safe');
+  assert(!isNaN(resEnd.simulated.dailyRate), 'TC-237 dailyRate is valid number');
+}
+
+// TC-238: no network/Supabase/DOM/LocalStorage dependency
+{
+  const pureRes = simulateWhatIf({
+    transactions: [{ amount: 200, type: 'expense', date: '2026-09-02' }],
+    options: { year: 2026, month: 9, now: sept18Now },
+    scenario: { type: SCENARIO_TYPES.ONE_TIME_EXPENSE, amount: 100 }
+  });
+  assert(typeof pureRes === 'object' && pureRes !== null, 'TC-238 no network/Supabase/DOM/LocalStorage dependency');
+}
+
+// TC-239: same input -> exact same output
+{
+  const run1 = simulateWhatIf({ transactions: whatIfBaseTxs, options: whatIfOpts, scenario: { type: SCENARIO_TYPES.FUTURE_SPEND_PERCENT_CHANGE, percent: -25 } });
+  const run2 = simulateWhatIf({ transactions: whatIfBaseTxs, options: whatIfOpts, scenario: { type: SCENARIO_TYPES.FUTURE_SPEND_PERCENT_CHANGE, percent: -25 } });
+  assert(JSON.stringify(run1) === JSON.stringify(run2), 'TC-239 same input -> exact same output');
 }
 
 console.log('\n====================================================');
