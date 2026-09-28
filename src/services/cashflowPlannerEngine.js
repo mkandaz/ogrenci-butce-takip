@@ -28,6 +28,11 @@ export const COVERAGE_STATUS = {
 };
 
 /**
+ * Bütçe kullanım oranı eşiği (Safe capacity'nin %80'i ve üzeri TIGHT kabul edilir).
+ */
+export const TIGHT_UTILIZATION_THRESHOLD = 0.80;
+
+/**
  * Nakit akışı motoru varsayımları (Assumptions).
  */
 export const CASHFLOW_ASSUMPTIONS = [
@@ -382,9 +387,13 @@ export function planCashflow({ plannedCashflows = [], options = {}, forecast = n
   let safeDailySpendUntilNextIncome = null;
 
   if (nextIncome.found && availableAfterPlannedObligations !== null) {
-    const freePool = Math.max(0, availableAfterPlannedObligations);
-    const daySpan = Math.max(1, daysUntilNextIncome);
-    safeDailySpendUntilNextIncome = round(freePool / daySpan);
+    if (daysUntilNextIncome === 0) {
+      // Bir sonraki gelir bugün ise harcama penceresi 0'dır, yapay 1 günlük bölme yapılmaz
+      safeDailySpendUntilNextIncome = 0;
+    } else {
+      const freePool = Math.max(0, availableAfterPlannedObligations);
+      safeDailySpendUntilNextIncome = round(freePool / daysUntilNextIncome);
+    }
   }
 
   // 4. FORECAST ENTEGRASYONU (FORECAST-AWARE METRİKLER)
@@ -398,7 +407,14 @@ export function planCashflow({ plannedCashflows = [], options = {}, forecast = n
   let dailyAdjustmentNeeded = null;
   let runwayDays = null;
 
-  if (isForecastApplicable && baselineDailyRate !== null) {
+  if (daysUntilNextIncome === 0) {
+    // Gelir bugün olduğunda gelir öncesi değişken harcama 0 kabul edilir
+    projectedVariableSpendUntilNextIncome = 0;
+    if (availableAfterPlannedObligations !== null) {
+      projectedBalanceBeforeNextIncome = availableAfterPlannedObligations;
+    }
+    dailyAdjustmentNeeded = 0;
+  } else if (isForecastApplicable && baselineDailyRate !== null) {
     if (nextIncome.found && daysUntilNextIncome !== null) {
       projectedVariableSpendUntilNextIncome = round(baselineDailyRate * daysUntilNextIncome);
 
@@ -414,17 +430,21 @@ export function planCashflow({ plannedCashflows = [], options = {}, forecast = n
         }
       }
     }
+  }
 
-    if (availableAfterPlannedObligations !== null) {
-      if (baselineDailyRate > 0) {
-        runwayDays = Math.floor(Math.max(0, availableAfterPlannedObligations) / baselineDailyRate);
-      } else {
-        runwayDays = null;
-      }
+  if (isForecastApplicable && baselineDailyRate !== null && availableAfterPlannedObligations !== null) {
+    if (baselineDailyRate > 0) {
+      runwayDays = Math.floor(Math.max(0, availableAfterPlannedObligations) / baselineDailyRate);
+    } else {
+      runwayDays = null;
     }
   }
 
-  // 5. COVERAGE STATUS (MAKİNE TARAFINDAN OKUNABİLİR KAPLAMA DURUMU)
+  // 5. UTILIZATION RATIO VE COVERAGE STATUS (MAKİNE TARAFINDAN OKUNABİLİR KAPLAMA DURUMU)
+  const utilizationRatio = (safeDailySpendUntilNextIncome > 0 && typeof baselineDailyRate === 'number' && !isNaN(baselineDailyRate))
+    ? round(baselineDailyRate / safeDailySpendUntilNextIncome, 4)
+    : null;
+
   let coverageStatus = COVERAGE_STATUS.COVERED;
 
   if (!nextIncome.found) {
@@ -435,9 +455,8 @@ export function planCashflow({ plannedCashflows = [], options = {}, forecast = n
   ) {
     coverageStatus = COVERAGE_STATUS.DEFICIT_BEFORE_INCOME;
   } else if (
-    baselineDailyRate !== null &&
-    safeDailySpendUntilNextIncome !== null &&
-    (baselineDailyRate > safeDailySpendUntilNextIncome || baselineDailyRate >= safeDailySpendUntilNextIncome * 0.8)
+    utilizationRatio !== null &&
+    utilizationRatio >= TIGHT_UTILIZATION_THRESHOLD
   ) {
     coverageStatus = COVERAGE_STATUS.TIGHT;
   } else {
@@ -467,7 +486,8 @@ export function planCashflow({ plannedCashflows = [], options = {}, forecast = n
       projectedVariableSpendUntilNextIncome,
       projectedBalanceBeforeNextIncome,
       runwayDays,
-      dailyAdjustmentNeeded
+      dailyAdjustmentNeeded,
+      utilizationRatio
     },
     status: {
       coverageStatus

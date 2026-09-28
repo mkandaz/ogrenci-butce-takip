@@ -40,7 +40,8 @@ import {
   CASHFLOW_TYPES,
   RECURRENCE_TYPES,
   COVERAGE_STATUS,
-  CASHFLOW_ASSUMPTIONS
+  CASHFLOW_ASSUMPTIONS,
+  TIGHT_UTILIZATION_THRESHOLD
 } from '../src/services/cashflowPlannerEngine.js';
 
 console.log('====================================================');
@@ -6810,6 +6811,125 @@ const sept28Now = new Date(2026, 8, 28, 10, 0, 0); // 28 Eylül 2026
     options: { now: sept28Now }
   });
   assert(typeof res === 'object' && res !== null, 'TC-285 no network/Supabase/DOM/LocalStorage dependency');
+}
+
+// --------------------------------------------------------------------------
+// 25. FAZ 5.5A SEMANTIC PATCH TESTLERİ (TC-286 - TC-294)
+// --------------------------------------------------------------------------
+console.log('\n--- 25. FAZ 5.5A SEMANTIC PATCH: TIGHT & SAME-DAY INCOME ---');
+
+// TC-286: utilizationRatio = 0.79 -> COVERED
+{
+  // 10 gün, 10.000 TL bakiye -> safe daily spend = 1000 TL/gün
+  // baseline daily = 790 TL/gün -> ratio = 0.79 < 0.80 -> COVERED
+  const plan = planCashflow({
+    plannedCashflows: [{ id: 'inc', name: 'Burs', type: 'income', amount: 3000, recurrence: 'once', date: '2026-10-08' }],
+    options: { now: sept28Now, currentAvailableBalance: 10000 },
+    forecast: { metadata: { isForecastApplicable: true }, dailyRates: { blended: 790 } }
+  });
+  assert(plan.spending.safeDailySpendUntilNextIncome === 1000, 'TC-286 safe daily spend 1000');
+  assert(plan.spending.utilizationRatio === 0.79, 'TC-286 utilizationRatio 0.79');
+  assert(plan.status.coverageStatus === COVERAGE_STATUS.COVERED, 'TC-286 0.79 ratio -> COVERED');
+}
+
+// TC-287: utilizationRatio = 0.80 -> TIGHT
+{
+  // baseline daily = 800 TL/gün -> ratio = 0.80 >= 0.80 -> TIGHT
+  const plan = planCashflow({
+    plannedCashflows: [{ id: 'inc', name: 'Burs', type: 'income', amount: 3000, recurrence: 'once', date: '2026-10-08' }],
+    options: { now: sept28Now, currentAvailableBalance: 10000 },
+    forecast: { metadata: { isForecastApplicable: true }, dailyRates: { blended: 800 } }
+  });
+  assert(plan.spending.utilizationRatio === 0.80, 'TC-287 utilizationRatio 0.80');
+  assert(plan.status.coverageStatus === COVERAGE_STATUS.TIGHT, 'TC-287 0.80 ratio -> TIGHT');
+}
+
+// TC-288: utilizationRatio = 0.99 -> TIGHT
+{
+  // baseline daily = 990 TL/gün -> ratio = 0.99 >= 0.80 -> TIGHT
+  const plan = planCashflow({
+    plannedCashflows: [{ id: 'inc', name: 'Burs', type: 'income', amount: 3000, recurrence: 'once', date: '2026-10-08' }],
+    options: { now: sept28Now, currentAvailableBalance: 10000 },
+    forecast: { metadata: { isForecastApplicable: true }, dailyRates: { blended: 990 } }
+  });
+  assert(plan.spending.utilizationRatio === 0.99, 'TC-288 utilizationRatio 0.99');
+  assert(plan.status.coverageStatus === COVERAGE_STATUS.TIGHT, 'TC-288 0.99 ratio -> TIGHT');
+}
+
+// TC-289: utilizationRatio > 1.00 with projected negative balance -> DEFICIT_BEFORE_INCOME
+{
+  // baseline daily = 1200 TL/gün -> 10 gün * 1200 = 12000 TL variable spend > 10000 -> projected balance = -2000 -> DEFICIT
+  const plan = planCashflow({
+    plannedCashflows: [{ id: 'inc', name: 'Burs', type: 'income', amount: 3000, recurrence: 'once', date: '2026-10-08' }],
+    options: { now: sept28Now, currentAvailableBalance: 10000 },
+    forecast: { metadata: { isForecastApplicable: true }, dailyRates: { blended: 1200 } }
+  });
+  assert(plan.spending.utilizationRatio === 1.2, 'TC-289 utilizationRatio 1.20');
+  assert(plan.spending.projectedBalanceBeforeNextIncome === -2000, 'TC-289 projected balance -2000');
+  assert(plan.status.coverageStatus === COVERAGE_STATUS.DEFICIT_BEFORE_INCOME, 'TC-289 > 1.00 with negative balance -> DEFICIT_BEFORE_INCOME');
+}
+
+// TC-290: income today, no expense
+{
+  const plan = planCashflow({
+    plannedCashflows: [{ id: 'incToday', name: 'Bugünkü Burs', type: 'income', amount: 3000, recurrence: 'once', date: '2026-09-28' }],
+    options: { now: sept28Now, currentAvailableBalance: 4000 },
+    forecast: { metadata: { isForecastApplicable: true }, dailyRates: { blended: 250 } }
+  });
+  assert(plan.nextIncome.daysUntil === 0, 'TC-290 daysUntilNextIncome 0');
+  assert(plan.spending.safeDailySpendUntilNextIncome === 0, 'TC-290 safeDailySpendUntilNextIncome 0 (yapay 1 güne bölünmedi)');
+  assert(plan.spending.projectedVariableSpendUntilNextIncome === 0, 'TC-290 projectedVariableSpendUntilNextIncome 0');
+  assert(plan.spending.dailyAdjustmentNeeded === 0, 'TC-290 dailyAdjustmentNeeded 0');
+  assert(plan.spending.projectedBalanceBeforeNextIncome === 4000, 'TC-290 projectedBalanceBeforeNextIncome mevcut bakiye ile eşit');
+}
+
+// TC-291: income today + same-day expense
+{
+  const plan = planCashflow({
+    plannedCashflows: [
+      { id: 'incToday', name: 'Bugünkü Burs', type: 'income', amount: 3000, recurrence: 'once', date: '2026-09-28' },
+      { id: 'expToday', name: 'Bugünkü Fatura', type: 'expense', amount: 600, recurrence: 'once', date: '2026-09-28' }
+    ],
+    options: { now: sept28Now, currentAvailableBalance: 2000 },
+    forecast: { metadata: { isForecastApplicable: true }, dailyRates: { blended: 200 } }
+  });
+  assert(plan.obligations.sameDayExpenseTotal === 600, 'TC-291 sameDayExpenseTotal 600');
+  assert(plan.spending.availableAfterPlannedObligations === 1400, 'TC-291 availableAfterPlannedObligations 1400 (2000 - 600)');
+  assert(plan.spending.projectedBalanceBeforeNextIncome === 1400, 'TC-291 projectedBalanceBeforeNextIncome 1400');
+  assert(plan.spending.safeDailySpendUntilNextIncome === 0, 'TC-291 safeDailySpendUntilNextIncome 0');
+}
+
+// TC-292: income today + same-day expense causing deficit
+{
+  const plan = planCashflow({
+    plannedCashflows: [
+      { id: 'incToday', name: 'Burs', type: 'income', amount: 3000, recurrence: 'once', date: '2026-09-28' },
+      { id: 'expToday', name: 'Büyük Fatura', type: 'expense', amount: 1500, recurrence: 'once', date: '2026-09-28' }
+    ],
+    options: { now: sept28Now, currentAvailableBalance: 1000 }
+  });
+  assert(plan.spending.availableAfterPlannedObligations === -500, 'TC-292 availableAfterPlannedObligations -500');
+  assert(plan.spending.projectedBalanceBeforeNextIncome === -500, 'TC-292 projectedBalanceBeforeNextIncome -500');
+  assert(plan.status.coverageStatus === COVERAGE_STATUS.DEFICIT_BEFORE_INCOME, 'TC-292 deficit status üretildi');
+}
+
+// TC-293: no NaN or Infinity anywhere when daysUntilNextIncome === 0
+{
+  const plan = planCashflow({
+    plannedCashflows: [{ id: 'incToday', name: 'Burs', type: 'income', amount: 3000, recurrence: 'once', date: '2026-09-28' }],
+    options: { now: sept28Now, currentAvailableBalance: 1000 },
+    forecast: { metadata: { isForecastApplicable: true }, dailyRates: { blended: 250 } }
+  });
+  const sp = plan.spending;
+  assert(!isNaN(sp.safeDailySpendUntilNextIncome) && isFinite(sp.safeDailySpendUntilNextIncome), 'TC-293 safeDailySpend finite');
+  assert(!isNaN(sp.projectedVariableSpendUntilNextIncome) && isFinite(sp.projectedVariableSpendUntilNextIncome), 'TC-293 variable spend finite');
+  assert(!isNaN(sp.projectedBalanceBeforeNextIncome) && isFinite(sp.projectedBalanceBeforeNextIncome), 'TC-293 projected balance finite');
+  assert(!isNaN(sp.dailyAdjustmentNeeded) && isFinite(sp.dailyAdjustmentNeeded), 'TC-293 adjustment finite');
+}
+
+// TC-294: TIGHT_UTILIZATION_THRESHOLD is strictly 0.80
+{
+  assert(TIGHT_UTILIZATION_THRESHOLD === 0.80, 'TC-294 TIGHT_UTILIZATION_THRESHOLD strictly 0.80');
 }
 
 console.log('\n====================================================');
