@@ -7,6 +7,58 @@ const LAST_SYNCED_KEY = 'student_budget_last_synced_at';
 const PRE_CLOUD_BACKUP_KEY = 'student_budget_pre_cloud_backup';
 const DELETED_QUEUE_KEY = 'student_budget_deleted_queue';
 const SYNC_OUTBOX_KEY = 'student_budget_sync_outbox';
+export const PLANNED_CASHFLOW_OUTBOX_KEY = 'student_budget_planned_cashflow_outbox';
+
+// --- Mappers for Planned Cashflows ---
+export function mapPlannedCashflowToDb(item, userId) {
+  if (!item) return null;
+  const createdAtIso = item.createdAt
+    ? (typeof item.createdAt === 'number' ? new Date(item.createdAt).toISOString() : new Date(item.createdAt).toISOString())
+    : new Date().toISOString();
+  const updatedAtIso = item.updatedAt
+    ? (typeof item.updatedAt === 'number' ? new Date(item.updatedAt).toISOString() : new Date(item.updatedAt).toISOString())
+    : new Date().toISOString();
+
+  return {
+    id: item.id,
+    user_id: userId,
+    name: String(item.name || '').trim(),
+    type: item.type === 'income' ? 'income' : 'expense',
+    amount: Math.round(Number(item.amount) * 100) / 100,
+    recurrence: item.recurrence === 'monthly' ? 'monthly' : 'once',
+    day_of_month: item.recurrence === 'monthly' ? (Number(item.dayOfMonth) || null) : null,
+    date: item.recurrence === 'once' ? (item.date || null) : null,
+    start_date: item.startDate || null,
+    end_date: item.endDate || null,
+    category_id: item.categoryId || null,
+    is_active: item.isActive !== false,
+    is_deleted: Boolean(item.isDeleted),
+    deleted_at: item.deletedAt ? new Date(item.deletedAt).toISOString() : null,
+    created_at: createdAtIso,
+    updated_at: updatedAtIso
+  };
+}
+
+export function mapPlannedCashflowFromDb(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    name: String(row.name || '').trim(),
+    type: row.type,
+    amount: Number(row.amount) || 0,
+    recurrence: row.recurrence,
+    dayOfMonth: row.day_of_month !== null && row.day_of_month !== undefined ? Number(row.day_of_month) : null,
+    date: row.date || null,
+    startDate: row.start_date || null,
+    endDate: row.end_date || null,
+    categoryId: row.category_id || null,
+    isActive: Boolean(row.is_active),
+    isDeleted: Boolean(row.is_deleted),
+    deletedAt: row.deleted_at ? new Date(row.deleted_at).getTime() : null,
+    createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+    updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : Date.now()
+  };
+}
 
 export class SyncService {
   constructor(store, customClient = null) {
@@ -57,7 +109,7 @@ export class SyncService {
       }
     });
 
-    if (this.store && (this.getOutbox().length > 0 || this.store.dirtySettings || this.store.dirtyPresets)) {
+    if (this.store && (this.getOutbox().length > 0 || this.getPlannedCashflowOutbox().length > 0 || this.store.dirtySettings || this.store.dirtyPresets)) {
       this.store.hasUnsyncedChanges = true;
     }
 
@@ -122,7 +174,7 @@ export class SyncService {
   isSelfEcho(tableName, payload) {
     if (!this.recentLocalWrites) return false;
     const record = payload?.new;
-    if (tableName === 'transactions' && record && record.id) {
+    if ((tableName === 'transactions' || tableName === 'planned_cashflows') && record && record.id) {
       if (this.recentLocalWrites.has(record.id)) {
         const expected = this.recentLocalWrites.get(record.id);
         if (expected === 'ANY' || !record.updated_at || record.updated_at === expected) {
@@ -181,6 +233,16 @@ export class SyncService {
           filter: `user_id=eq.${user.id}`
         },
         (payload) => handleRemoteChange('transactions', payload)
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'planned_cashflows',
+          filter: `user_id=eq.${user.id}`
+        },
+        (payload) => handleRemoteChange('planned_cashflows', payload)
       )
       .on(
         'postgres_changes',
@@ -493,6 +555,41 @@ export class SyncService {
     }
   }
 
+  // Durable Planned Cashflow Outbox Takibi (student_budget_planned_cashflow_outbox)
+  getPlannedCashflowOutbox() {
+    if (this.store && typeof this.store.getPlannedCashflowOutbox === 'function') {
+      return this.store.getPlannedCashflowOutbox();
+    }
+    try {
+      const raw = SafeStorage.getItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  removeFromPlannedCashflowOutbox(ids = []) {
+    if (this.store && typeof this.store.removeFromPlannedCashflowOutbox === 'function') {
+      return this.store.removeFromPlannedCashflowOutbox(ids);
+    }
+    try {
+      if (!ids || !ids.length) {
+        SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+      } else {
+        const idSet = new Set(ids);
+        const queue = this.getPlannedCashflowOutbox();
+        const filtered = queue.filter(item => !idSet.has(item.id));
+        if (filtered.length === 0) {
+          SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+        } else {
+          SafeStorage.setItem(PLANNED_CASHFLOW_OUTBOX_KEY, JSON.stringify(filtered));
+        }
+      }
+    } catch (e) {
+      console.warn('[SyncService] removeFromPlannedCashflowOutbox hatası:', e);
+    }
+  }
+
   async flushOutboxThenCatchUp(user = null) {
     return this.recoverAfterReconnect(user);
   }
@@ -595,7 +692,8 @@ export class SyncService {
 
       const localLastSyncedAt = this.getLastSyncedAt();
       const outbox = this.getOutbox();
-      const hasPendingOutbox = outbox.length > 0;
+      const plannedOutbox = this.getPlannedCashflowOutbox();
+      const hasPendingOutbox = outbox.length > 0 || plannedOutbox.length > 0;
       const hasDirty = Boolean(
         hasPendingOutbox ||
         (this.store && this.store.hasUnsyncedChanges) ||
@@ -609,6 +707,7 @@ export class SyncService {
         console.info('[SyncService] İlk bulut ilklendirmesi (Initial Migration) başlatılıyor...');
         await this.runInitialMigration(user);
         this.removeFromOutbox();
+        this.removeFromPlannedCashflowOutbox();
         this.hasPerformedStartupCatchUp = true;
         this.lastFullCatchUpTime = Date.now();
       } else if (!localLastSyncedAt && !hasDirty) {
@@ -748,6 +847,20 @@ export class SyncService {
       }
     }
 
+    // ADIM 3.5: planned_cashflows Batch Upsert
+    const plannedCashflows = this.store?.getPlannedCashflows() || [];
+    if (plannedCashflows && plannedCashflows.length > 0) {
+      const plannedPayload = plannedCashflows.map(p => mapPlannedCashflowToDb({ ...p, isDeleted: false }, user.id));
+
+      const { error: plannedErr } = await client
+        .from('planned_cashflows')
+        .upsert(plannedPayload);
+
+      if (plannedErr) {
+        throw new Error(`planned_cashflows kaydedilemedi: ${plannedErr.message}`);
+      }
+    }
+
     // ADIM 4: EN SON user_sync_metadata (Öncekiler başarılıysa)
     const { error: finalMetaErr } = await client
       .from('user_sync_metadata')
@@ -864,7 +977,35 @@ export class SyncService {
     // Cloud'da henüz olmayan yerel insert'ler localMap içinde aynen korunur!
     const activeMergedTxs = Array.from(localMap.values());
 
+    // ADIM 3.5: planned_cashflows Çek (Tüm aktif kayıtlar, last_synced_at filtresi OLMADAN)
+    const { data: cloudPlanned, error: cloudPlannedErr } = await client
+      .from('planned_cashflows')
+      .select('*')
+      .eq('user_id', user.id);
+
+    if (cloudPlannedErr) {
+      throw new Error(`planned_cashflows okunamadı: ${cloudPlannedErr.message}`);
+    }
+
+    const activeCloudPlanned = (cloudPlanned || [])
+      .filter(cp => !cp.is_deleted)
+      .map(cp => mapPlannedCashflowFromDb(cp));
+
+    const localPlannedMap = new Map((this.store?.state?.plannedCashflows || []).map(p => [p.id, p]));
+    const plannedOutbox = this.getPlannedCashflowOutbox();
+    const pendingPlannedOutboxMap = new Map(plannedOutbox.map(item => [item.id, item]));
+
+    activeCloudPlanned.forEach(acp => {
+      const pendingItem = pendingPlannedOutboxMap.get(acp.id);
+      if (!pendingItem || (pendingItem.operation !== 'create' && pendingItem.operation !== 'insert' && pendingItem.operation !== 'update')) {
+        localPlannedMap.set(acp.id, acp);
+      }
+    });
+
+    const activeMergedPlanned = Array.from(localPlannedMap.values());
+
     this.store.state.transactions = activeMergedTxs;
+    this.store.state.plannedCashflows = activeMergedPlanned;
     if (typeof this.store.sortTransactions === 'function') {
       this.store.sortTransactions('date-desc');
     }
@@ -872,6 +1013,7 @@ export class SyncService {
     // ADIM 4: LocalStorage'a persist et ve arayüzü bilgilendir
     const applyRemoteData = () => {
       this.store.state.transactions = activeMergedTxs;
+      this.store.state.plannedCashflows = activeMergedPlanned;
       if (typeof this.store.sortTransactions === 'function') {
         this.store.sortTransactions('date-desc');
       }
@@ -885,7 +1027,7 @@ export class SyncService {
       applyRemoteData();
     }
 
-    console.info(`[SyncService] Full Cloud Bootstrap başarıyla tamamlandı. (${activeCloudTxs.length} aktif işlem yüklendi)`);
+    console.info(`[SyncService] Full Cloud Bootstrap başarıyla tamamlandı. (${activeCloudTxs.length} aktif işlem, ${activeCloudPlanned.length} aktif planlı akış yüklendi)`);
   }
 
   // 3.6. Bekleyen Yerel Değişiklikleri Buluta PUSH Etme
@@ -1054,6 +1196,75 @@ export class SyncService {
       hasPushedData = true;
     }
 
+    // ADIM 4.5: planned_cashflows PUSH (Outbox delete, create, update)
+    const plannedOutbox = this.getPlannedCashflowOutbox();
+    if (plannedOutbox.length > 0) {
+      const localPlannedList = this.store?.getPlannedCashflows() || [];
+      const localPlannedMap = new Map(localPlannedList.map(p => [p.id, p]));
+      const plannedDeletes = plannedOutbox.filter(item => item.operation === 'delete');
+      const plannedUpserts = plannedOutbox.filter(item => item.operation === 'create' || item.operation === 'insert' || item.operation === 'update');
+
+      // 1. Soft-delete planned cashflows
+      if (plannedDeletes.length > 0) {
+        const successfullyDeletedPlannedIds = [];
+        for (const item of plannedDeletes) {
+          const delAtIso = item.updatedAt ? new Date(item.updatedAt).toISOString() : new Date().toISOString();
+          const { error: delErr } = await client
+            .from('planned_cashflows')
+            .update({
+              is_deleted: true,
+              deleted_at: delAtIso,
+              updated_at: delAtIso
+            })
+            .eq('id', item.id)
+            .eq('user_id', user.id);
+
+          if (delErr) {
+            if (successfullyDeletedPlannedIds.length > 0) {
+              this.removeFromPlannedCashflowOutbox(successfullyDeletedPlannedIds);
+            }
+            throw new Error(`Planned cashflow soft-delete güncellenemedi (${item.id}): ${delErr.message}`);
+          }
+          successfullyDeletedPlannedIds.push(item.id);
+        }
+
+        if (successfullyDeletedPlannedIds.length > 0) {
+          this.removeFromPlannedCashflowOutbox(successfullyDeletedPlannedIds);
+          hasPushedData = true;
+        }
+      }
+
+      // 2. Upsert planned cashflows
+      if (plannedUpserts.length > 0) {
+        const itemsToUpsert = [];
+        for (const outItem of plannedUpserts) {
+          const item = outItem.payload || localPlannedMap.get(outItem.id);
+          if (item) {
+            itemsToUpsert.push(item);
+          }
+        }
+
+        if (itemsToUpsert.length > 0) {
+          const plannedPayload = itemsToUpsert.map(p => {
+            const upIso = p.updatedAt ? new Date(p.updatedAt).toISOString() : new Date().toISOString();
+            this.recordLocalWrite(p.id, upIso);
+            return mapPlannedCashflowToDb({ ...p, isDeleted: false }, user.id);
+          });
+
+          const { error: pushPlannedErr } = await client
+            .from('planned_cashflows')
+            .upsert(plannedPayload);
+
+          if (pushPlannedErr) {
+            throw new Error(`planned_cashflows gönderilemedi: ${pushPlannedErr.message}`);
+          }
+
+          this.removeFromPlannedCashflowOutbox(itemsToUpsert.map(p => p.id));
+          hasPushedData = true;
+        }
+      }
+    }
+
     // ADIM 5: user_sync_metadata güncellemesi
     if (hasPushedData) {
       const syncTimestamp = new Date().toISOString();
@@ -1220,8 +1431,50 @@ export class SyncService {
 
     const mergedTransactions = Array.from(localMap.values());
 
+    // ADIM 3.5: planned_cashflows Çek: TÜM KAYITLAR (last_synced_at filtresi OLMADAN)
+    const { data: cloudPlanned, error: cloudPlannedErr } = await client
+      .from('planned_cashflows')
+      .select('*')
+      .eq('user_id', user.id);
+
+    if (cloudPlannedErr) {
+      throw new Error(`planned_cashflows okunamadı: ${cloudPlannedErr.message}`);
+    }
+
+    const localPlannedMap = new Map((this.store?.state?.plannedCashflows || []).map(p => [p.id, p]));
+    const plannedOutbox = this.getPlannedCashflowOutbox();
+    const pendingPlannedOutboxMap = new Map(plannedOutbox.map(item => [item.id, item]));
+
+    (cloudPlanned || []).forEach(cp => {
+      const pendingItem = pendingPlannedOutboxMap.get(cp.id);
+
+      if (cp.is_deleted) {
+        if (pendingItem && (pendingItem.operation === 'create' || pendingItem.operation === 'insert' || pendingItem.operation === 'update')) {
+          // Yerel bekleyen işlemi koru!
+        } else {
+          localPlannedMap.delete(cp.id);
+        }
+      } else {
+        const localItem = localPlannedMap.get(cp.id);
+        const cloudUpdated = cp.updated_at ? new Date(cp.updated_at).getTime() : 0;
+        const localUpdated = localItem?.updatedAt ? new Date(localItem.updatedAt).getTime() : 0;
+
+        if (pendingItem && (pendingItem.operation === 'create' || pendingItem.operation === 'insert' || pendingItem.operation === 'update')) {
+          // Yerel bekleyen işlem varsa KORU!
+        } else if (!localItem || cloudUpdated >= localUpdated) {
+          localPlannedMap.set(cp.id, mapPlannedCashflowFromDb(cp));
+        }
+      }
+    });
+
+    const mergedPlanned = Array.from(localPlannedMap.values());
+
+    this.store.state.transactions = mergedTransactions;
+    this.store.state.plannedCashflows = mergedPlanned;
+
     const applyRemoteData = () => {
       this.store.state.transactions = mergedTransactions;
+      this.store.state.plannedCashflows = mergedPlanned;
       if (typeof this.store.sortTransactions === 'function') {
         this.store.sortTransactions('date-desc');
       }
@@ -1236,7 +1489,7 @@ export class SyncService {
     }
 
     this.lastFullCatchUpTime = Date.now();
-    console.info(`[SyncService] Full Cloud Catch-up tamamlandı (${mergedTransactions.length} aktif işlem).`);
+    console.info(`[SyncService] Full Cloud Catch-up tamamlandı (${mergedTransactions.length} aktif işlem, ${mergedPlanned.length} aktif planlı akış).`);
   }
 
   // 3.8. Çevrimdışı Yeniden Bağlanma Kurtarma Akışı (Offline Reconnect Recovery)
@@ -1280,8 +1533,10 @@ export class SyncService {
 
       // B) Bu cihazda yerel unpushed/dirty değişiklik var mı?
       const outbox = this.getOutbox();
+      const plannedOutbox = this.getPlannedCashflowOutbox();
       const hasDirty = Boolean(
         outbox.length > 0 ||
+        plannedOutbox.length > 0 ||
         (this.store && this.store.hasUnsyncedChanges) ||
         (this.store && this.store.dirtySettings) ||
         (this.store && this.store.dirtyPresets) ||
@@ -1532,6 +1787,54 @@ export class SyncService {
       }
     }
 
+    // --- PULL: planned_cashflows (Delta: Sadece updated_at > lastSyncedAt olanlar veya tümü) ---
+    let plannedQuery = client
+      .from('planned_cashflows')
+      .select('*')
+      .eq('user_id', user.id);
+
+    if (lastSyncedAt) {
+      const overlapTime = Math.max(0, new Date(lastSyncedAt).getTime() - 10000);
+      const overlapIso = new Date(overlapTime).toISOString();
+      plannedQuery = plannedQuery.gt('updated_at', overlapIso);
+    }
+
+    const { data: cloudPlanned, error: cloudPlannedErr } = await plannedQuery;
+
+    if (cloudPlannedErr) {
+      throw new Error(`planned_cashflows çekilemedi: ${cloudPlannedErr.message}`);
+    }
+
+    if (cloudPlanned && cloudPlanned.length > 0) {
+      const localPlannedMap = new Map((this.store.state.plannedCashflows || []).map(p => [p.id, p]));
+      const plannedOutbox = this.getPlannedCashflowOutbox();
+      const pendingPlannedOutboxMap = new Map(plannedOutbox.map(item => [item.id, item]));
+
+      cloudPlanned.forEach(cp => {
+        const pendingItem = pendingPlannedOutboxMap.get(cp.id);
+
+        if (cp.is_deleted) {
+          if (pendingItem && (pendingItem.operation === 'create' || pendingItem.operation === 'insert' || pendingItem.operation === 'update')) {
+            // Local outbox has pending write -> preserve local
+          } else {
+            localPlannedMap.delete(cp.id);
+          }
+        } else {
+          const localItem = localPlannedMap.get(cp.id);
+          const cloudUpdated = new Date(cp.updated_at).getTime();
+          const localUpdated = localItem?.updatedAt ? new Date(localItem.updatedAt).getTime() : 0;
+
+          if (pendingItem && (pendingItem.operation === 'create' || pendingItem.operation === 'insert' || pendingItem.operation === 'update')) {
+            // Local outbox wins
+          } else if (!localItem || cloudUpdated >= localUpdated) {
+            localPlannedMap.set(cp.id, mapPlannedCashflowFromDb(cp));
+          }
+        }
+      });
+
+      this.store.state.plannedCashflows = Array.from(localPlannedMap.values());
+    }
+
     // --- PUSH: Soft-delete kuyruğundakileri bulutta UPDATE et (YALNIZCA pullOnly DEĞİLSE) ---
     if (!pullOnly) {
       const deletedQueue = this.getDeletedQueue();
@@ -1597,6 +1900,68 @@ export class SyncService {
         }
         hasPushedData = true;
       }
+
+      // --- PUSH: Planned cashflows (YALNIZCA pullOnly DEĞİLSE) ---
+      const plannedOutbox = this.getPlannedCashflowOutbox();
+      if (plannedOutbox.length > 0) {
+        // Soft deletes
+        const plannedDeletes = plannedOutbox.filter(item => item.operation === 'delete');
+        if (plannedDeletes.length > 0) {
+          const successfullyDeletedPlannedIds = [];
+          for (const item of plannedDeletes) {
+            const delAtIso = item.updatedAt ? new Date(item.updatedAt).toISOString() : new Date().toISOString();
+            const { error: delErr } = await client
+              .from('planned_cashflows')
+              .update({
+                is_deleted: true,
+                deleted_at: delAtIso,
+                updated_at: delAtIso
+              })
+              .eq('id', item.id)
+              .eq('user_id', user.id);
+
+            if (delErr) {
+              if (successfullyDeletedPlannedIds.length > 0) {
+                this.removeFromPlannedCashflowOutbox(successfullyDeletedPlannedIds);
+              }
+              throw new Error(`Planned cashflow soft-delete güncellenemedi (${item.id}): ${delErr.message}`);
+            }
+            successfullyDeletedPlannedIds.push(item.id);
+          }
+          if (successfullyDeletedPlannedIds.length > 0) {
+            this.removeFromPlannedCashflowOutbox(successfullyDeletedPlannedIds);
+            hasPushedData = true;
+          }
+        }
+
+        // Upserts
+        const localPlannedMap = new Map((this.store?.state?.plannedCashflows || []).map(p => [p.id, p]));
+        const plannedUpserts = plannedOutbox.filter(item => item.operation === 'create' || item.operation === 'insert' || item.operation === 'update');
+        const itemsToUpsert = [];
+        for (const outItem of plannedUpserts) {
+          const item = outItem.payload || localPlannedMap.get(outItem.id);
+          if (item) itemsToUpsert.push(item);
+        }
+
+        if (itemsToUpsert.length > 0) {
+          const plannedPayload = itemsToUpsert.map(p => {
+            const upIso = p.updatedAt ? new Date(p.updatedAt).toISOString() : new Date().toISOString();
+            this.recordLocalWrite(p.id, upIso);
+            return mapPlannedCashflowToDb({ ...p, isDeleted: false }, user.id);
+          });
+
+          const { error: pushPlannedErr } = await client
+            .from('planned_cashflows')
+            .upsert(plannedPayload);
+
+          if (pushPlannedErr) {
+            throw new Error(`planned_cashflows gönderilemedi: ${pushPlannedErr.message}`);
+          }
+
+          this.removeFromPlannedCashflowOutbox(itemsToUpsert.map(p => p.id));
+          hasPushedData = true;
+        }
+      }
     }
 
     // --- METADATA: user_sync_metadata last_synced_at güncelle ---
@@ -1631,7 +1996,8 @@ export class SyncService {
     try {
       const backupData = {
         backupAt: new Date().toISOString(),
-        state: this.store.state
+        state: this.store.state,
+        plannedCashflows: (this.store && typeof this.store.getPlannedCashflows === 'function') ? this.store.getPlannedCashflows() : (this.store?.state?.plannedCashflows || [])
       };
       SafeStorage.setItem(PRE_CLOUD_BACKUP_KEY, JSON.stringify(backupData));
       console.info('[SyncService] Güvenli yerel yedek oluşturuldu.');
