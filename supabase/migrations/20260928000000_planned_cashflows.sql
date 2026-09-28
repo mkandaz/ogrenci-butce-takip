@@ -62,3 +62,16 @@ CREATE POLICY "Users can update own planned cashflows"
 CREATE POLICY "Users can delete own planned cashflows"
   ON planned_cashflows FOR DELETE
   USING (auth.uid() = user_id);
+
+-- Realtime: Tablonun Supabase Realtime (Postgres Changes) yayınına güvenle eklenmesi
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' 
+      AND schemaname = 'public' 
+      AND tablename = 'planned_cashflows'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE planned_cashflows;
+  END IF;
+END $$;

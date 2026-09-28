@@ -997,7 +997,9 @@ export class SyncService {
 
     activeCloudPlanned.forEach(acp => {
       const pendingItem = pendingPlannedOutboxMap.get(acp.id);
-      if (!pendingItem || (pendingItem.operation !== 'create' && pendingItem.operation !== 'insert' && pendingItem.operation !== 'update')) {
+      if (pendingItem && pendingItem.operation === 'delete') {
+        localPlannedMap.delete(acp.id);
+      } else if (!pendingItem || (pendingItem.operation !== 'create' && pendingItem.operation !== 'insert' && pendingItem.operation !== 'update')) {
         localPlannedMap.set(acp.id, acp);
       }
     });
@@ -1459,7 +1461,10 @@ export class SyncService {
         const cloudUpdated = cp.updated_at ? new Date(cp.updated_at).getTime() : 0;
         const localUpdated = localItem?.updatedAt ? new Date(localItem.updatedAt).getTime() : 0;
 
-        if (pendingItem && (pendingItem.operation === 'create' || pendingItem.operation === 'insert' || pendingItem.operation === 'update')) {
+        if (pendingItem && pendingItem.operation === 'delete') {
+          // Yerelde silinmiş ve bekleyen DELETE tombstone var -> buluttaki eski kayıt yereli diriltemez!
+          localPlannedMap.delete(cp.id);
+        } else if (pendingItem && (pendingItem.operation === 'create' || pendingItem.operation === 'insert' || pendingItem.operation === 'update')) {
           // Yerel bekleyen işlem varsa KORU!
         } else if (!localItem || cloudUpdated >= localUpdated) {
           localPlannedMap.set(cp.id, mapPlannedCashflowFromDb(cp));
@@ -1824,7 +1829,10 @@ export class SyncService {
           const cloudUpdated = new Date(cp.updated_at).getTime();
           const localUpdated = localItem?.updatedAt ? new Date(localItem.updatedAt).getTime() : 0;
 
-          if (pendingItem && (pendingItem.operation === 'create' || pendingItem.operation === 'insert' || pendingItem.operation === 'update')) {
+          if (pendingItem && pendingItem.operation === 'delete') {
+            // Local outbox delete tombstone wins over stale cloud row!
+            localPlannedMap.delete(cp.id);
+          } else if (pendingItem && (pendingItem.operation === 'create' || pendingItem.operation === 'insert' || pendingItem.operation === 'update')) {
             // Local outbox wins
           } else if (!localItem || cloudUpdated >= localUpdated) {
             localPlannedMap.set(cp.id, mapPlannedCashflowFromDb(cp));

@@ -369,6 +369,7 @@ export class BudgetStore {
       }
 
       SafeStorage.setItem(PLANNED_CASHFLOW_OUTBOX_KEY, JSON.stringify(queue));
+      this.hasUnsyncedChanges = true;
     } catch (e) {
       console.warn('[BudgetStore] addToPlannedCashflowOutbox hatası:', e);
     }
@@ -666,7 +667,11 @@ export class BudgetStore {
     if (!id) return false;
     const prevLen = (this.state.plannedCashflows || []).length;
     this.state.plannedCashflows = (this.state.plannedCashflows || []).filter(c => c.id !== id);
-    if (this.state.plannedCashflows.length !== prevLen) {
+    const wasInState = this.state.plannedCashflows.length !== prevLen;
+    const outbox = this.getPlannedCashflowOutbox();
+    const wasInOutbox = outbox.some(item => item.id === id);
+
+    if (wasInState || wasInOutbox) {
       const now = Date.now();
       this.addToPlannedCashflowOutbox({
         id,
@@ -1038,21 +1043,66 @@ export class BudgetStore {
       });
     }
 
-    if (mode === 'replace') {
-      this.state.transactions = validatedTxs;
-      if (rawPlannedCashflows) {
-        this.state.plannedCashflows = validatedPlanned;
-      }
-    } else {
-      // Merge
-      const txMap = new Map(this.state.transactions.map(t => [t.id, t]));
-      validatedTxs.forEach(t => txMap.set(t.id, t));
-      this.state.transactions = Array.from(txMap.values());
+    if (rawPlannedCashflows) {
+      const prevPlanned = this.state.plannedCashflows || [];
+      const prevPlannedMap = new Map(prevPlanned.map(p => [p.id, p]));
+      const importedIds = new Set(validatedPlanned.map(p => p.id));
 
-      if (rawPlannedCashflows) {
+      if (mode === 'replace') {
+        this.state.transactions = validatedTxs;
+        this.state.plannedCashflows = validatedPlanned;
+
+        // REPLACE Sözleşmesi: Yeni anlık görüntüde bulunmayan eski planlar için DELETE tombstone
+        prevPlanned.forEach(oldP => {
+          if (!importedIds.has(oldP.id)) {
+            this.addToPlannedCashflowOutbox({
+              id: oldP.id,
+              operation: 'delete',
+              payload: null,
+              updatedAt: Date.now(),
+              queuedAt: Date.now()
+            });
+          }
+        });
+
+        // İçe aktarılan planları outbox'a ekle (yeni: create, mevcut: update)
+        validatedPlanned.forEach(p => {
+          this.addToPlannedCashflowOutbox({
+            id: p.id,
+            operation: prevPlannedMap.has(p.id) ? 'update' : 'create',
+            payload: p,
+            updatedAt: p.updatedAt || Date.now(),
+            queuedAt: Date.now()
+          });
+        });
+      } else {
+        // Merge
+        const txMap = new Map(this.state.transactions.map(t => [t.id, t]));
+        validatedTxs.forEach(t => txMap.set(t.id, t));
+        this.state.transactions = Array.from(txMap.values());
+
         const pcMap = new Map((this.state.plannedCashflows || []).map(p => [p.id, p]));
         validatedPlanned.forEach(p => pcMap.set(p.id, p));
         this.state.plannedCashflows = Array.from(pcMap.values());
+
+        // MERGE Sözleşmesi: İçe aktarılan planları outbox'a ekle
+        validatedPlanned.forEach(p => {
+          this.addToPlannedCashflowOutbox({
+            id: p.id,
+            operation: prevPlannedMap.has(p.id) ? 'update' : 'create',
+            payload: p,
+            updatedAt: p.updatedAt || Date.now(),
+            queuedAt: Date.now()
+          });
+        });
+      }
+    } else {
+      if (mode === 'replace') {
+        this.state.transactions = validatedTxs;
+      } else {
+        const txMap = new Map(this.state.transactions.map(t => [t.id, t]));
+        validatedTxs.forEach(t => txMap.set(t.id, t));
+        this.state.transactions = Array.from(txMap.values());
       }
     }
 

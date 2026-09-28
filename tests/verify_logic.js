@@ -8238,11 +8238,334 @@ console.log('\n--- 26. FAZ 5.5B — PLANNED CASHFLOW PERSISTENCE, SUPABASE & DUR
   assert(metadataWritten === false, 'TC-352 user_sync_metadata NOT written when planned cashflows fails');
 }
 
+// --------------------------------------------------------------------------
+// 27. FAZ 5.5B — PRODUCTION HARDENING: REALTIME PUBLICATION, TOMBSTONES & IMPORT SYNC
+// --------------------------------------------------------------------------
+console.log('\n--- 27. FAZ 5.5B — PRODUCTION HARDENING: REALTIME PUBLICATION, TOMBSTONES & IMPORT SYNC (TC-353 - TC-365) ---');
+
+// TC-353: Migration SQL includes safe/idempotent addition of planned_cashflows to supabase_realtime publication
+{
+  const sqlPath = path.resolve(process.cwd(), 'supabase/migrations/20260928000000_planned_cashflows.sql');
+  const sqlContent = fs.readFileSync(sqlPath, 'utf8');
+  assert(sqlContent.includes("ALTER PUBLICATION supabase_realtime ADD TABLE planned_cashflows;"), 'TC-353 publication alter command present');
+  assert(sqlContent.includes("pubname = 'supabase_realtime'"), 'TC-353 publication name check present');
+  assert(sqlContent.includes("tablename = 'planned_cashflows'"), 'TC-353 tablename check present');
+}
+
+// TC-354: Offline create -> delete before any sync converts outbox entry from create to delete tombstone
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  const pc = store.addPlannedCashflow({ name: 'Geçici Plan', type: 'expense', amount: 500, recurrence: 'monthly', dayOfMonth: 1 });
+  assert(store.getPlannedCashflowOutbox().length === 1, 'TC-354 outbox has 1 create');
+  assert(store.getPlannedCashflowOutbox()[0].operation === 'create', 'TC-354 operation is create');
+
+  // Şimdi çevrimdışıyken silinir
+  const deleted = store.deletePlannedCashflow(pc.id);
+  assert(deleted === true, 'TC-354 delete returned true');
+  assert(store.getPlannedCashflows().length === 0, 'TC-354 removed from store');
+  const outbox = store.getPlannedCashflowOutbox();
+  assert(outbox.length === 1, 'TC-354 outbox retains entry');
+  assert(outbox[0].id === pc.id, 'TC-354 outbox entry matches id');
+  assert(outbox[0].operation === 'delete', 'TC-354 outbox operation converted to delete tombstone');
+}
+
+// TC-355: PWA restart / SafeStorage reload preserves delete tombstone across instance restarts
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const storeA = new BudgetStore();
+  const pc = storeA.addPlannedCashflow({ name: 'Tombstone Test', type: 'income', amount: 2000, recurrence: 'monthly', dayOfMonth: 5 });
+  storeA.deletePlannedCashflow(pc.id);
+  assert(storeA.getPlannedCashflowOutbox()[0].operation === 'delete', 'TC-355 storeA has tombstone');
+
+  // Tarayıcı / PWA kapandı, yeni store örneği açıldı
+  const storeB = new BudgetStore();
+  const outboxB = storeB.getPlannedCashflowOutbox();
+  assert(outboxB.length === 1, 'TC-355 storeB has 1 outbox item');
+  assert(outboxB[0].operation === 'delete', 'TC-355 tombstone preserved across restart');
+  assert(storeB.hasUnsyncedChanges === true, 'TC-355 hasUnsyncedChanges true on restart with tombstone');
+}
+
+// TC-356: Ambiguous network: create push committed on Supabase but response lost (network failure), client deletes locally -> outbox retains durable DELETE tombstone
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  const pc = store.addPlannedCashflow({ name: 'Ghost Candidate', type: 'expense', amount: 800, recurrence: 'monthly', dayOfMonth: 12 });
+
+  // Simüle edelim: create bulutta commit oldu ama istemci ağ kopması nedeniyle yanıt alamadı
+  assert(store.getPlannedCashflowOutbox().length === 1, 'TC-356 outbox has pending create');
+
+  // Kullanıcı yerelde siliyor
+  store.deletePlannedCashflow(pc.id);
+  const outbox = store.getPlannedCashflowOutbox();
+  assert(outbox.length === 1, 'TC-356 outbox not dropped');
+  assert(outbox[0].operation === 'delete', 'TC-356 outbox has durable DELETE tombstone preventing cloud ghost');
+}
+
+// TC-357: Reconnect push sends soft-delete for DELETE tombstone, clearing ghost record on Supabase and clearing outbox upon confirmation
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  const pc = store.addPlannedCashflow({ name: 'Ghost To Clear', type: 'expense', amount: 350, recurrence: 'monthly', dayOfMonth: 2 });
+  store.deletePlannedCashflow(pc.id);
+
+  let softDeleteCalled = false;
+  let softDeletePayload = null;
+  const mockClient = createMockClient({
+    planned_cashflows: {
+      update: (payload) => {
+        softDeleteCalled = true;
+        softDeletePayload = payload;
+        return { data: [payload], error: null };
+      }
+    },
+    user_sync_metadata: { update: () => ({ data: [], error: null }) }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  await sync.pushLocalChanges({ id: 'user-xyz' }, mockClient);
+  assert(softDeleteCalled === true, 'TC-357 soft-delete update called on Supabase');
+  assert(softDeletePayload.is_deleted === true, 'TC-357 is_deleted set to true on Supabase');
+  assert(Boolean(softDeletePayload.deleted_at), 'TC-357 deleted_at set on Supabase');
+  assert(store.getPlannedCashflowOutbox().length === 0, 'TC-357 tombstone cleared from outbox after Supabase confirmation');
+}
+
+// TC-358: Zero-row update resilience: if row never existed on Supabase, soft-delete succeeds cleanly and removes tombstone
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  const pc = store.addPlannedCashflow({ name: 'Never Reached Cloud', type: 'income', amount: 1200, recurrence: 'once', date: '2026-10-15' });
+  store.deletePlannedCashflow(pc.id);
+
+  const mockClient = createMockClient({
+    planned_cashflows: {
+      update: () => {
+        // 0 row updated, error null
+        return { data: [], error: null };
+      }
+    },
+    user_sync_metadata: { update: () => ({ data: [], error: null }) }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  await sync.pushLocalChanges({ id: 'user-xyz' }, mockClient);
+  assert(store.getPlannedCashflowOutbox().length === 0, 'TC-358 tombstone cleanly removed even if 0 rows matched on remote');
+}
+
+// TC-359: Cloud catch-up / delta pull with pending local DELETE tombstone prevents ghost record resurrection in local state
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  const pc = store.addPlannedCashflow({ id: 'ghost-item-1', name: 'Buluttaki Hayalet', type: 'expense', amount: 1500, recurrence: 'monthly', dayOfMonth: 1 });
+  // Kullanıcı sildi, tombstone bekliyor
+  store.deletePlannedCashflow('ghost-item-1');
+  assert(store.getPlannedCashflows().length === 0, 'TC-359 store has 0 items');
+  assert(store.getPlannedCashflowOutbox()[0].operation === 'delete', 'TC-359 outbox has tombstone');
+
+  // Bulutta hâlâ is_deleted = false olarak duran eski kayıt dönsün
+  const cloudRecords = [
+    { id: 'ghost-item-1', name: 'Buluttaki Hayalet', type: 'expense', amount: 1500, recurrence: 'monthly', day_of_month: 1, is_active: true, is_deleted: false, updated_at: '2026-09-28T18:00:00Z' }
+  ];
+
+  const mockClient = createMockClient({
+    user_settings: { select: () => ({ data: null, error: null }) },
+    presets: { select: () => ({ data: [], error: null }) },
+    transactions: { select: () => ({ data: [], error: null }) },
+    planned_cashflows: { select: () => ({ data: cloudRecords, error: null }) }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  await sync.runFullCloudCatchUp({ id: 'user-xyz' }, mockClient);
+  assert(store.getPlannedCashflowById('ghost-item-1') === null, 'TC-359 ghost record NOT resurrected during catchup');
+  assert(store.getPlannedCashflows().length === 0, 'TC-359 local state remains empty');
+}
+
+// TC-360: Second device pulling from cloud after tombstone sync receives is_deleted: true and deletes/does not resurrect item
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const device2Store = new BudgetStore();
+  device2Store.addPlannedCashflow({ id: 'shared-item-2', name: 'Ortak Plan', type: 'income', amount: 2000, recurrence: 'monthly', dayOfMonth: 8 });
+  device2Store.clearPlannedCashflowOutbox(); // senkronize kabul edilsin
+
+  // Cihaz 1 tombstone push etti ve bulutta is_deleted: true oldu
+  const cloudRecords = [
+    { id: 'shared-item-2', name: 'Ortak Plan', type: 'income', amount: 2000, recurrence: 'monthly', day_of_month: 8, is_active: true, is_deleted: true, deleted_at: '2026-09-28T18:10:00Z', updated_at: '2026-09-28T18:10:00Z' }
+  ];
+
+  const mockClient = createMockClient({
+    user_settings: { select: () => ({ data: null, error: null }) },
+    presets: { select: () => ({ data: [], error: null }) },
+    transactions: { select: () => ({ data: [], error: null }) },
+    planned_cashflows: { select: () => ({ data: cloudRecords, error: null }) }
+  });
+
+  const sync2 = new SyncService(device2Store, mockClient);
+  await sync2.runDeltaSync({ id: 'user-xyz' }, { last_synced_at: '2026-09-25T00:00:00Z' }, { pullOnly: true });
+  assert(device2Store.getPlannedCashflowById('shared-item-2') === null, 'TC-360 device 2 deleted item based on cloud is_deleted');
+}
+
+// TC-361: Authenticated import in MERGE mode enqueues durable create for new plans and update for existing plans
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  store.addPlannedCashflow({ id: 'exist-p1', name: 'Mevcut Plan', type: 'income', amount: 1000, recurrence: 'monthly', dayOfMonth: 1 });
+  store.clearPlannedCashflowOutbox(); // push edilmiş kabul edilsin
+
+  const importPayload = {
+    version: '1.1.0',
+    transactions: [{ id: '11111111-1111-4111-8111-111111111111', title: 'T', amount: 10, type: 'expense', categoryId: 'exp_other', date: '2026-09-01' }],
+    plannedCashflows: [
+      { id: 'exist-p1', name: 'Mevcut Plan Zamlı', type: 'income', amount: 1500, recurrence: 'monthly', dayOfMonth: 1 },
+      { id: 'new-p2', name: 'Yeni İçe Aktarılan', type: 'expense', amount: 400, recurrence: 'monthly', dayOfMonth: 15 }
+    ]
+  };
+
+  store.importData(importPayload, 'merge');
+  const outbox = store.getPlannedCashflowOutbox();
+  assert(outbox.length === 2, 'TC-361 outbox has 2 items');
+  const existEntry = outbox.find(o => o.id === 'exist-p1');
+  const newEntry = outbox.find(o => o.id === 'new-p2');
+  assert(existEntry && existEntry.operation === 'update', 'TC-361 exist-p1 enqueued as update');
+  assert(existEntry.payload.amount === 1500, 'TC-361 exist-p1 payload has new amount');
+  assert(newEntry && newEntry.operation === 'create', 'TC-361 new-p2 enqueued as create');
+  assert(store.hasUnsyncedChanges === true, 'TC-361 hasUnsyncedChanges is true');
+}
+
+// TC-362: Subsequent pushLocalChanges after MERGE import successfully pushes all imported plans to Supabase
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  const importPayload = {
+    version: '1.1.0',
+    transactions: [{ id: '11111111-1111-4111-8111-111111111111', title: 'T', amount: 10, type: 'expense', categoryId: 'exp_other', date: '2026-09-01' }],
+    plannedCashflows: [
+      { id: 'import-p1', name: 'Plan 1', type: 'income', amount: 1000, recurrence: 'monthly', dayOfMonth: 5 }
+    ]
+  };
+  store.importData(importPayload, 'merge');
+
+  let pushedRows = [];
+  const mockClient = createMockClient({
+    planned_cashflows: {
+      upsert: (rows) => {
+        pushedRows = rows;
+        return { data: rows, error: null };
+      }
+    },
+    user_sync_metadata: { update: () => ({ data: [], error: null }) }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  await sync.pushLocalChanges({ id: 'user-xyz' }, mockClient);
+  assert(pushedRows.length === 1, 'TC-362 1 planned cashflow pushed to Supabase');
+  assert(pushedRows[0].id === 'import-p1', 'TC-362 pushed id matches');
+  assert(store.getPlannedCashflowOutbox().length === 0, 'TC-362 outbox cleared after push');
+}
+
+// TC-363: Authenticated import in REPLACE mode enqueues durable delete tombstones for omitted plans and create/update for included plans
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  store.addPlannedCashflow({ id: 'stay-p1', name: 'Kalan Plan', type: 'income', amount: 1000, recurrence: 'monthly', dayOfMonth: 1 });
+  store.addPlannedCashflow({ id: 'drop-p2', name: 'Kaldırılacak Plan', type: 'expense', amount: 300, recurrence: 'monthly', dayOfMonth: 10 });
+  store.clearPlannedCashflowOutbox(); // push edilmiş kabul edilsin
+
+  const replacePayload = {
+    version: '1.1.0',
+    transactions: [{ id: '11111111-1111-4111-8111-111111111111', title: 'T', amount: 10, type: 'expense', categoryId: 'exp_other', date: '2026-09-01' }],
+    plannedCashflows: [
+      { id: 'stay-p1', name: 'Kalan Plan Güncellendi', type: 'income', amount: 1200, recurrence: 'monthly', dayOfMonth: 1 },
+      { id: 'new-p3', name: 'Yeni Eklenen Plan', type: 'expense', amount: 500, recurrence: 'monthly', dayOfMonth: 20 }
+    ]
+  };
+
+  store.importData(replacePayload, 'replace');
+  const outbox = store.getPlannedCashflowOutbox();
+  assert(outbox.length === 3, 'TC-363 outbox has 3 operations (1 delete, 1 update, 1 create)');
+  const delEntry = outbox.find(o => o.id === 'drop-p2');
+  const updateEntry = outbox.find(o => o.id === 'stay-p1');
+  const createEntry = outbox.find(o => o.id === 'new-p3');
+
+  assert(delEntry && delEntry.operation === 'delete', 'TC-363 omitted drop-p2 enqueued as DELETE tombstone');
+  assert(updateEntry && updateEntry.operation === 'update', 'TC-363 stay-p1 enqueued as update');
+  assert(createEntry && createEntry.operation === 'create', 'TC-363 new-p3 enqueued as create');
+}
+
+// TC-364: Subsequent pushLocalChanges after REPLACE import sends soft-deletes for omitted plans and upsert for replacement plans
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  store.addPlannedCashflow({ id: 'old-to-delete', name: 'Eski Silinecek', type: 'income', amount: 500, recurrence: 'monthly', dayOfMonth: 1 });
+  store.clearPlannedCashflowOutbox();
+
+  const replacePayload = {
+    version: '1.1.0',
+    transactions: [{ id: '11111111-1111-4111-8111-111111111111', title: 'T', amount: 10, type: 'expense', categoryId: 'exp_other', date: '2026-09-01' }],
+    plannedCashflows: [
+      { id: 'fresh-p1', name: 'Taze Plan', type: 'expense', amount: 750, recurrence: 'monthly', dayOfMonth: 15 }
+    ]
+  };
+  store.importData(replacePayload, 'replace');
+
+  let softDeletedId = null;
+  let upsertedIds = [];
+  const mockClient = createMockClient({
+    planned_cashflows: {
+      update: (payload, eqs) => {
+        softDeletedId = 'old-to-delete';
+        return { data: [payload], error: null };
+      },
+      upsert: (rows) => {
+        upsertedIds = rows.map(r => r.id);
+        return { data: rows, error: null };
+      }
+    },
+    user_sync_metadata: { update: () => ({ data: [], error: null }) }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  await sync.pushLocalChanges({ id: 'user-xyz' }, mockClient);
+  assert(softDeletedId === 'old-to-delete', 'TC-364 omitted plan soft-deleted in Supabase');
+  assert(upsertedIds.includes('fresh-p1'), 'TC-364 fresh plan upserted in Supabase');
+  assert(store.getPlannedCashflowOutbox().length === 0, 'TC-364 outbox cleared after push');
+}
+
+// TC-365: Old backup file without plannedCashflows imported in MERGE/REPLACE preserves existing planned cashflows and does not touch outbox
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  store.addPlannedCashflow({ id: 'existing-untouched', name: 'Dokunulmayacak Plan', type: 'income', amount: 3000, recurrence: 'monthly', dayOfMonth: 8 });
+  store.clearPlannedCashflowOutbox();
+
+  const legacyBackup = {
+    version: '1.0.0',
+    transactions: [{ id: '11111111-1111-4111-8111-111111111111', title: 'Old Tx', amount: 50, type: 'expense', categoryId: 'exp_food', date: '2026-09-01' }]
+  };
+
+  store.importData(legacyBackup, 'replace');
+  assert(store.getPlannedCashflows().length === 1, 'TC-365 existing planned cashflows preserved');
+  assert(store.getPlannedCashflowById('existing-untouched') !== null, 'TC-365 untouched item intact');
+  assert(store.getPlannedCashflowOutbox().length === 0, 'TC-365 outbox unchanged (no redundant tombstones created)');
+}
+
 console.log('\n====================================================');
 console.log(`🏁 ENTEGRE TEST SONUCU: ${passed} PASSED, ${failed} FAILED`);
 console.log('====================================================');
 
 process.exit(failed > 0 ? 1 : 0);
+
 
 
 
