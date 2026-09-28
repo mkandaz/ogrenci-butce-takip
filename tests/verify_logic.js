@@ -22,6 +22,7 @@ import {
   RECENT_WEIGHT,
   MTD_WEIGHT
 } from '../src/services/forecastEngine.js';
+import { generateInsights, RULE_THRESHOLDS } from '../src/services/insightEngine.js';
 
 console.log('====================================================');
 console.log('🚀 ÖĞRENCİ BÜTÇE TAKİP - ENTEGRE TEST PAKETİ (FAZ 2 & 3)');
@@ -5370,6 +5371,573 @@ const sept18Now = new Date(2026, 8, 18, 12, 0, 0); // 18 Eylül 2026
   const out2 = forecastMonth(txs, opts);
 
   assert(JSON.stringify(out1) === JSON.stringify(out2), 'TC-170 İki ardışık forecastMonth çalıştırması birebir aynı sonucu üretti (Deterministik)');
+}
+
+// --------------------------------------------------------------------------
+// 22. FAZ 5.3 — DETERMINISTIC INSIGHT / RULE ENGINE (TC-171 - TC-200)
+// --------------------------------------------------------------------------
+console.log('\n--- 22. FAZ 5.3 — DETERMINISTIC INSIGHT / RULE ENGINE ---');
+
+// TC-171: empty/no-expense data safe insight
+{
+  const res = generateInsights({ transactions: [], options: { year: 2026, month: 9, now: sept18Now } });
+  assert(res.insights.length > 0, 'TC-171 Boş işlemde insight üretildi');
+  assert(res.insights[0].id === 'NO_EXPENSE_ACTIVITY', 'TC-171 İlk insight NO_EXPENSE_ACTIVITY');
+  assert(res.insights[0].severity === 'info', 'TC-171 NO_EXPENSE_ACTIVITY severity info');
+  assert(!res.insights.some(i => i.id === 'SPENDING_ACCELERATING'), 'TC-171 Boş veride harcama hızlanma uyarısı çıkmadı');
+}
+
+// TC-172: low confidence -> insufficient data insight
+{
+  const txs = [{ id: '1', amount: 100, type: 'expense', date: '2026-09-01' }];
+  const res = generateInsights({ transactions: txs, options: { year: 2026, month: 9, now: new Date(2026, 8, 2, 12, 0, 0) } });
+  const hasInsufficient = res.insights.some(i => i.id === 'INSUFFICIENT_DATA');
+  assert(hasInsufficient, 'TC-172 Düşük veri güveninde INSUFFICIENT_DATA üretildi');
+  const insInsight = res.insights.find(i => i.id === 'INSUFFICIENT_DATA');
+  assert(insInsight.severity === 'info', 'TC-172 INSUFFICIENT_DATA severity info');
+}
+
+// TC-173: low confidence trend rule suppression
+{
+  // 2 günlük veri, harcama hızlanmış görünse bile (örneğin 1. gün 10, 2. gün 100) trend kuralları baskılanmalı
+  const txs = [
+    { id: '1', amount: 10, type: 'expense', date: '2026-09-01' },
+    { id: '2', amount: 100, type: 'expense', date: '2026-09-02' }
+  ];
+  const res = generateInsights({ transactions: txs, options: { year: 2026, month: 9, now: new Date(2026, 8, 2, 12, 0, 0) } });
+  assert(!res.insights.some(i => i.id === 'SPENDING_ACCELERATING'), 'TC-173 Düşük güvende SPENDING_ACCELERATING baskılandı');
+  assert(!res.insights.some(i => i.id === 'MONTH_SPEND_UP'), 'TC-173 Düşük güvende MONTH_SPEND_UP baskılandı');
+  assert(res.metadata.suppressedRuleCount > 0, 'TC-173 Baskılanan kural sayısı > 0');
+}
+
+// TC-174: velocity +20 threshold triggers acceleration
+{
+  // Yeterli veri ortamı: 25 gün, 15 gün aktivite
+  // MTD günlük ortalama = 300, Son 7 gün ortalama = 384 -> Değişim = +28% (>= 20%)
+  const txs = [];
+  txs.push({ id: 'prev', amount: 100, type: 'expense', date: '2026-08-01' });
+  // Gün 1-11: 1800 TL (11 gün)
+  for (let d = 1; d <= 11; d++) {
+    txs.push({ id: `d_${d}`, amount: 163.64, type: 'expense', date: `2026-09-${String(d).padStart(2, '0')}` });
+  }
+  // Gün 12-18 (son 7 gün): günde 384 TL -> 2688 TL
+  for (let d = 12; d <= 18; d++) {
+    txs.push({ id: `d_${d}`, amount: 384, type: 'expense', date: `2026-09-${String(d).padStart(2, '0')}` });
+  }
+  const res = generateInsights({ transactions: txs, options: { year: 2026, month: 9, now: sept18Now } });
+  const accInsight = res.insights.find(i => i.id === 'SPENDING_ACCELERATING');
+  assert(accInsight !== undefined, 'TC-174 Hızlanma eşiği (%20) üzerinde SPENDING_ACCELERATING tetiklendi');
+  assert(accInsight.severity === 'watch', 'TC-174 SPENDING_ACCELERATING severity watch');
+  assert(accInsight.evidence.metric === 'velocityChangePercent', 'TC-174 Evidence metriği velocityChangePercent');
+}
+
+// TC-175: velocity below threshold doesn't trigger
+{
+  // Değişim %19.99 veya %10 (Eşik %20'nin altında)
+  // MTD = 100, Son 7 gün = 115 -> %15 artış (< 20)
+  const txs = [];
+  txs.push({ id: 'prev', amount: 100, type: 'expense', date: '2026-08-01' });
+  for (let d = 1; d <= 11; d++) {
+    txs.push({ id: `d_${d}`, amount: 90.45, type: 'expense', date: `2026-09-${String(d).padStart(2, '0')}` });
+  }
+  for (let d = 12; d <= 18; d++) {
+    txs.push({ id: `d_${d}`, amount: 115, type: 'expense', date: `2026-09-${String(d).padStart(2, '0')}` });
+  }
+  const res = generateInsights({ transactions: txs, options: { year: 2026, month: 9, now: sept18Now } });
+  assert(!res.insights.some(i => i.id === 'SPENDING_ACCELERATING'), 'TC-175 %20 eşiğinin altındaki hızlanmada SPENDING_ACCELERATING tetiklenmedi');
+}
+
+// TC-176: negative velocity triggers slowing
+{
+  // Son 7 gün hızı %20'den fazla düşmüş (örn: -25%)
+  const txs = [];
+  txs.push({ id: 'prev', amount: 100, type: 'expense', date: '2026-08-01' });
+  // İlk 11 günde yüksek harcama: günde 200 TL
+  for (let d = 1; d <= 11; d++) {
+    txs.push({ id: `d_${d}`, amount: 200, type: 'expense', date: `2026-09-${String(d).padStart(2, '0')}` });
+  }
+  // Son 7 günde düşük harcama: günde 50 TL
+  for (let d = 12; d <= 18; d++) {
+    txs.push({ id: `d_${d}`, amount: 50, type: 'expense', date: `2026-09-${String(d).padStart(2, '0')}` });
+  }
+  const res = generateInsights({ transactions: txs, options: { year: 2026, month: 9, now: sept18Now } });
+  const slowInsight = res.insights.find(i => i.id === 'SPENDING_SLOWING');
+  assert(slowInsight !== undefined, 'TC-176 %20 yavaşlama eşiğinde SPENDING_SLOWING tetiklendi');
+  assert(slowInsight.severity === 'positive', 'TC-176 SPENDING_SLOWING severity positive');
+}
+
+// TC-177: same-period spend up triggers
+{
+  const analytics = {
+    summary: { totalExpense: 3000 },
+    dataQuality: { historyDaysAvailable: 30, expenseDaysWithActivity: 12 },
+    comparison: { percentageChange: 22, currentExpense: 3000, previousExpense: 2459, comparisonDays: 18 }
+  };
+  const forecast = { metadata: { isForecastApplicable: true }, confidence: { level: 'medium' } };
+  const res = generateInsights({ analytics, forecast });
+  const upInsight = res.insights.find(i => i.id === 'MONTH_SPEND_UP');
+  assert(upInsight !== undefined, 'TC-177 Geçen ayın aynı dönemine göre +%22 artışta MONTH_SPEND_UP tetiklendi');
+  assert(upInsight.severity === 'watch', 'TC-177 MONTH_SPEND_UP severity watch');
+}
+
+// TC-178: same-period spend down triggers
+{
+  const analytics = {
+    summary: { totalExpense: 2000 },
+    dataQuality: { historyDaysAvailable: 30, expenseDaysWithActivity: 12 },
+    comparison: { percentageChange: -25, currentExpense: 2000, previousExpense: 2666, comparisonDays: 18 }
+  };
+  const forecast = { metadata: { isForecastApplicable: true }, confidence: { level: 'medium' } };
+  const res = generateInsights({ analytics, forecast });
+  const downInsight = res.insights.find(i => i.id === 'MONTH_SPEND_DOWN');
+  assert(downInsight !== undefined, 'TC-178 Geçen ayın aynı dönemine göre -%25 düşüşte MONTH_SPEND_DOWN tetiklendi');
+  assert(downInsight.severity === 'positive', 'TC-178 MONTH_SPEND_DOWN severity positive');
+}
+
+// TC-179: comparison null -> no false insight
+{
+  const analytics = {
+    summary: { totalExpense: 2000 },
+    dataQuality: { historyDaysAvailable: 15, expenseDaysWithActivity: 8 },
+    comparison: { percentageChange: null, currentExpense: 2000, previousExpense: 0 }
+  };
+  const forecast = { metadata: { isForecastApplicable: true }, confidence: { level: 'medium' } };
+  const res = generateInsights({ analytics, forecast });
+  assert(!res.insights.some(i => i.id === 'MONTH_SPEND_UP'), 'TC-179 comparison.percentageChange null iken MONTH_SPEND_UP tetiklenmedi');
+  assert(!res.insights.some(i => i.id === 'MONTH_SPEND_DOWN'), 'TC-179 comparison.percentageChange null iken MONTH_SPEND_DOWN tetiklenmedi');
+}
+
+// TC-180: category +25 and >=10% share triggers
+{
+  const analytics = {
+    summary: { totalExpense: 5000 },
+    dataQuality: { historyDaysAvailable: 30, expenseDaysWithActivity: 10 },
+    categories: [
+      { categoryId: 'exp_food', categoryName: 'Yemek', currentAmount: 1500, previousAmount: 1000, percentageChange: 50, shareOfTotalExpense: 30 }
+    ]
+  };
+  const forecast = { metadata: { isForecastApplicable: true }, confidence: { level: 'medium' } };
+  const res = generateInsights({ analytics, forecast });
+  const catUp = res.insights.find(i => i.id === 'CATEGORY_SPEND_UP:exp_food');
+  assert(catUp !== undefined, 'TC-180 +%50 artış ve %30 pay ile CATEGORY_SPEND_UP:exp_food tetiklendi');
+  assert(catUp.ruleId === 'CATEGORY_SPEND_UP', 'TC-180 catUp.ruleId CATEGORY_SPEND_UP olarak ayrıştırıldı');
+  assert(catUp.severity === 'watch', 'TC-180 CATEGORY_SPEND_UP severity watch');
+}
+
+// TC-181: tiny category +200% but <10% share does NOT trigger
+{
+  const analytics = {
+    summary: { totalExpense: 10000 },
+    dataQuality: { historyDaysAvailable: 30, expenseDaysWithActivity: 10 },
+    categories: [
+      // 5 TL -> 15 TL (+%200) fakat toplamdaki payı %0.15 (< %10)
+      { categoryId: 'exp_other', categoryName: 'Diğer', currentAmount: 15, previousAmount: 5, percentageChange: 200, shareOfTotalExpense: 0.15 }
+    ]
+  };
+  const forecast = { metadata: { isForecastApplicable: true }, confidence: { level: 'medium' } };
+  const res = generateInsights({ analytics, forecast });
+  assert(!res.insights.some(i => i.id === 'CATEGORY_SPEND_UP:exp_other'), 'TC-181 Küçük tutarlı kategoride (%0.15 pay) CATEGORY_SPEND_UP tetiklenmedi');
+}
+
+// TC-182: category decline triggers
+{
+  const analytics = {
+    summary: { totalExpense: 5000 },
+    dataQuality: { historyDaysAvailable: 30, expenseDaysWithActivity: 10 },
+    comparison: { previousExpense: 5000 },
+    categories: [
+      { categoryId: 'exp_shopping', categoryName: 'Giyim', currentAmount: 400, previousAmount: 1000, percentageChange: -60, shareOfTotalExpense: 8 }
+    ]
+  };
+  const forecast = { metadata: { isForecastApplicable: true }, confidence: { level: 'medium' } };
+  const res = generateInsights({ analytics, forecast });
+  const catDown = res.insights.find(i => i.id === 'CATEGORY_SPEND_DOWN:exp_shopping');
+  assert(catDown !== undefined, 'TC-182 Önceki payı %20 olan kategoride -%60 düşüş ile CATEGORY_SPEND_DOWN:exp_shopping tetiklendi');
+  assert(catDown.ruleId === 'CATEGORY_SPEND_DOWN', 'TC-182 catDown.ruleId CATEGORY_SPEND_DOWN olarak ayrıştırıldı');
+  assert(catDown.params.previousShare === 20, 'TC-182 previousShare (1000 / 5000 * 100 = 20) türetildi');
+  assert(catDown.severity === 'positive', 'TC-182 CATEGORY_SPEND_DOWN severity positive');
+}
+
+// TC-183: high category share >=40 triggers
+{
+  const analytics = {
+    summary: { totalExpense: 5000 },
+    dataQuality: { historyDaysAvailable: 30, expenseDaysWithActivity: 10 },
+    categories: [
+      { categoryId: 'exp_food', categoryName: 'Yemek', currentAmount: 2300, shareOfTotalExpense: 46 }
+    ]
+  };
+  const forecast = { metadata: { isForecastApplicable: true }, confidence: { level: 'medium' } };
+  const res = generateInsights({ analytics, forecast });
+  const highShare = res.insights.find(i => i.id === 'HIGH_CATEGORY_SHARE:exp_food');
+  assert(highShare !== undefined, 'TC-183 %46 pay ile HIGH_CATEGORY_SHARE:exp_food tetiklendi');
+  assert(highShare.ruleId === 'HIGH_CATEGORY_SHARE', 'TC-183 highShare.ruleId HIGH_CATEGORY_SHARE olarak ayrıştırıldı');
+  assert(highShare.params.shareOfTotalExpense === 46, 'TC-183 shareOfTotalExpense parametresi 46');
+}
+
+// TC-184: top category dedup with high share
+{
+  const analytics = {
+    summary: { totalExpense: 5000 },
+    dataQuality: { historyDaysAvailable: 30, expenseDaysWithActivity: 10 },
+    categories: [
+      { categoryId: 'exp_food', categoryName: 'Yemek', currentAmount: 2300, shareOfTotalExpense: 46 },
+      { categoryId: 'exp_transport', categoryName: 'Ulaşım', currentAmount: 800, shareOfTotalExpense: 16 }
+    ]
+  };
+  const forecast = { metadata: { isForecastApplicable: true }, confidence: { level: 'medium' } };
+  const res = generateInsights({ analytics, forecast });
+  assert(res.insights.some(i => i.id === 'HIGH_CATEGORY_SHARE:exp_food'), 'TC-184 HIGH_CATEGORY_SHARE:exp_food mevcut');
+  assert(!res.insights.some(i => i.id === 'TOP_SPENDING_CATEGORY'), 'TC-184 HIGH_CATEGORY_SHARE tetiklendiğinde TOP_SPENDING_CATEGORY dedup ile baskılandı');
+}
+
+// TC-185: negative projected balance triggers warning
+{
+  const analytics = { summary: { totalExpense: 5000 }, dataQuality: { historyDaysAvailable: 30, expenseDaysWithActivity: 10 } };
+  const forecast = {
+    metadata: { isForecastApplicable: true },
+    confidence: { level: 'high' },
+    forecast: {
+      projectedEndBalanceAssumingNoNewIncome: -750,
+      projectedRemainingExpense: 3750
+    }
+  };
+  const res = generateInsights({ analytics, forecast });
+  const negWarn = res.insights.find(i => i.id === 'PROJECTED_BALANCE_NEGATIVE_WITHOUT_NEW_INCOME');
+  assert(negWarn !== undefined, 'TC-185 Eksi bakiye projeksiyonunda uyarı tetiklendi');
+  assert(negWarn.severity === 'warning', 'TC-185 Uyarı severity warning');
+  assert(negWarn.priority === 95, 'TC-185 Uyarı priority 95');
+}
+
+// TC-186: negative-balance insight explicitly carries no-new-income assumption metadata/message key
+{
+  const analytics = { summary: { totalExpense: 5000 }, dataQuality: { historyDaysAvailable: 30, expenseDaysWithActivity: 10 } };
+  const forecast = {
+    metadata: { isForecastApplicable: true },
+    confidence: { level: 'high' },
+    forecast: {
+      projectedEndBalanceAssumingNoNewIncome: -750,
+      projectedRemainingExpense: 3750
+    }
+  };
+  const res = generateInsights({ analytics, forecast });
+  const negWarn = res.insights.find(i => i.id === 'PROJECTED_BALANCE_NEGATIVE_WITHOUT_NEW_INCOME');
+  assert(negWarn.messageKey === 'insights.projectedNegativeBalanceNoIncome', 'TC-186 messageKey projectedNegativeBalanceNoIncome sözleşmesine uygun');
+  assert(negWarn.evidence.metric === 'projectedEndBalanceAssumingNoNewIncome', 'TC-186 evidence metriği projectedEndBalanceAssumingNoNewIncome');
+}
+
+// TC-187: missing current balance -> no false negative balance warning
+{
+  const analytics = { summary: { totalExpense: 5000 }, dataQuality: { historyDaysAvailable: 30, expenseDaysWithActivity: 10 } };
+  const forecast = {
+    metadata: { isForecastApplicable: true },
+    confidence: { level: 'high' },
+    forecast: {
+      projectedEndBalanceAssumingNoNewIncome: null
+    }
+  };
+  const res = generateInsights({ analytics, forecast });
+  assert(!res.insights.some(i => i.id === 'PROJECTED_BALANCE_NEGATIVE_WITHOUT_NEW_INCOME'), 'TC-187 Bakiye parametresi yokken yanlış eksi bakiye uyarısı üretilmedi');
+}
+
+// TC-188: low forecast confidence insight
+{
+  const analytics = { summary: { totalExpense: 2000 }, dataQuality: { historyDaysAvailable: 5, expenseDaysWithActivity: 2 } };
+  const forecast = {
+    metadata: { isForecastApplicable: true },
+    confidence: { level: 'low', score: 35, sampleDays: 5, activeExpenseDays: 2 }
+  };
+  const res = generateInsights({ analytics, forecast });
+  const lowConf = res.insights.find(i => i.id === 'LOW_FORECAST_CONFIDENCE');
+  assert(lowConf !== undefined, 'TC-188 LOW_FORECAST_CONFIDENCE içgörüsü üretildi');
+  assert(lowConf.params.confidenceScore === 35, 'TC-188 Güven puanı parametresi doğru');
+}
+
+// TC-189: forecast model spread >=15% triggers
+{
+  const analytics = { summary: { totalExpense: 5000 }, dataQuality: { historyDaysAvailable: 30, expenseDaysWithActivity: 10 } };
+  const forecast = {
+    metadata: { isForecastApplicable: true },
+    confidence: { level: 'medium' },
+    forecast: {
+      projectedExpense: 10000,
+      lowerProjection: 9000,
+      upperProjection: 11000 // spread = 2000, spreadPercent = 20% >= 15%
+    }
+  };
+  const res = generateInsights({ analytics, forecast });
+  const disInsight = res.insights.find(i => i.id === 'FORECAST_MODEL_DISAGREEMENT');
+  assert(disInsight !== undefined, 'TC-189 Model farkı %20 >= %15 iken FORECAST_MODEL_DISAGREEMENT tetiklendi');
+  assert(disInsight.evidence.metric === 'forecastSpreadPercent', 'TC-189 Evidence metriği forecastSpreadPercent');
+}
+
+// TC-190: spread below threshold does not trigger
+{
+  const analytics = { summary: { totalExpense: 5000 }, dataQuality: { historyDaysAvailable: 30, expenseDaysWithActivity: 10 } };
+  const forecast = {
+    metadata: { isForecastApplicable: true },
+    confidence: { level: 'medium' },
+    forecast: {
+      projectedExpense: 10000,
+      lowerProjection: 9500,
+      upperProjection: 10500 // spread = 1000, spreadPercent = 10% < 15%
+    }
+  };
+  const res = generateInsights({ analytics, forecast });
+  assert(!res.insights.some(i => i.id === 'FORECAST_MODEL_DISAGREEMENT'), 'TC-190 Model farkı %10 < %15 iken FORECAST_MODEL_DISAGREEMENT tetiklenmedi');
+}
+
+// TC-191: priority sorting descending
+{
+  const analytics = {
+    summary: { totalExpense: 5000 },
+    dataQuality: { historyDaysAvailable: 30, expenseDaysWithActivity: 10 },
+    spendingVelocity: { velocityChangePercent: 30, last7DaysDailyAverage: 400, monthToDateDailyAverage: 300 },
+    comparison: { percentageChange: 25, currentExpense: 5000, previousExpense: 4000, comparisonDays: 18 }
+  };
+  const forecast = {
+    metadata: { isForecastApplicable: true },
+    confidence: { level: 'high' },
+    forecast: {
+      projectedEndBalanceAssumingNoNewIncome: -500,
+      projectedRemainingExpense: 3000
+    }
+  };
+  const res = generateInsights({ analytics, forecast });
+  for (let i = 0; i < res.insights.length - 1; i++) {
+    assert(res.insights[i].priority >= res.insights[i + 1].priority, `TC-191 Öncelik sıralaması azalan: ${res.insights[i].priority} >= ${res.insights[i + 1].priority}`);
+  }
+}
+
+// TC-192: maxInsights limit works
+{
+  const analytics = {
+    summary: { totalExpense: 5000 },
+    dataQuality: { historyDaysAvailable: 30, expenseDaysWithActivity: 10 },
+    spendingVelocity: { velocityChangePercent: 30 },
+    comparison: { percentageChange: 25 },
+    categories: [
+      { categoryId: 'c1', categoryName: 'Yemek', currentAmount: 2000, previousAmount: 1000, percentageChange: 100, shareOfTotalExpense: 40 },
+      { categoryId: 'c2', categoryName: 'Ulaşım', currentAmount: 1500, previousAmount: 500, percentageChange: 200, shareOfTotalExpense: 30 }
+    ]
+  };
+  const forecast = {
+    metadata: { isForecastApplicable: true },
+    confidence: { level: 'high' },
+    forecast: {
+      projectedEndBalanceAssumingNoNewIncome: -500,
+      projectedExpense: 10000,
+      lowerProjection: 8000,
+      upperProjection: 12000
+    }
+  };
+  const resLimit = generateInsights({ analytics, forecast, options: { maxInsights: 2 } });
+  assert(resLimit.insights.length === 2, 'TC-192 maxInsights=2 kısıtıyla tam 2 içgörü döndürüldü');
+}
+
+// TC-193: duplicate IDs prevented
+{
+  const analytics = {
+    summary: { totalExpense: 5000 },
+    dataQuality: { historyDaysAvailable: 30, expenseDaysWithActivity: 10 }
+  };
+  const forecast = { metadata: { isForecastApplicable: true }, confidence: { level: 'medium' } };
+  const res = generateInsights({ analytics, forecast });
+  const ids = res.insights.map(i => i.id);
+  const uniqueIds = new Set(ids);
+  assert(ids.length === uniqueIds.size, 'TC-193 Çıktıda yinelenen ID bulunmuyor');
+}
+
+// TC-194: category insight count capped
+{
+  const analytics = {
+    summary: { totalExpense: 10000 },
+    dataQuality: { historyDaysAvailable: 30, expenseDaysWithActivity: 10 },
+    categories: [
+      { categoryId: 'c1', categoryName: 'Kat 1', currentAmount: 2000, previousAmount: 1000, percentageChange: 100, shareOfTotalExpense: 20 },
+      { categoryId: 'c2', categoryName: 'Kat 2', currentAmount: 2000, previousAmount: 1000, percentageChange: 90, shareOfTotalExpense: 20 },
+      { categoryId: 'c3', categoryName: 'Kat 3', currentAmount: 2000, previousAmount: 1000, percentageChange: 80, shareOfTotalExpense: 20 },
+      { categoryId: 'c4', categoryName: 'Kat 4', currentAmount: 2000, previousAmount: 1000, percentageChange: 70, shareOfTotalExpense: 20 }
+    ]
+  };
+  const forecast = { metadata: { isForecastApplicable: true }, confidence: { level: 'high' } };
+  const res = generateInsights({ analytics, forecast, options: { maxInsights: 10 } });
+  const surgeInsights = res.insights.filter(i => i.type === 'category_surge');
+  assert(surgeInsights.length <= 2, 'TC-194 Kategori sıçrama içgörüleri en fazla 2 adetle sınırlandı');
+}
+
+// TC-195: evidence includes metric/value/threshold
+{
+  const analytics = {
+    summary: { totalExpense: 5000 },
+    dataQuality: { historyDaysAvailable: 30, expenseDaysWithActivity: 10 },
+    spendingVelocity: { velocityChangePercent: 28, last7DaysDailyAverage: 400, monthToDateDailyAverage: 312.5 }
+  };
+  const forecast = { metadata: { isForecastApplicable: true }, confidence: { level: 'high' } };
+  const res = generateInsights({ analytics, forecast });
+  const acc = res.insights.find(i => i.id === 'SPENDING_ACCELERATING');
+  assert(acc.evidence.metric === 'velocityChangePercent', 'TC-195 evidence metric mevcut');
+  assert(acc.evidence.value === 28, 'TC-195 evidence value mevcut');
+  assert(acc.evidence.threshold === 20, 'TC-195 evidence threshold mevcut');
+  assert(acc.evidence.comparison === '>=', 'TC-195 evidence comparison mevcut');
+}
+
+// TC-196: action metadata correct
+{
+  const analytics = {
+    summary: { totalExpense: 5000 },
+    dataQuality: { historyDaysAvailable: 30, expenseDaysWithActivity: 10 },
+    categories: [
+      { categoryId: 'exp_food', categoryName: 'Yemek', currentAmount: 2300, shareOfTotalExpense: 46 }
+    ]
+  };
+  const forecast = { metadata: { isForecastApplicable: true }, confidence: { level: 'medium' } };
+  const res = generateInsights({ analytics, forecast });
+  const highShare = res.insights.find(i => i.id === 'HIGH_CATEGORY_SHARE:exp_food');
+  assert(highShare.action && highShare.action.type === 'OPEN_CATEGORY', 'TC-196 Action tipi OPEN_CATEGORY');
+  assert(highShare.action.categoryId === 'exp_food', 'TC-196 Action categoryId doğru');
+}
+
+// TC-197: counts metadata correct
+{
+  const analytics = {
+    summary: { totalExpense: 5000 },
+    dataQuality: { historyDaysAvailable: 30, expenseDaysWithActivity: 10 },
+    spendingVelocity: { velocityChangePercent: 28 },
+    comparison: { percentageChange: -25 }
+  };
+  const forecast = {
+    metadata: { isForecastApplicable: true },
+    confidence: { level: 'high' },
+    forecast: { projectedEndBalanceAssumingNoNewIncome: -200 }
+  };
+  const res = generateInsights({ analytics, forecast, options: { maxInsights: 10 } });
+  let expectedWarning = 0, expectedWatch = 0, expectedPositive = 0, expectedInfo = 0;
+  res.insights.forEach(i => {
+    if (i.severity === 'warning') expectedWarning++;
+    if (i.severity === 'watch') expectedWatch++;
+    if (i.severity === 'positive') expectedPositive++;
+    if (i.severity === 'info') expectedInfo++;
+  });
+  assert(res.counts.warning === expectedWarning, 'TC-197 counts.warning doğru');
+  assert(res.counts.watch === expectedWatch, 'TC-197 counts.watch doğru');
+  assert(res.counts.positive === expectedPositive, 'TC-197 counts.positive doğru');
+  assert(res.counts.info === expectedInfo, 'TC-197 counts.info doğru');
+}
+
+// TC-198: input objects are not mutated
+{
+  const frozenAnalytics = Object.freeze({
+    summary: Object.freeze({ totalExpense: 1000 }),
+    dataQuality: Object.freeze({ historyDaysAvailable: 30, expenseDaysWithActivity: 10 }),
+    categories: Object.freeze([Object.freeze({ categoryId: 'exp_food', currentAmount: 500, shareOfTotalExpense: 50 })])
+  });
+  const frozenForecast = Object.freeze({
+    metadata: Object.freeze({ isForecastApplicable: true }),
+    confidence: Object.freeze({ level: 'high' }),
+    forecast: Object.freeze({ projectedExpense: 2000 })
+  });
+  let mutated = false;
+  try {
+    generateInsights({ analytics: frozenAnalytics, forecast: frozenForecast });
+  } catch (e) {
+    mutated = true;
+  }
+  assert(!mutated, 'TC-198 Donmuş girdi nesneleri üzerinde hiçbir mutasyon yapılmadı');
+}
+
+// TC-199: zero network/Supabase/DOM/LocalStorage dependency
+{
+  const pureRes = generateInsights({ transactions: [{ amount: 100, type: 'expense', date: '2026-09-01' }], options: { year: 2026, month: 9, now: sept18Now } });
+  assert(typeof pureRes === 'object' && pureRes !== null, 'TC-199 Insight motoru harici bağımlılık olmadan saf JS olarak çalıştı');
+}
+
+// TC-200: same input = exactly same output
+{
+  const params = {
+    transactions: [
+      { id: '1', amount: 500, type: 'expense', categoryId: 'exp_food', date: '2026-09-05' },
+      { id: '2', amount: 1000, type: 'income', categoryId: 'inc_scholarship', date: '2026-09-01' }
+    ],
+    options: { year: 2026, month: 9, now: sept18Now, currentAvailableBalance: 3000 }
+  };
+  const out1 = generateInsights(params);
+  const out2 = generateInsights(params);
+  assert(JSON.stringify(out1) === JSON.stringify(out2), 'TC-200 İki ardışık generateInsights çalıştırması birebir aynı sonucu üretti (Deterministik)');
+}
+
+// --------------------------------------------------------------------------
+// EK DOĞRULAMA TESTLERİ (REFINED ADJUSTMENTS)
+// --------------------------------------------------------------------------
+
+// TC-201: NO_EXPENSE_ACTIVITY precedence suppresses INSUFFICIENT_DATA and LOW_FORECAST_CONFIDENCE
+{
+  const emptyRes = generateInsights({ transactions: [], options: { year: 2026, month: 9, now: sept18Now } });
+  assert(emptyRes.insights.length === 1, 'TC-201 0 harcamada yalnızca tek bir NO_EXPENSE_ACTIVITY insight döndü');
+  assert(emptyRes.insights[0].ruleId === 'NO_EXPENSE_ACTIVITY', 'TC-201 İlk insight ruleId NO_EXPENSE_ACTIVITY');
+  assert(!emptyRes.insights.some(i => i.id === 'INSUFFICIENT_DATA'), 'TC-201 NO_EXPENSE_ACTIVITY altında INSUFFICIENT_DATA baskılandı');
+  assert(!emptyRes.insights.some(i => i.id === 'LOW_FORECAST_CONFIDENCE'), 'TC-201 NO_EXPENSE_ACTIVITY altında LOW_FORECAST_CONFIDENCE baskılandı');
+}
+
+// TC-202: CATEGORY_SPEND_DOWN previousShare null-safety when previousExpense is 0
+{
+  const analytics = {
+    summary: { totalExpense: 1000 },
+    dataQuality: { historyDaysAvailable: 30, expenseDaysWithActivity: 10 },
+    comparison: { previousExpense: 0 }, // Önceki harcama 0
+    categories: [
+      { categoryId: 'exp_food', categoryName: 'Yemek', currentAmount: 200, previousAmount: 0, percentageChange: -30, shareOfTotalExpense: 20 }
+    ]
+  };
+  const forecast = { metadata: { isForecastApplicable: true }, confidence: { level: 'medium' } };
+  const res = generateInsights({ analytics, forecast });
+  assert(!res.insights.some(i => i.ruleId === 'CATEGORY_SPEND_DOWN'), 'TC-202 previousExpense=0 iken CATEGORY_SPEND_DOWN tetiklenmedi (previousShare null güvenli)');
+}
+
+// TC-203: FORECAST_MODEL_DISAGREEMENT safely handles projectedExpense === 0
+{
+  const analytics = { summary: { totalExpense: 0 }, dataQuality: { historyDaysAvailable: 30, expenseDaysWithActivity: 10 } };
+  const forecast = {
+    metadata: { isForecastApplicable: true },
+    confidence: { level: 'medium' },
+    forecast: {
+      projectedExpense: 0, // Sıfır tahmin
+      lowerProjection: 0,
+      upperProjection: 500
+    }
+  };
+  const res = generateInsights({ analytics, forecast });
+  assert(!res.insights.some(i => i.ruleId === 'FORECAST_MODEL_DISAGREEMENT'), 'TC-203 projectedExpense=0 iken FORECAST_MODEL_DISAGREEMENT güvenle tetiklenmedi (NaN/Infinity yok)');
+}
+
+// TC-204: Metadata distinction: triggeredRuleCount, returnedInsightCount, suppressedRuleCount, evaluatedRuleCount
+{
+  const analytics = {
+    summary: { totalExpense: 5000 },
+    dataQuality: { historyDaysAvailable: 30, expenseDaysWithActivity: 10 },
+    spendingVelocity: { velocityChangePercent: 30 },
+    comparison: { percentageChange: 25 },
+    categories: [
+      { categoryId: 'c1', categoryName: 'K1', currentAmount: 2000, previousAmount: 1000, percentageChange: 100, shareOfTotalExpense: 40 },
+      { categoryId: 'c2', categoryName: 'K2', currentAmount: 1500, previousAmount: 500, percentageChange: 200, shareOfTotalExpense: 30 },
+      { categoryId: 'c3', categoryName: 'K3', currentAmount: 1000, previousAmount: 400, percentageChange: 150, shareOfTotalExpense: 20 }
+    ]
+  };
+  const forecast = {
+    metadata: { isForecastApplicable: true },
+    confidence: { level: 'high' },
+    forecast: {
+      projectedEndBalanceAssumingNoNewIncome: -500,
+      projectedExpense: 10000,
+      lowerProjection: 8000,
+      upperProjection: 12000
+    }
+  };
+  const resMeta = generateInsights({ analytics, forecast, options: { maxInsights: 3 } });
+  assert(resMeta.metadata.returnedInsightCount === 3, 'TC-204 returnedInsightCount = 3');
+  assert(resMeta.metadata.triggeredRuleCount >= 3, 'TC-204 triggeredRuleCount >= returnedInsightCount');
+  assert(typeof resMeta.metadata.suppressedRuleCount === 'number', 'TC-204 suppressedRuleCount sayı');
+  assert(typeof resMeta.metadata.evaluatedRuleCount === 'number', 'TC-204 evaluatedRuleCount sayı');
 }
 
 console.log('\n====================================================');

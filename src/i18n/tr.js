@@ -214,5 +214,20 @@ export default {
     statusPending: 'Bekleyen Değişiklikler',
     statusOffline: 'Çevrimdışı Mod',
     statusError: 'Eşitleme Hatası'
+  },
+  insights: {
+    insufficientData: 'Daha kesin finansal içgörüler için birkaç gün daha işlem kaydı gerekiyor.',
+    spendingAccelerating: 'Son 7 gündeki harcama hızın aylık ortalamanın %{changePercent} üzerinde seyrediyor.',
+    spendingSlowing: 'Son 7 gündeki günlük harcama hızın aylık ortalamaya göre %{changePercent} daha düşük.',
+    monthSpendUp: 'Geçen ayın aynı dönemine göre harcaman %{changePercent} arttı.',
+    monthSpendDown: 'Geçen ayın aynı dönemine göre harcaman %{changePercent} azaldı.',
+    categorySpendUp: '{category} harcaman geçen ayın aynı dönemine göre %{changePercent} arttı.',
+    categorySpendDown: '{category} harcaman geçen ayın aynı dönemine göre %{changePercent} azaldı.',
+    highCategoryShare: 'Bu ayki harcamalarının %{shareOfTotalExpense}\'i {category} kategorisinde yoğunlaşıyor.',
+    topSpendingCategory: 'Bu ay en çok harcama yapılan kategori: {category}.',
+    projectedNegativeBalanceNoIncome: 'Yeni gelir gelmediği varsayımıyla, mevcut harcama temposu ay sonunda eksi bakiye öngörüyor.',
+    lowForecastConfidence: 'Harcama tahmini sınırlı veri geçmişiyle hesaplandı; yeni işlemler eklendikçe netleşecek.',
+    forecastModelDisagreement: 'Harcama modelleri arasında belirgin fark var; harcamaların dalgalı seyrediyor.',
+    noExpenseActivity: 'Bu dönemde henüz kaydedilmiş bir harcama bulunmuyor.'
   }
 };

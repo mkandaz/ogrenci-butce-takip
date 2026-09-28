@@ -214,5 +214,20 @@ export default {
     statusPending: 'Pending Changes',
     statusOffline: 'Offline Mode',
     statusError: 'Sync Error'
+  },
+  insights: {
+    insufficientData: 'A few more days of transaction history is needed for reliable financial insights.',
+    spendingAccelerating: 'Your spending pace in the last 7 days is %{changePercent} above your monthly average.',
+    spendingSlowing: 'Your spending pace in the last 7 days is %{changePercent} lower than your monthly average.',
+    monthSpendUp: 'Compared to the same period last month, your spending increased by %{changePercent}.',
+    monthSpendDown: 'Compared to the same period last month, your spending decreased by %{changePercent}.',
+    categorySpendUp: 'Your {category} spending increased by %{changePercent} compared to the same period last month.',
+    categorySpendDown: 'Your {category} spending decreased by %{changePercent} compared to the same period last month.',
+    highCategoryShare: '%{shareOfTotalExpense} of your expenses this month is concentrated in {category}.',
+    topSpendingCategory: 'Highest spending category this month: {category}.',
+    projectedNegativeBalanceNoIncome: 'Assuming no new income arrives, your current pace projects a negative balance by month end.',
+    lowForecastConfidence: 'Spending forecast calculated with limited data history; will become more accurate as new transactions are added.',
+    forecastModelDisagreement: 'Significant divergence between spending models; indicates volatile spending patterns.',
+    noExpenseActivity: 'No expenses recorded in this period yet.'
   }
 };
