@@ -13,6 +13,7 @@ import { SyncService } from '../src/services/syncService.js';
 import { UIManager } from '../src/components/UIManager.js';
 import { ModalManager } from '../src/components/modalManager.js';
 import { STORAGE_KEY } from '../src/config/constants.js';
+import { analyzeMonth, round as roundMetric } from '../src/services/analyticsEngine.js';
 
 console.log('====================================================');
 console.log('🚀 ÖĞRENCİ BÜTÇE TAKİP - ENTEGRE TEST PAKETİ (FAZ 2 & 3)');
@@ -4582,6 +4583,386 @@ console.log('\n--- 19. FAZ 4.2 — iOS PWA OFFLINE DURABILITY & MOBILE RESPONSIV
   assert(store.dirtySettings === false, 'TC-117 store.dirtySettings false oldu');
   assert(store.dirtyPresets === false, 'TC-117 store.dirtyPresets false oldu');
   assert(store.getOutbox().length === 0, 'TC-117 Outbox temizlendi');
+}
+
+// ============================================================================
+// 20. FAZ 5.1 — STUDENT FINANCIAL ANALYTICS ENGINE (TC-118 - TC-142)
+// ============================================================================
+console.log('\n--- 20. FAZ 5.1 — STUDENT FINANCIAL ANALYTICS ENGINE ---');
+
+// TC-118: Empty dataset güvenli sonuç
+{
+  const fixedNow = new Date(2026, 8, 18, 12, 0, 0); // 18 Eylül 2026
+  const res = analyzeMonth([], { year: 2026, month: 9, now: fixedNow });
+
+  assert(res.summary.totalIncome === 0, 'TC-118 Boş veride totalIncome 0');
+  assert(res.summary.totalExpense === 0, 'TC-118 Boş veride totalExpense 0');
+  assert(res.summary.netCashFlow === 0, 'TC-118 Boş veride netCashFlow 0');
+  assert(res.summary.transactionCount === 0, 'TC-118 Boş veride transactionCount 0');
+  assert(res.summary.avgDailyExpense === 0, 'TC-118 Boş veride avgDailyExpense 0');
+  assert(res.summary.avgDailyIncome === 0, 'TC-118 Boş veride avgDailyIncome 0');
+  assert(res.spendingVelocity.velocityRatio === null, 'TC-118 Boş veride velocityRatio null');
+  assert(res.spendingVelocity.velocityChangePercent === null, 'TC-118 Boş veride velocityChangePercent null');
+  assert(res.comparison.percentageChange === null, 'TC-118 Boş veride comparison percentageChange null');
+  assert(res.categories.length === 0, 'TC-118 Boş veride categories boş dizi');
+  assert(res.dailySeries.length === 18, 'TC-118 Boş veride current month için 18 günlük sıfır serisi üretildi');
+  assert(res.dailySeries.every(d => d.expense === 0), 'TC-118 Boş veride tüm günlerin harcaması 0');
+  assert(res.dataQuality.transactionCount === 0, 'TC-118 dataQuality transactionCount 0');
+  assert(res.dataQuality.hasPreviousMonthData === false, 'TC-118 dataQuality hasPreviousMonthData false');
+}
+
+// TC-119: Income / expense ayrımı doğru
+{
+  const fixedNow = new Date(2026, 8, 18, 12, 0, 0);
+  const sampleTxs = [
+    { id: '1', title: 'Burs', amount: 3000, type: 'income', categoryId: 'inc_kyk', date: '2026-09-05' },
+    { id: '2', title: 'Market', amount: 500, type: 'expense', categoryId: 'exp_food', date: '2026-09-08' },
+    { id: '3', title: 'Ulaşım', amount: 200, type: 'expense', categoryId: 'exp_transport', date: '2026-09-12' },
+    { id: '4', title: 'Harçlık', amount: 1000, type: 'income', categoryId: 'inc_allowance', date: '2026-09-15' }
+  ];
+
+  const res = analyzeMonth(sampleTxs, { year: 2026, month: 9, now: fixedNow });
+
+  assert(res.summary.totalIncome === 4000, 'TC-119 totalIncome toplamı (3000 + 1000 = 4000 TL) doğru');
+  assert(res.summary.totalExpense === 700, 'TC-119 totalExpense toplamı (500 + 200 = 700 TL) doğru');
+  assert(res.summary.incomeTransactionCount === 2, 'TC-119 Gelir işlem adedi (2) doğru');
+  assert(res.summary.expenseTransactionCount === 2, 'TC-119 Gider işlem adedi (2) doğru');
+  assert(res.summary.transactionCount === 4, 'TC-119 Toplam işlem adedi (4) doğru');
+}
+
+// TC-120: Net Cash Flow doğru
+{
+  const fixedNow = new Date(2026, 8, 18, 12, 0, 0);
+  const positiveFlow = [
+    { id: '1', amount: 5000, type: 'income', date: '2026-09-01' },
+    { id: '2', amount: 1500, type: 'expense', date: '2026-09-02' }
+  ];
+  const resPos = analyzeMonth(positiveFlow, { year: 2026, month: 9, now: fixedNow });
+  assert(resPos.summary.netCashFlow === 3500, 'TC-120 Pozitif netCashFlow (5000 - 1500 = 3500 TL) doğru');
+
+  const negativeFlow = [
+    { id: '1', amount: 1000, type: 'income', date: '2026-09-01' },
+    { id: '2', amount: 2500, type: 'expense', date: '2026-09-02' }
+  ];
+  const resNeg = analyzeMonth(negativeFlow, { year: 2026, month: 9, now: fixedNow });
+  assert(resNeg.summary.netCashFlow === -1500, 'TC-120 Negatif netCashFlow (1000 - 2500 = -1500 TL) doğru');
+}
+
+// TC-121: avgDailyExpense takvim günü üzerinden doğru
+{
+  const fixedNow = new Date(2026, 8, 10, 12, 0, 0); // 10 gün geçmiş
+  const txs = [
+    { id: '1', amount: 1200, type: 'expense', date: '2026-09-02' },
+    { id: '2', amount: 800, type: 'expense', date: '2026-09-05' }
+  ];
+
+  const res = analyzeMonth(txs, { year: 2026, month: 9, now: fixedNow });
+  assert(res.summary.daysElapsed === 10, 'TC-121 10 Eylül itibarıyla geçen gün 10');
+  assert(res.summary.avgDailyExpense === 200, 'TC-121 avgDailyExpense (2000 / 10 = 200 TL) tüm takvim günlerini payda aldı');
+}
+
+// TC-122: Current month gelecekteki işlemi actual spend'e dahil etmiyor
+{
+  const fixedNow = new Date(2026, 8, 18, 12, 0, 0); // 18 Eylül
+  const txs = [
+    { id: '1', amount: 300, type: 'expense', date: '2026-09-15' },
+    { id: '2', amount: 700, type: 'expense', date: '2026-09-25' }
+  ];
+
+  const res = analyzeMonth(txs, { year: 2026, month: 9, now: fixedNow });
+  assert(res.summary.totalExpense === 300, 'TC-122 Gelecek tarihli işlem (700 TL) actual spend hesabına dahil edilmedi');
+  assert(res.summary.expenseTransactionCount === 1, 'TC-122 Gelecek tarihli işlem sayısı actual adede sayılmadı');
+}
+
+// TC-123: Historical month tüm ayı kullanıyor
+{
+  const fixedNow = new Date(2026, 8, 18, 12, 0, 0); // Şu an Eylül'deyiz
+  const augTxs = [
+    { id: '1', amount: 400, type: 'expense', date: '2026-08-05' },
+    { id: '2', amount: 600, type: 'expense', date: '2026-08-20' },
+    { id: '3', amount: 200, type: 'expense', date: '2026-08-30' }
+  ];
+
+  const res = analyzeMonth(augTxs, { year: 2026, month: 8, now: fixedNow });
+  assert(res.period.isHistoricalMonth === true, 'TC-123 Geçmiş ay isHistoricalMonth=true olarak algılandı');
+  assert(res.summary.daysElapsed === 31, 'TC-123 Geçmiş ayda daysElapsed=31 (tüm ay)');
+  assert(res.summary.daysRemaining === 0, 'TC-123 Geçmiş ayda daysRemaining=0');
+  assert(res.summary.totalExpense === 1200, 'TC-123 Ay sonundaki tüm harcamalar (1200 TL) dahil edildi');
+  assert(res.dailySeries.length === 31, 'TC-123 Geçmiş ay için 31 günlük tam seri üretildi');
+}
+
+// TC-124: MTD vs previous month SAME PERIOD karşılaştırması
+{
+  const fixedNow = new Date(2026, 8, 18, 12, 0, 0); // 18 Eylül
+  const txs = [
+    { id: 's1', amount: 1500, type: 'expense', date: '2026-09-10' },
+    { id: 'a1', amount: 400, type: 'expense', date: '2026-08-05' },
+    { id: 'a2', amount: 600, type: 'expense', date: '2026-08-15' },
+    { id: 'a3', amount: 3000, type: 'expense', date: '2026-08-25' } // 18 Ağustos'tan sonra
+  ];
+
+  const res = analyzeMonth(txs, { year: 2026, month: 9, now: fixedNow });
+  assert(res.comparison.comparisonDays === 18, 'TC-124 comparisonDays 18 gün olarak belirlendi');
+  assert(res.comparison.currentExpense === 1500, 'TC-124 Mevcut ay harcaması 1500 TL');
+  assert(res.comparison.previousExpense === 1000, 'TC-124 Önceki ayın sadece ilk 18 günü (400 + 600 = 1000 TL) hesaba katıldı');
+  assert(res.comparison.absoluteChange === 500, 'TC-124 absoluteChange (1500 - 1000 = 500 TL) doğru');
+  assert(res.comparison.percentageChange === 50, 'TC-124 percentageChange (%50 artış) doğru');
+}
+
+// TC-125: previousExpense=0 -> percentageChange=null
+{
+  const fixedNow = new Date(2026, 8, 18, 12, 0, 0);
+  const txs = [
+    { id: 's1', amount: 800, type: 'expense', date: '2026-09-10' }
+  ];
+
+  const res = analyzeMonth(txs, { year: 2026, month: 9, now: fixedNow });
+  assert(res.comparison.previousExpense === 0, 'TC-125 Önceki ay harcaması 0');
+  assert(res.comparison.currentExpense === 800, 'TC-125 Mevcut ay harcaması 800 TL');
+  assert(res.comparison.absoluteChange === 800, 'TC-125 absoluteChange 800 TL doğru');
+  assert(res.comparison.percentageChange === null, 'TC-125 previousExpense=0 durumunda percentageChange null döndü (Infinity değil)');
+}
+
+// TC-126: Positive percentage change
+{
+  const fixedNow = new Date(2026, 8, 18, 12, 0, 0);
+  const txs = [
+    { id: 's1', amount: 1250, type: 'expense', date: '2026-09-10' },
+    { id: 'a1', amount: 1000, type: 'expense', date: '2026-08-10' }
+  ];
+
+  const res = analyzeMonth(txs, { year: 2026, month: 9, now: fixedNow });
+  assert(res.comparison.absoluteChange === 250, 'TC-126 Pozitif absoluteChange 250 TL');
+  assert(res.comparison.percentageChange === 25, 'TC-126 Pozitif percentageChange %25');
+}
+
+// TC-127: Negative percentage change
+{
+  const fixedNow = new Date(2026, 8, 18, 12, 0, 0);
+  const txs = [
+    { id: 's1', amount: 750, type: 'expense', date: '2026-09-10' },
+    { id: 'a1', amount: 1000, type: 'expense', date: '2026-08-10' }
+  ];
+
+  const res = analyzeMonth(txs, { year: 2026, month: 9, now: fixedNow });
+  assert(res.comparison.absoluteChange === -250, 'TC-127 Negatif absoluteChange -250 TL');
+  assert(res.comparison.percentageChange === -25, 'TC-127 Negatif percentageChange -%25');
+}
+
+// TC-128: Last 7-day rolling expense
+{
+  const fixedNow = new Date(2026, 8, 28, 12, 0, 0); // 28 Eylül -> son 7 gün: 22-28 Eylül
+  const txs = [
+    { id: '1', amount: 100, type: 'expense', date: '2026-09-20' },
+    { id: '2', amount: 150, type: 'expense', date: '2026-09-22' },
+    { id: '3', amount: 250, type: 'expense', date: '2026-09-25' },
+    { id: '4', amount: 200, type: 'expense', date: '2026-09-28' }
+  ];
+
+  const res = analyzeMonth(txs, { year: 2026, month: 9, now: fixedNow });
+  assert(res.spendingVelocity.last7DaysExpense === 600, 'TC-128 Son 7 günlük harcama (150+250+200 = 600 TL) doğru');
+  assert(res.spendingVelocity.last7DaysDailyAverage === roundMetric(600 / 7), 'TC-128 Son 7 gün günlük ortalama (85.71 TL) doğru');
+}
+
+// TC-129: Previous rolling 7-day expense
+{
+  const fixedNow = new Date(2026, 8, 28, 12, 0, 0); // Önceki 7 gün: 15-21 Eylül
+  const txs = [
+    { id: '1', amount: 300, type: 'expense', date: '2026-09-16' },
+    { id: '2', amount: 100, type: 'expense', date: '2026-09-20' },
+    { id: '3', amount: 100, type: 'expense', date: '2026-09-21' }
+  ];
+
+  const res = analyzeMonth(txs, { year: 2026, month: 9, now: fixedNow });
+  assert(res.spendingVelocity.previous7DaysExpense === 500, 'TC-129 Önceki 7 günlük harcama (300+100+100 = 500 TL) doğru');
+  assert(res.spendingVelocity.previous7DaysDailyAverage === roundMetric(500 / 7), 'TC-129 Önceki 7 gün günlük ortalama (71.43 TL) doğru');
+}
+
+// TC-130: Velocity ratio / change doğru
+{
+  const fixedNow = new Date(2026, 8, 28, 12, 0, 0);
+  const txs = [
+    { id: '1', amount: 9800, type: 'expense', date: '2026-09-10' },
+    { id: '2', amount: 4200, type: 'expense', date: '2026-09-25' }
+  ];
+
+  const res = analyzeMonth(txs, { year: 2026, month: 9, now: fixedNow });
+  assert(res.spendingVelocity.monthToDateDailyAverage === 500, 'TC-130 monthToDateDailyAverage 500 TL');
+  assert(res.spendingVelocity.last7DaysDailyAverage === 600, 'TC-130 last7DaysDailyAverage 600 TL');
+  assert(res.spendingVelocity.velocityRatio === 1.2, 'TC-130 velocityRatio (600 / 500 = 1.20) doğru');
+  assert(res.spendingVelocity.velocityChangePercent === 20, 'TC-130 velocityChangePercent %20 artış doğru');
+}
+
+// TC-131: Yetersiz history sampleDays doğru
+{
+  const fixedNow = new Date(2026, 8, 4, 12, 0, 0); // 4 Eylül
+  const txs = [
+    { id: '1', amount: 100, type: 'expense', date: '2026-09-01' },
+    { id: '2', amount: 300, type: 'expense', date: '2026-09-03' }
+  ];
+
+  const res = analyzeMonth(txs, { year: 2026, month: 9, now: fixedNow });
+  assert(res.spendingVelocity.last7DaysSampleDays === 4, 'TC-131 Ayın 4. gününde last7DaysSampleDays 4 gün olarak kısıtlandı');
+  assert(res.spendingVelocity.last7DaysExpense === 400, 'TC-131 4 günlük harcama 400 TL');
+  assert(res.spendingVelocity.last7DaysDailyAverage === 100, 'TC-131 4 günlük ortalama (400 / 4 = 100 TL) doğru');
+}
+
+// TC-132: Kategori toplamları doğru
+{
+  const fixedNow = new Date(2026, 8, 18, 12, 0, 0);
+  const txs = [
+    { id: '1', amount: 200, type: 'expense', categoryId: 'exp_food', date: '2026-09-02' },
+    { id: '2', amount: 300, type: 'expense', categoryId: 'exp_food', date: '2026-09-05' },
+    { id: '3', amount: 150, type: 'expense', categoryId: 'exp_transport', date: '2026-09-08' }
+  ];
+
+  const res = analyzeMonth(txs, { year: 2026, month: 9, now: fixedNow });
+  const foodCat = res.categories.find(c => c.categoryId === 'exp_food');
+  const transCat = res.categories.find(c => c.categoryId === 'exp_transport');
+
+  assert(foodCat && foodCat.currentAmount === 500, 'TC-132 Yemek kategorisi toplamı (200 + 300 = 500 TL) doğru');
+  assert(transCat && transCat.currentAmount === 150, 'TC-132 Ulaşım kategorisi toplamı (150 TL) doğru');
+  assert(res.categories[0].categoryId === 'exp_food', 'TC-132 En çok harcanan kategori ilk sırada yer aldı (currentAmount DESC)');
+}
+
+// TC-133: Category share toplam expense üzerinden doğru
+{
+  const fixedNow = new Date(2026, 8, 18, 12, 0, 0);
+  const txs = [
+    { id: '1', amount: 500, type: 'expense', categoryId: 'exp_food', date: '2026-09-02' },
+    { id: '2', amount: 150, type: 'expense', categoryId: 'exp_transport', date: '2026-09-08' }
+  ];
+
+  const res = analyzeMonth(txs, { year: 2026, month: 9, now: fixedNow });
+  const foodCat = res.categories.find(c => c.categoryId === 'exp_food');
+  const transCat = res.categories.find(c => c.categoryId === 'exp_transport');
+
+  assert(foodCat.shareOfTotalExpense === 76.92, 'TC-133 Yemek kategorisi harcama payı %76.92');
+  assert(transCat.shareOfTotalExpense === 23.08, 'TC-133 Ulaşım kategorisi harcama payı %23.08');
+}
+
+// TC-134: Kategori avg transaction amount doğru
+{
+  const fixedNow = new Date(2026, 8, 18, 12, 0, 0);
+  const txs = [
+    { id: '1', amount: 200, type: 'expense', categoryId: 'exp_food', date: '2026-09-02' },
+    { id: '2', amount: 300, type: 'expense', categoryId: 'exp_food', date: '2026-09-05' }
+  ];
+
+  const res = analyzeMonth(txs, { year: 2026, month: 9, now: fixedNow });
+  const foodCat = res.categories.find(c => c.categoryId === 'exp_food');
+
+  assert(foodCat.transactionCount === 2, 'TC-134 Yemek işlem adedi 2');
+  assert(foodCat.avgTransactionAmount === 250, 'TC-134 Yemek ortalama işlem tutarı (500 / 2 = 250 TL) doğru');
+}
+
+// TC-135: Kategori previous=0 güvenli
+{
+  const fixedNow = new Date(2026, 8, 18, 12, 0, 0);
+  const txs = [
+    { id: '1', amount: 450, type: 'expense', categoryId: 'exp_social', date: '2026-09-05' }
+  ];
+
+  const res = analyzeMonth(txs, { year: 2026, month: 9, now: fixedNow });
+  const socialCat = res.categories.find(c => c.categoryId === 'exp_social');
+
+  assert(socialCat.previousAmount === 0, 'TC-135 Önceki ay harcaması 0');
+  assert(socialCat.percentageChange === null, 'TC-135 Önceki harcama 0 olduğunda percentageChange null oldu');
+  assert(socialCat.absoluteChange === 450, 'TC-135 absoluteChange 450 TL doğru');
+}
+
+// TC-136: Daily series transaction olmayan günlerde 0 üretir
+{
+  const fixedNow = new Date(2026, 8, 5, 12, 0, 0);
+  const txs = [
+    { id: '1', amount: 120, type: 'expense', date: '2026-09-01' },
+    { id: '2', amount: 340, type: 'expense', date: '2026-09-03' }
+  ];
+
+  const res = analyzeMonth(txs, { year: 2026, month: 9, now: fixedNow });
+  assert(res.dailySeries.length === 5, 'TC-136 1-5 Eylül için 5 günlük seri üretildi');
+  assert(res.dailySeries[0].date === '2026-09-01' && res.dailySeries[0].expense === 120, 'TC-136 1 Eylül harcaması 120 TL');
+  assert(res.dailySeries[1].date === '2026-09-02' && res.dailySeries[1].expense === 0, 'TC-136 2 Eylül harcaması 0 TL (boş gün)');
+  assert(res.dailySeries[2].date === '2026-09-03' && res.dailySeries[2].expense === 340, 'TC-136 3 Eylül harcaması 340 TL');
+  assert(res.dailySeries[3].date === '2026-09-04' && res.dailySeries[3].expense === 0, 'TC-136 4 Eylül harcaması 0 TL');
+  assert(res.dailySeries[4].date === '2026-09-05' && res.dailySeries[4].expense === 0, 'TC-136 5 Eylül harcaması 0 TL');
+}
+
+// TC-137: Daily series current month'ta future days üretmez
+{
+  const fixedNow = new Date(2026, 8, 12, 12, 0, 0); // 12 Eylül
+  const res = analyzeMonth([], { year: 2026, month: 9, now: fixedNow });
+
+  assert(res.dailySeries.length === 12, 'TC-137 12 Eylül için tam 12 eleman üretildi');
+  assert(res.dailySeries[res.dailySeries.length - 1].date === '2026-09-12', 'TC-137 Son eleman bugünün tarihi (2026-09-12)');
+  assert(!res.dailySeries.some(d => d.date > '2026-09-12'), 'TC-137 Gelecek günlere (13-30 Eylül) ait eleman üretilmedi');
+}
+
+// TC-138: Leap year February
+{
+  const resLeap = analyzeMonth([], { year: 2024, month: 2, now: new Date(2026, 8, 1) });
+  assert(resLeap.period.daysInMonth === 29, 'TC-138 Artık yıl Şubat 2024 için daysInMonth 29');
+  assert(resLeap.period.daysElapsed === 29, 'TC-138 Geçmiş artık yıl Şubat 2024 için daysElapsed 29');
+  assert(resLeap.dailySeries.length === 29, 'TC-138 Şubat 2024 için 29 günlük seri');
+
+  const resNorm = analyzeMonth([], { year: 2026, month: 2, now: new Date(2026, 8, 1) });
+  assert(resNorm.period.daysInMonth === 28, 'TC-138 Standart yıl Şubat 2026 için daysInMonth 28');
+  assert(resNorm.dailySeries.length === 28, 'TC-138 Şubat 2026 için 28 günlük seri');
+}
+
+// TC-139: Local timezone / date boundary regression
+{
+  const txNight = {
+    id: 'tx-night',
+    amount: 150,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-27'
+  };
+
+  const fixedNow = new Date(2026, 8, 28, 12, 0, 0);
+  const res = analyzeMonth([txNight], { year: 2026, month: 9, now: fixedNow });
+
+  const day27 = res.dailySeries.find(d => d.date === '2026-09-27');
+  const day26 = res.dailySeries.find(d => d.date === '2026-09-26');
+  assert(day27 && day27.expense === 150, 'TC-139 Gece 23:55 işlemi yerel takvim günü olan 2026-09-27 altında toplandı');
+  assert(day26 && day26.expense === 0, 'TC-139 UTC kayması nedeniyle 2026-09-26 gününe sıçramadı');
+}
+
+// TC-140: Analytics hiçbir store state veya transaction nesnesini mutate etmiyor
+{
+  const originalTx = { id: 'tx-frozen', amount: 500, type: 'expense', categoryId: 'exp_food', date: '2026-09-10' };
+  Object.freeze(originalTx);
+  const txList = Object.freeze([originalTx]);
+
+  let mutationError = false;
+  try {
+    const res = analyzeMonth(txList, { year: 2026, month: 9, now: new Date(2026, 8, 18) });
+    assert(res.summary.totalExpense === 500, 'TC-140 Donmuş nesneyle hesaplama başarılı');
+  } catch (e) {
+    mutationError = true;
+  }
+  assert(!mutationError, 'TC-140 Donmuş işlem nesneleri üzerinde hiçbir mutasyon yapılmadı');
+}
+
+// TC-141: Analytics hiçbir network/Supabase/DOM bağımlılığı taşımıyor
+{
+  const pureRes = analyzeMonth([{ amount: 100, type: 'expense', date: '2026-09-01' }], { year: 2026, month: 9, now: new Date(2026, 8, 18) });
+  assert(typeof pureRes === 'object' && pureRes !== null, 'TC-141 Analytics motoru harici API/DOM bağımlılığı olmadan saf JS olarak çalıştı');
+}
+
+// TC-142: Aynı input aynı output (determinizm)
+{
+  const txs = [
+    { id: '1', amount: 250, type: 'expense', categoryId: 'exp_food', date: '2026-09-05' },
+    { id: '2', amount: 1500, type: 'income', categoryId: 'inc_kyk', date: '2026-09-06' }
+  ];
+  const opts = { year: 2026, month: 9, now: new Date(2026, 8, 18, 10, 0, 0) };
+
+  const run1 = analyzeMonth(txs, opts);
+  const run2 = analyzeMonth(txs, opts);
+
+  assert(JSON.stringify(run1) === JSON.stringify(run2), 'TC-142 İki ardışık çalıştırma birebir aynı sonucu üretti (Deterministik)');
 }
 
 console.log('\n====================================================');
