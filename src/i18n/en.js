@@ -233,7 +233,7 @@ export default {
   financialOutlook: {
     title: 'Financial Outlook',
     subtitle: 'Deterministic cashflow and spend projection',
-    currentBadge: 'Current Status (Real-time)',
+    currentBadge: 'Today\'s financial status — Independent of selected month view.',
     historicalNotice: 'Viewing historical month. Cashflow outlook reflects today\'s real-time calendar.',
     manageCashflows: 'Manage Planned Cashflows',
     nextIncomeTitle: 'Next Income',
@@ -247,7 +247,7 @@ export default {
     currentPaceSub: 'Based on recent trend',
     paceDifference: '+{amount} / day over',
     paceBalanced: 'Pace is within safe limit',
-    monthEndForecastTitle: 'Month-End Spend Forecast',
+    monthEndForecastTitle: 'Projected month-end spending',
     monthEndForecastSub: 'Deterministic projection',
     limitedData: 'Limited data available for forecast',
     topInsightsTitle: 'Financial Insights',

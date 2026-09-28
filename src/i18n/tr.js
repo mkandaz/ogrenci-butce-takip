@@ -233,7 +233,7 @@ export default {
   financialOutlook: {
     title: 'Finansal Görünüm',
     subtitle: 'Deterministik nakit akışı ve harcama projeksiyonu',
-    currentBadge: 'Bugünkü Durum (Canlı)',
+    currentBadge: 'Bugünkü finansal durum — Seçili ay görünümünden bağımsızdır.',
     historicalNotice: 'Geçmiş ay inceleniyor. Aşağıdaki planlı nakit akışı ve sonraki gelir bugünkü gerçek takvimi yansıtır.',
     manageCashflows: 'Planlı Gelir / Giderleri Yönet',
     nextIncomeTitle: 'Bir Sonraki Gelir',
@@ -247,7 +247,7 @@ export default {
     currentPaceSub: 'Son harcama trendine göre',
     paceDifference: '+{amount} / gün fazla',
     paceBalanced: 'Harcama hızı limit dahilinde',
-    monthEndForecastTitle: 'Ay Sonu Harcama Tahmini',
+    monthEndForecastTitle: 'Ay sonu gider tahmini',
     monthEndForecastSub: 'Deterministik projeksiyon',
     limitedData: 'Tahmin için henüz sınırlı veri var',
     topInsightsTitle: 'Finansal İçgörüler',

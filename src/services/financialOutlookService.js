@@ -27,37 +27,42 @@ export function getFinancialOutlookViewModel({ store, selectedMonth, now = new D
   const safeNow = isNaN(validNow.getTime()) ? new Date() : validNow;
   const refDateStr = getLocalDateString(safeNow);
 
+  // Time-axis separation (UX Option B):
+  // selectedMonth determines dashboard period navigation (historical, current, future).
+  // Financial Outlook is ALWAYS "today's live financial situation" based on safeNow!
   const currentYearMonth = getCurrentYearMonth(safeNow);
-  const targetMonth = selectedMonth || currentYearMonth;
+  const selectedPeriod = selectedMonth || currentYearMonth;
 
-  const isCurrentMonth = targetMonth === currentYearMonth;
-  const isHistorical = targetMonth < currentYearMonth;
-  const isFuture = targetMonth > currentYearMonth;
+  const isCurrentMonth = selectedPeriod === currentYearMonth;
+  const isHistorical = selectedPeriod < currentYearMonth;
+  const isFuture = selectedPeriod > currentYearMonth;
 
-  const [yStr, mStr] = targetMonth.split('-');
-  const targetYear = parseInt(yStr, 10) || safeNow.getFullYear();
-  const targetMonthNum = parseInt(mStr, 10) || (safeNow.getMonth() + 1);
+  // Live calculation period is ALWAYS current year & current month of safeNow
+  const [curYStr, curMStr] = currentYearMonth.split('-');
+  const currentYear = parseInt(curYStr, 10) || safeNow.getFullYear();
+  const currentMonthNum = parseInt(curMStr, 10) || (safeNow.getMonth() + 1);
 
   // 1. İşlem ve plan kayıtları
   const transactions = store.getTransactions() || [];
   const plannedCashflows = store.getPlannedCashflows() || [];
 
-  // 2. Mevcut Bakiye (Kart 1 ve Star Card ile %100 özdeş)
-  const summary = calculateSummary(transactions, safeNow, targetMonth);
+  // 2. Canlı Mevcut Bakiye: DAİMA safeNow ve currentYearMonth üzerinden hesaplanır.
+  // Seçili ay geçmiş veya gelecek olsa bile Finansal Görünüm bugünkü canlı bakiyeyi kullanır.
+  const summary = calculateSummary(transactions, safeNow, currentYearMonth);
   const currentAvailableBalance = summary.balance;
 
-  // 3. Analytics Engine (FAZ 5.1)
+  // 3. Analytics Engine (FAZ 5.1): Canlı cari ay analizi
   const analytics = analyzeMonth(transactions, {
     now: safeNow,
-    year: targetYear,
-    month: targetMonthNum
+    year: currentYear,
+    month: currentMonthNum
   });
 
-  // 4. Forecast Engine (FAZ 5.2)
+  // 4. Forecast Engine (FAZ 5.2): Canlı cari ay tahmini
   const forecast = forecastMonth(transactions, {
     now: safeNow,
-    year: targetYear,
-    month: targetMonthNum,
+    year: currentYear,
+    month: currentMonthNum,
     currentAvailableBalance
   });
 
@@ -88,7 +93,9 @@ export function getFinancialOutlookViewModel({ store, selectedMonth, now = new D
   // 7. Structured UI ViewModel
   return {
     referenceDate: refDateStr,
-    targetMonth,
+    targetMonth: selectedPeriod,
+    selectedMonth: selectedPeriod,
+    currentYearMonth,
     isCurrentMonth,
     isHistorical,
     isFuture,

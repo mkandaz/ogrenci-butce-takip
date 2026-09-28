@@ -9176,6 +9176,149 @@ console.log('\n--- 28. FAZ 5.5C — STUDENT FINANCIAL COMMAND CENTER UI (TC-366 
   assert(!uiManagerCode.includes('availableAfterPlannedObligations / daysUntilNextIncome'), 'TC-385 No duplicate safe daily spend formula in UIManager');
 }
 
+// TC-386: Historical & Future Month Time-Axis Separation (Requirements A-F)
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  const store = new BudgetStore();
+  const refDate = new Date('2026-09-28T10:00:00Z');
+
+  // Setup:
+  // Historical transactions in August:
+  // Income: 5,000, Expense: 2,000 -> August end balance = 3,000
+  store.addTransaction({ title: 'Ağustos Gelir', amount: 5000, type: 'income', categoryId: 'inc_salary', date: '2026-08-01' });
+  store.addTransaction({ title: 'Ağustos Gider', amount: 2000, type: 'expense', categoryId: 'cat_market', date: '2026-08-15' });
+
+  // Current transactions in September (up to Sep 28):
+  // Income: 7,000, Expense: 5,000 -> Cumulative balance on Sep 28 = 3,000 + 7,000 - 5,000 = 5,000
+  store.addTransaction({ title: 'Eylül Maaş', amount: 7000, type: 'income', categoryId: 'inc_salary', date: '2026-09-01' });
+  store.addTransaction({ title: 'Eylül Harcama 1', amount: 3000, type: 'expense', categoryId: 'cat_market', date: '2026-09-10' });
+  store.addTransaction({ title: 'Eylül Harcama 2', amount: 2000, type: 'expense', categoryId: 'cat_market', date: '2026-09-20' });
+
+  // Planned cashflows:
+  // Kira 2,000 on 3rd of month, Aile 3,000 on 5th of month
+  store.addPlannedCashflow({ name: 'Kira', type: 'expense', amount: 2000, recurrence: 'monthly', dayOfMonth: 3, categoryId: 'cat_rent' });
+  store.addPlannedCashflow({ name: 'Aile Desteği', type: 'income', amount: 3000, recurrence: 'monthly', dayOfMonth: 5 });
+
+  // A) Current month selected -> same behavior as before
+  const vmCurrent = getFinancialOutlookViewModel({ store, selectedMonth: '2026-09', now: refDate });
+  assert(vmCurrent.isCurrentMonth === true, 'TC-386-A isCurrentMonth true for 2026-09');
+  assert(vmCurrent.isHistorical === false, 'TC-386-A isHistorical false for 2026-09');
+  assert(vmCurrent.isFuture === false, 'TC-386-A isFuture false for 2026-09');
+  assert(vmCurrent.currentAvailableBalance === 5000, 'TC-386-A currentAvailableBalance is 5000 in current month');
+  assert(vmCurrent.nextIncome.name === 'Aile Desteği', 'TC-386-A nextIncome is Aile Desteği');
+  assert(vmCurrent.nextIncome.daysUntil === 7, 'TC-386-A 7 days until next income');
+  assert(Math.abs(vmCurrent.safeDailySpend - 428.57) < 0.1, 'TC-386-A safeDailySpend is ~428.57');
+
+  // Verify historical summary balance for August vs Live balance
+  const augSummary = calculateSummary(store.getTransactions(), refDate, '2026-08');
+  assert(augSummary.balance === 3000, 'TC-386 Historical August summary balance is 3000');
+
+  // B) Historical selectedMonth (2026-08):
+  // Financial Outlook currentAvailableBalance is identical to current-month live balance (5000, NOT 3000)
+  const vmHistorical = getFinancialOutlookViewModel({ store, selectedMonth: '2026-08', now: refDate });
+  assert(vmHistorical.currentAvailableBalance === vmCurrent.currentAvailableBalance, 'TC-386-B Historical selectedMonth has identical live balance to current month');
+  assert(vmHistorical.currentAvailableBalance === 5000, 'TC-386-B Historical selectedMonth uses live 5000 balance, not historical 3000');
+
+  // C) Historical selectedMonth:
+  // next income and safe daily spend are identical to current live outlook
+  assert(vmHistorical.nextIncome.found === vmCurrent.nextIncome.found, 'TC-386-C nextIncome found matches current');
+  assert(vmHistorical.nextIncome.date === vmCurrent.nextIncome.date, 'TC-386-C nextIncome date matches current');
+  assert(vmHistorical.nextIncome.daysUntil === vmCurrent.nextIncome.daysUntil, 'TC-386-C nextIncome daysUntil matches current');
+  assert(vmHistorical.safeDailySpend === vmCurrent.safeDailySpend, 'TC-386-C safeDailySpend matches current');
+
+  // D) Historical selectedMonth:
+  // currentDailyPace comes from current month forecast, not historical forecast
+  assert(vmHistorical.currentDailyPace === vmCurrent.currentDailyPace, 'TC-386-D currentDailyPace comes from current month forecast');
+
+  // E) Historical selectedMonth:
+  // dashboard period flag remains historical and explanatory badge is visible
+  assert(vmHistorical.isHistorical === true, 'TC-386-E isHistorical is true for 2026-08');
+  assert(vmHistorical.isCurrentMonth === false, 'TC-386-E isCurrentMonth is false for 2026-08');
+  assert(vmHistorical.targetMonth === '2026-08', 'TC-386-E targetMonth preserved as 2026-08');
+
+  // Verify badge visibility in DOM when historical month selected
+  const originalDoc = globalThis.document;
+  const mockBadge = {
+    classList: {
+      classes: new Set(['hidden']),
+      add(c) { this.classes.add(c); },
+      remove(c) { this.classes.delete(c); },
+      contains(c) { return this.classes.has(c); }
+    },
+    textContent: ''
+  };
+  const mockSection = { querySelector: () => null };
+  globalThis.document = {
+    getElementById: (id) => {
+      if (id === 'outlook-historical-badge') return mockBadge;
+      if (id === 'financial-outlook-section') return mockSection;
+      return null;
+    },
+    querySelectorAll: () => [],
+    createElement: () => ({ classList: { add() {}, remove() {}, contains() { return false; } } }),
+    documentElement: { classList: { add() {}, remove() {}, contains() { return false; } } },
+    body: { classList: { add() {}, remove() {}, contains() { return false; } } },
+    addEventListener: () => {},
+    removeEventListener: () => {}
+  };
+  const ui = new UIManager(store);
+  ui.financialOutlookSection = mockSection;
+  ui.outlookHistoricalBadge = mockBadge;
+  ui.selectedMonth = '2026-08';
+  ui.renderFinancialOutlook('TRY', 'tr');
+  assert(!mockBadge.classList.contains('hidden'), 'TC-386-E explanatory badge is visible when browsing historical month');
+  assert(mockBadge.textContent === 'Bugünkü finansal durum — Seçili ay görünümünden bağımsızdır.', 'TC-386-E badge text shows live independent notice');
+
+  // When browsing current month, badge is hidden
+  ui.selectedMonth = '2026-09';
+  ui.renderFinancialOutlook('TRY', 'tr');
+  assert(mockBadge.classList.contains('hidden'), 'TC-386-E explanatory badge is hidden when browsing current month');
+
+  // F) Future selectedMonth (2026-10) does not move live Financial Outlook into the future
+  const vmFuture = getFinancialOutlookViewModel({ store, selectedMonth: '2026-10', now: refDate });
+  assert(vmFuture.isFuture === true, 'TC-386-F isFuture is true for 2026-10');
+  assert(vmFuture.isCurrentMonth === false, 'TC-386-F isCurrentMonth is false for 2026-10');
+  assert(vmFuture.currentAvailableBalance === vmCurrent.currentAvailableBalance, 'TC-386-F Future month uses today live balance');
+  assert(vmFuture.nextIncome.date === vmCurrent.nextIncome.date, 'TC-386-F Future month nextIncome date is still based on today');
+  assert(vmFuture.safeDailySpend === vmCurrent.safeDailySpend, 'TC-386-F Future month safeDailySpend matches today');
+
+  // When browsing future month, badge is visible
+  ui.selectedMonth = '2026-10';
+  ui.renderFinancialOutlook('TRY', 'tr');
+  assert(!mockBadge.classList.contains('hidden'), 'TC-386-F explanatory badge is visible when browsing future month');
+
+  globalThis.document = originalDoc;
+}
+
+// TC-387: Clarify Month-End Forecast Expense vs Balance Semantics Contract
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  const store = new BudgetStore();
+  const refDate = new Date('2026-09-28T10:00:00Z');
+  store.addTransaction({ title: 'Gelir', amount: 5000, type: 'income', categoryId: 'inc_salary', date: '2026-09-01' });
+  store.addTransaction({ title: 'Harcama', amount: 1500, type: 'expense', categoryId: 'cat_market', date: '2026-09-15' });
+
+  const vm = getFinancialOutlookViewModel({ store, selectedMonth: '2026-09', now: refDate });
+
+  // 1. Metric is projectedExpense, NOT projectedBalance or netBalance
+  assert(typeof vm.monthEndForecast.projectedExpense === 'number', 'TC-387 monthEndForecast exposes projectedExpense as number');
+  assert(vm.monthEndForecast.projectedExpense > 0, 'TC-387 projectedExpense is positive expense forecast');
+  assert(vm.monthEndForecast.projectedBalance === undefined, 'TC-387 monthEndForecast does NOT expose projectedBalance');
+  assert(vm.monthEndForecast.netBalance === undefined, 'TC-387 monthEndForecast does NOT expose netBalance');
+
+  // 2. Translations are consistent with "Ay sonu gider tahmini" / "Projected month-end spending"
+  assert(tr.financialOutlook.monthEndForecastTitle === 'Ay sonu gider tahmini', 'TC-387 TR title is Ay sonu gider tahmini');
+  assert(!tr.financialOutlook.monthEndForecastTitle.toLowerCase().includes('bakiye'), 'TC-387 TR title does not contain bakiye');
+  assert(en.financialOutlook.monthEndForecastTitle === 'Projected month-end spending', 'TC-387 EN title is Projected month-end spending');
+  assert(!en.financialOutlook.monthEndForecastTitle.toLowerCase().includes('balance'), 'TC-387 EN title does not contain balance');
+
+  // 3. index.html does not misrepresent Metric D as balance
+  const indexHtml = fs.readFileSync(path.join(process.cwd(), 'index.html'), 'utf-8');
+  assert(indexHtml.includes('data-i18n="financialOutlook.monthEndForecastTitle">Ay sonu gider tahmini</span>'), 'TC-387 index.html Metric D label matches Ay sonu gider tahmini');
+  assert(!indexHtml.includes('Ay Sonu Harcama Tahmini'), 'TC-387 index.html does not use old title');
+  assert(!indexHtml.includes('Ay sonu bakiye'), 'TC-387 index.html does not call forecast bakiye');
+}
+
 console.log('\n====================================================');
 console.log(`🏁 ENTEGRE TEST SONUCU: ${passed} PASSED, ${failed} FAILED`);
 console.log('====================================================');

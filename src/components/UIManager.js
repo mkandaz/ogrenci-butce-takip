@@ -758,9 +758,10 @@ export class UIManager {
       return;
     }
 
-    // Historical month badge
+    // Historical / non-current month explanatory badge
     if (this.outlookHistoricalBadge) {
-      if (outlook.isHistorical) {
+      if (!outlook.isCurrentMonth) {
+        this.outlookHistoricalBadge.textContent = t('financialOutlook.currentBadge');
         this.outlookHistoricalBadge.classList.remove('hidden');
       } else {
         this.outlookHistoricalBadge.classList.add('hidden');
