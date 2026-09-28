@@ -663,6 +663,12 @@ export class BudgetStore {
     return true;
   }
 
+  togglePlannedCashflowActive(id) {
+    const item = this.getPlannedCashflowById(id);
+    if (!item) return false;
+    return this.updatePlannedCashflow(id, { isActive: !item.isActive });
+  }
+
   deletePlannedCashflow(id) {
     if (!id) return false;
     const prevLen = (this.state.plannedCashflows || []).length;

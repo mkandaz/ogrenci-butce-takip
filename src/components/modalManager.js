@@ -96,6 +96,45 @@ export class ModalManager {
     this.authSuccessBox = document.getElementById('auth-success-box');
     this.authBtnSubmit = document.getElementById('auth-btn-submit');
     this.authBtnText = document.getElementById('auth-btn-text');
+
+    // Planned Cashflow Manager Modal (FAZ 5.5C)
+    this.cashflowManagerModal = document.getElementById('cashflow-manager-modal');
+    this.cashflowManagerTitle = document.getElementById('cashflow-manager-title');
+    this.cashflowManagerClose = document.getElementById('cashflow-manager-close');
+    this.cashflowManagerBtnDone = document.getElementById('cashflow-manager-btn-done');
+    this.btnManagerAddNew = document.getElementById('btn-manager-add-new');
+    this.cashflowListContainer = document.getElementById('cashflow-list-container');
+    this.cashflowManagerEmpty = document.getElementById('cashflow-manager-empty');
+
+    // Planned Cashflow Add/Edit Modal (FAZ 5.5C)
+    this.cashflowModal = document.getElementById('cashflow-modal');
+    this.cashflowModalTitle = document.getElementById('cashflow-modal-title');
+    this.cashflowModalClose = document.getElementById('cashflow-modal-close');
+    this.cashflowForm = document.getElementById('cashflow-form');
+    this.cashflowFieldId = document.getElementById('cashflow-field-id');
+    this.cfTypeIncomeBtn = document.getElementById('cf-type-income-btn');
+    this.cfTypeExpenseBtn = document.getElementById('cf-type-expense-btn');
+    this.cashflowFieldType = document.getElementById('cashflow-field-type');
+    this.cashflowFieldName = document.getElementById('cashflow-field-name');
+    this.cfErrName = document.getElementById('cf-err-name');
+    this.cashflowFieldAmount = document.getElementById('cashflow-field-amount');
+    this.cfErrAmount = document.getElementById('cf-err-amount');
+    this.cfRecurrenceMonthlyBtn = document.getElementById('cf-recurrence-monthly-btn');
+    this.cfRecurrenceOnceBtn = document.getElementById('cf-recurrence-once-btn');
+    this.cashflowFieldRecurrence = document.getElementById('cashflow-field-recurrence');
+    this.cfGroupMonthly = document.getElementById('cf-group-monthly');
+    this.cashflowFieldDay = document.getElementById('cashflow-field-day');
+    this.cfErrDay = document.getElementById('cf-err-day');
+    this.cfGroupOnce = document.getElementById('cf-group-once');
+    this.cashflowFieldDate = document.getElementById('cashflow-field-date');
+    this.cfErrDate = document.getElementById('cf-err-date');
+    this.cfGroupCategory = document.getElementById('cf-group-category');
+    this.cashflowFieldCategory = document.getElementById('cashflow-field-category');
+    this.cashflowFieldStartDate = document.getElementById('cashflow-field-start-date');
+    this.cashflowFieldEndDate = document.getElementById('cashflow-field-end-date');
+    this.cashflowFieldActive = document.getElementById('cashflow-field-active');
+    this.cashflowBtnCancel = document.getElementById('cashflow-btn-cancel');
+    this.cashflowBtnSubmit = document.getElementById('cashflow-btn-submit');
   }
 
   bindEvents() {
@@ -190,11 +229,32 @@ export class ModalManager {
       });
     }
 
+    // Planned Cashflow Modals (FAZ 5.5C)
+    if (this.cashflowManagerClose) this.cashflowManagerClose.addEventListener('click', () => this.closeCashflowManagerModal());
+    if (this.cashflowManagerBtnDone) this.cashflowManagerBtnDone.addEventListener('click', () => this.closeCashflowManagerModal());
+    if (this.btnManagerAddNew) this.btnManagerAddNew.addEventListener('click', () => this.openCashflowModal('add'));
+    if (this.cashflowModalClose) this.cashflowModalClose.addEventListener('click', () => this.closeCashflowModal());
+    if (this.cashflowBtnCancel) this.cashflowBtnCancel.addEventListener('click', () => this.closeCashflowModal());
+    if (this.cfTypeIncomeBtn) this.cfTypeIncomeBtn.addEventListener('click', () => this.setCashflowType('income'));
+    if (this.cfTypeExpenseBtn) this.cfTypeExpenseBtn.addEventListener('click', () => this.setCashflowType('expense'));
+    if (this.cfRecurrenceMonthlyBtn) this.cfRecurrenceMonthlyBtn.addEventListener('click', () => this.setCashflowRecurrence('monthly'));
+    if (this.cfRecurrenceOnceBtn) this.cfRecurrenceOnceBtn.addEventListener('click', () => this.setCashflowRecurrence('once'));
+    if (this.cashflowForm) {
+      this.cashflowForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        this.handleCashflowFormSubmit();
+      });
+    }
+
     // Modal dışına tıklayınca kapatma & ESC tuşu
     if (typeof window !== 'undefined') {
       window.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
-          if (this.txModal && !this.txModal.classList.contains('hidden')) {
+          if (this.cashflowModal && !this.cashflowModal.classList.contains('hidden')) {
+            this.closeCashflowModal();
+          } else if (this.cashflowManagerModal && !this.cashflowManagerModal.classList.contains('hidden')) {
+            this.closeCashflowManagerModal();
+          } else if (this.txModal && !this.txModal.classList.contains('hidden')) {
             this.closeTransactionModal();
           } else if (this.importModal && !this.importModal.classList.contains('hidden')) {
             this.closeImportModal();
@@ -211,11 +271,13 @@ export class ModalManager {
       });
     }
 
-    [this.txModal, this.importModal, this.confirmModal, this.presetModal, this.initialBudgetModal, this.authModal].forEach(modal => {
+    [this.txModal, this.importModal, this.confirmModal, this.presetModal, this.initialBudgetModal, this.authModal, this.cashflowManagerModal, this.cashflowModal].forEach(modal => {
       if (modal && typeof modal.addEventListener === 'function') {
         modal.addEventListener('click', (e) => {
           if (e.target === modal) {
-            if (modal === this.txModal) this.closeTransactionModal();
+            if (modal === this.cashflowModal) this.closeCashflowModal();
+            else if (modal === this.cashflowManagerModal) this.closeCashflowManagerModal();
+            else if (modal === this.txModal) this.closeTransactionModal();
             else if (modal === this.importModal) this.closeImportModal();
             else if (modal === this.confirmModal) this.closeConfirmModal();
             else if (modal === this.presetModal) this.closePresetModal();
@@ -236,7 +298,9 @@ export class ModalManager {
       this.presetModal,
       this.initialBudgetModal,
       this.authModal,
-      this.onboardingModal
+      this.onboardingModal,
+      this.cashflowManagerModal,
+      this.cashflowModal
     ];
     const isAnyOpen = modals.some(modal => modal && !modal.classList.contains('hidden'));
     if (isAnyOpen) {
@@ -744,6 +808,332 @@ export class ModalManager {
       if (this.authBtnSubmit) this.authBtnSubmit.disabled = false;
       if (this.authBtnText) this.authBtnText.textContent = t('auth.sendMagicLink');
       showToast(err.message, 'error');
+    }
+  }
+
+  // --- Planned Cashflow Manager Modal Methods (FAZ 5.5C) ---
+  openCashflowManagerModal() {
+    this.lastFocusedElement = typeof document !== 'undefined' ? document.activeElement : null;
+    this.renderCashflowManagerList();
+    if (this.cashflowManagerModal) this.cashflowManagerModal.classList.remove('hidden');
+    this.updateBodyScrollLock();
+  }
+
+  closeCashflowManagerModal() {
+    if (this.cashflowManagerModal) this.cashflowManagerModal.classList.add('hidden');
+    this.updateBodyScrollLock();
+    if (this.lastFocusedElement && typeof this.lastFocusedElement.focus === 'function') {
+      this.lastFocusedElement.focus();
+    }
+  }
+
+  renderCashflowManagerList() {
+    if (!this.cashflowListContainer) return;
+    const items = this.store.getPlannedCashflows ? this.store.getPlannedCashflows() : [];
+    const settings = this.store.getSettings ? this.store.getSettings() : {};
+    const currency = settings.currency || 'TRY';
+    const lang = this.ui?.selectedMonth ? (this.store.getSettings?.()?.language || 'tr') : 'tr';
+
+    if (items.length === 0) {
+      this.cashflowListContainer.innerHTML = '';
+      if (this.cashflowManagerEmpty) this.cashflowManagerEmpty.classList.remove('hidden');
+      return;
+    }
+
+    if (this.cashflowManagerEmpty) this.cashflowManagerEmpty.classList.add('hidden');
+
+    this.cashflowListContainer.innerHTML = items.map(item => {
+      const isInc = item.type === 'income';
+      const recurrenceStr = item.recurrence === 'monthly'
+        ? (t('cashflow.monthlyBadge', { day: item.dayOfMonth }) || `Her ayın ${item.dayOfMonth}'i`)
+        : (t('cashflow.onceBadge', { date: item.date || '' }) || `${item.date || ''} (Tek Seferlik)`);
+      const formattedAmount = (isInc ? '+' : '-') + formatCurrency(item.amount, currency, lang);
+      const badgeTypeClass = isInc
+        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+        : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300';
+      const amountColorClass = isInc
+        ? 'text-emerald-600 dark:text-emerald-400'
+        : 'text-rose-600 dark:text-rose-400';
+
+      return `
+        <div class="py-3 flex items-center justify-between gap-3 ${!item.isActive ? 'opacity-50' : ''}" data-cashflow-id="${item.id}">
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center space-x-2 flex-wrap gap-y-1">
+              <span class="font-bold text-xs sm:text-sm text-slate-900 dark:text-white truncate">${escapeHtml(item.name)}</span>
+              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${badgeTypeClass}">
+                ${isInc ? (t('cashflow.income') || 'Gelir (+)') : (t('cashflow.expense') || 'Gider (-)')}
+              </span>
+              <span class="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                ${recurrenceStr}
+              </span>
+            </div>
+            <div class="mt-1 flex items-center space-x-2 text-xs">
+              <span class="font-extrabold ${amountColorClass}">
+                ${formattedAmount}
+              </span>
+              <span class="text-slate-400 text-[11px]">•</span>
+              <span class="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                ${item.isActive ? (t('cashflow.activeBadge') || 'Aktif') : (t('cashflow.inactiveBadge') || 'Pasif')}
+              </span>
+            </div>
+          </div>
+          <div class="flex items-center space-x-1 shrink-0">
+            <label class="relative inline-flex items-center cursor-pointer mr-1" title="${t('cashflow.toggleStatus') || 'Durumu Değiştir'}">
+              <input type="checkbox" class="sr-only peer cf-toggle-active-btn" data-id="${item.id}" ${item.isActive ? 'checked' : ''} aria-label="${t('cashflow.toggleStatus') || 'Durumu Değiştir'}">
+              <div class="w-8 h-4 bg-slate-300 peer-focus:outline-hidden rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-indigo-600"></div>
+            </label>
+            <button type="button" class="cf-edit-btn min-w-[36px] min-h-[36px] p-2 rounded-xl flex items-center justify-center text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition" data-id="${item.id}" aria-label="${t('cashflow.editBtn') || 'Düzenle'}" title="${t('cashflow.editBtn') || 'Düzenle'}">
+              <i data-lucide="edit-3" class="w-4 h-4"></i>
+            </button>
+            <button type="button" class="cf-delete-btn min-w-[36px] min-h-[36px] p-2 rounded-xl flex items-center justify-center text-slate-500 hover:text-rose-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition" data-id="${item.id}" aria-label="${t('cashflow.deleteBtn') || 'Sil'}" title="${t('cashflow.deleteBtn') || 'Sil'}">
+              <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    this.cashflowListContainer.querySelectorAll('.cf-toggle-active-btn').forEach(btn => {
+      btn.addEventListener('change', (e) => {
+        const id = e.target.getAttribute('data-id');
+        const item = items.find(i => i.id === id);
+        if (item) {
+          this.store.updatePlannedCashflow(id, { isActive: !item.isActive });
+          this.renderCashflowManagerList();
+        }
+      });
+    });
+
+    this.cashflowListContainer.querySelectorAll('.cf-edit-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-id');
+        const item = items.find(i => i.id === id);
+        if (item) {
+          this.openCashflowModal('edit', item);
+        }
+      });
+    });
+
+    this.cashflowListContainer.querySelectorAll('.cf-delete-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-id');
+        this.requestDeletePlannedCashflow(id);
+      });
+    });
+
+    if (typeof lucide !== 'undefined' && typeof lucide.createIcons === 'function') {
+      lucide.createIcons();
+    }
+  }
+
+  requestDeletePlannedCashflow(id) {
+    const item = this.store.getPlannedCashflowById(id);
+    if (!item) return;
+    this.openConfirmModal({
+      title: t('cashflow.deleteConfirmTitle') || 'Planı Sil',
+      desc: t('cashflow.deleteConfirmDesc', { name: item.name }) || `"${item.name}" planını silmek istediğinize emin misiniz?`,
+      actionText: t('cashflow.deleteBtn') || 'Sil',
+      onConfirm: () => {
+        this.store.deletePlannedCashflow(item.id);
+        this.renderCashflowManagerList();
+        showToast(t('cashflow.deletedSuccess') || 'Planlı nakit akışı silindi.', 'success');
+      }
+    });
+  }
+
+  // --- Planned Cashflow Add/Edit Modal Methods (FAZ 5.5C) ---
+  openCashflowModal(mode = 'add', prefillData = null) {
+    this.lastFocusedElement = typeof document !== 'undefined' ? document.activeElement : null;
+    this.clearCashflowFieldErrors();
+
+    if (this.cashflowModalTitle) {
+      this.cashflowModalTitle.textContent = mode === 'edit'
+        ? (t('cashflow.editTitle') || 'Planlı Akışı Düzenle')
+        : (t('cashflow.addTitle') || 'Yeni Planlı Akış Ekle');
+    }
+
+    if (mode === 'edit' && prefillData) {
+      if (this.cashflowFieldId) this.cashflowFieldId.value = prefillData.id || '';
+      if (this.cashflowFieldName) this.cashflowFieldName.value = prefillData.name || '';
+      if (this.cashflowFieldAmount) this.cashflowFieldAmount.value = prefillData.amount || '';
+      this.setCashflowType(prefillData.type || 'income');
+      this.setCashflowRecurrence(prefillData.recurrence || 'monthly');
+      if (this.cashflowFieldDay) this.cashflowFieldDay.value = prefillData.dayOfMonth || '';
+      if (this.cashflowFieldDate) this.cashflowFieldDate.value = prefillData.date || '';
+      this.populateCashflowCategorySelect(prefillData.categoryId);
+      if (this.cashflowFieldStartDate) this.cashflowFieldStartDate.value = prefillData.startDate || '';
+      if (this.cashflowFieldEndDate) this.cashflowFieldEndDate.value = prefillData.endDate || '';
+      if (this.cashflowFieldActive) this.cashflowFieldActive.checked = prefillData.isActive !== false;
+    } else {
+      if (this.cashflowFieldId) this.cashflowFieldId.value = '';
+      if (this.cashflowFieldName) this.cashflowFieldName.value = '';
+      if (this.cashflowFieldAmount) this.cashflowFieldAmount.value = '';
+      this.setCashflowType('income');
+      this.setCashflowRecurrence('monthly');
+      if (this.cashflowFieldDay) this.cashflowFieldDay.value = '';
+      if (this.cashflowFieldDate) this.cashflowFieldDate.value = '';
+      this.populateCashflowCategorySelect(null);
+      if (this.cashflowFieldStartDate) this.cashflowFieldStartDate.value = '';
+      if (this.cashflowFieldEndDate) this.cashflowFieldEndDate.value = '';
+      if (this.cashflowFieldActive) this.cashflowFieldActive.checked = true;
+    }
+
+    if (this.cashflowModal) {
+      this.cashflowModal.classList.remove('hidden');
+      setTimeout(() => {
+        if (this.cashflowFieldName) this.cashflowFieldName.focus();
+      }, 50);
+    }
+    this.updateBodyScrollLock();
+  }
+
+  closeCashflowModal() {
+    if (this.cashflowModal) this.cashflowModal.classList.add('hidden');
+    this.updateBodyScrollLock();
+    this.clearCashflowFieldErrors();
+
+    if (this.cashflowManagerModal && !this.cashflowManagerModal.classList.contains('hidden')) {
+      this.renderCashflowManagerList();
+    } else if (this.lastFocusedElement && typeof this.lastFocusedElement.focus === 'function') {
+      this.lastFocusedElement.focus();
+    }
+  }
+
+  setCashflowType(type) {
+    if (!this.cashflowFieldType) return;
+    this.cashflowFieldType.value = type;
+
+    if (type === 'income') {
+      if (this.cfTypeIncomeBtn) this.cfTypeIncomeBtn.className = 'min-h-[40px] py-2 text-xs font-bold rounded-lg bg-emerald-600 text-white shadow-xs transition flex items-center justify-center space-x-1.5';
+      if (this.cfTypeExpenseBtn) this.cfTypeExpenseBtn.className = 'min-h-[40px] py-2 text-xs font-bold rounded-lg text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition flex items-center justify-center space-x-1.5';
+      if (this.cfGroupCategory) this.cfGroupCategory.classList.add('hidden');
+    } else {
+      if (this.cfTypeExpenseBtn) this.cfTypeExpenseBtn.className = 'min-h-[40px] py-2 text-xs font-bold rounded-lg bg-rose-600 text-white shadow-xs transition flex items-center justify-center space-x-1.5';
+      if (this.cfTypeIncomeBtn) this.cfTypeIncomeBtn.className = 'min-h-[40px] py-2 text-xs font-bold rounded-lg text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition flex items-center justify-center space-x-1.5';
+      if (this.cfGroupCategory) this.cfGroupCategory.classList.remove('hidden');
+      this.populateCashflowCategorySelect();
+    }
+  }
+
+  setCashflowRecurrence(recurrence) {
+    if (!this.cashflowFieldRecurrence) return;
+    this.cashflowFieldRecurrence.value = recurrence;
+
+    if (recurrence === 'monthly') {
+      if (this.cfRecurrenceMonthlyBtn) this.cfRecurrenceMonthlyBtn.className = 'min-h-[38px] py-1.5 text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-xs transition flex items-center justify-center space-x-1.5';
+      if (this.cfRecurrenceOnceBtn) this.cfRecurrenceOnceBtn.className = 'min-h-[38px] py-1.5 text-xs font-bold rounded-lg text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition flex items-center justify-center space-x-1.5';
+      if (this.cfGroupMonthly) this.cfGroupMonthly.classList.remove('hidden');
+      if (this.cfGroupOnce) this.cfGroupOnce.classList.add('hidden');
+    } else {
+      if (this.cfRecurrenceOnceBtn) this.cfRecurrenceOnceBtn.className = 'min-h-[38px] py-1.5 text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-xs transition flex items-center justify-center space-x-1.5';
+      if (this.cfRecurrenceMonthlyBtn) this.cfRecurrenceMonthlyBtn.className = 'min-h-[38px] py-1.5 text-xs font-bold rounded-lg text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition flex items-center justify-center space-x-1.5';
+      if (this.cfGroupMonthly) this.cfGroupMonthly.classList.add('hidden');
+      if (this.cfGroupOnce) this.cfGroupOnce.classList.remove('hidden');
+    }
+  }
+
+  populateCashflowCategorySelect(preselectId = null) {
+    if (!this.cashflowFieldCategory) return;
+    const cats = this.store.getCategories ? this.store.getCategories('expense') : [];
+    this.cashflowFieldCategory.innerHTML = `<option value="">${t('cashflow.optionalCategory') || 'Kategori Seçin (İsteğe Bağlı)'}</option>`;
+    cats.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.id;
+      opt.textContent = c.name || c.id;
+      if (preselectId && c.id === preselectId) opt.selected = true;
+      this.cashflowFieldCategory.appendChild(opt);
+    });
+  }
+
+  clearCashflowFieldErrors() {
+    [this.cfErrName, this.cfErrAmount, this.cfErrDay, this.cfErrDate].forEach(el => {
+      if (el) el.classList.add('hidden');
+    });
+  }
+
+  handleCashflowFormSubmit() {
+    this.clearCashflowFieldErrors();
+
+    const id = this.cashflowFieldId?.value?.trim() || null;
+    const name = this.cashflowFieldName?.value?.trim() || '';
+    const rawAmount = this.cashflowFieldAmount?.value;
+    const amount = rawAmount ? Number(rawAmount) : NaN;
+    const type = this.cashflowFieldType?.value || 'income';
+    const recurrence = this.cashflowFieldRecurrence?.value || 'monthly';
+    const rawDay = this.cashflowFieldDay?.value;
+    const dayOfMonth = recurrence === 'monthly' ? parseInt(rawDay, 10) : undefined;
+    const date = recurrence === 'once' ? (this.cashflowFieldDate?.value || '') : undefined;
+    const categoryId = type === 'expense' ? (this.cashflowFieldCategory?.value || undefined) : undefined;
+    const startDate = this.cashflowFieldStartDate?.value || undefined;
+    const endDate = this.cashflowFieldEndDate?.value || undefined;
+    const isActive = this.cashflowFieldActive ? this.cashflowFieldActive.checked : true;
+
+    let hasError = false;
+
+    if (!name) {
+      if (this.cfErrName) {
+        const span = this.cfErrName.querySelector('.err-text');
+        if (span) span.textContent = t('cashflow.errNameRequired') || 'Lütfen plan adı girin.';
+        this.cfErrName.classList.remove('hidden');
+      }
+      hasError = true;
+    }
+
+    if (isNaN(amount) || amount <= 0) {
+      if (this.cfErrAmount) {
+        const span = this.cfErrAmount.querySelector('.err-text');
+        if (span) span.textContent = t('cashflow.errAmountPositive') || 'Tutar 0\'dan büyük olmalıdır.';
+        this.cfErrAmount.classList.remove('hidden');
+      }
+      hasError = true;
+    }
+
+    if (recurrence === 'monthly') {
+      if (isNaN(dayOfMonth) || dayOfMonth < 1 || dayOfMonth > 31) {
+        if (this.cfErrDay) {
+          const span = this.cfErrDay.querySelector('.err-text');
+          if (span) span.textContent = t('cashflow.errDayInvalid') || 'Lütfen ayın 1 ile 31 arasında geçerli bir gününü seçin.';
+          this.cfErrDay.classList.remove('hidden');
+        }
+        hasError = true;
+      }
+    } else if (recurrence === 'once') {
+      if (!date) {
+        if (this.cfErrDate) {
+          const span = this.cfErrDate.querySelector('.err-text');
+          if (span) span.textContent = t('cashflow.errDateRequired') || 'Lütfen tek seferlik akış için bir tarih seçin.';
+          this.cfErrDate.classList.remove('hidden');
+        }
+        hasError = true;
+      }
+    }
+
+    if (hasError) return;
+
+    try {
+      const payload = {
+        name,
+        type,
+        amount,
+        recurrence,
+        dayOfMonth: recurrence === 'monthly' ? dayOfMonth : undefined,
+        date: recurrence === 'once' ? date : undefined,
+        categoryId,
+        startDate,
+        endDate,
+        isActive
+      };
+
+      if (id) {
+        this.store.updatePlannedCashflow(id, payload);
+      } else {
+        this.store.addPlannedCashflow(payload);
+      }
+
+      this.closeCashflowModal();
+      showToast(t('cashflow.savedSuccess') || 'Planlı nakit akışı başarıyla kaydedildi.', 'success');
+    } catch (err) {
+      showToast(err.message || 'Hata oluştu', 'error');
     }
   }
 }
