@@ -119,8 +119,9 @@ export class UIManager {
 
       this.authService.onAuthStateChange((user) => {
         this.renderAuthBadge(user);
-        if (user && this.store.state.onboarded) {
-          this.modalManager.closeOnboardingModal();
+        if (user) {
+          this.modalManager.closeAuthModal?.();
+          this.modalManager.closeOnboardingModal?.();
         }
       });
 
@@ -219,6 +220,7 @@ export class UIManager {
     this.iconSyncCloud = document.getElementById('icon-sync-cloud');
     this.syncStatusText = document.getElementById('sync-status-text');
     this.userEmailText = document.getElementById('user-email-text');
+    this.userAvatarImg = document.getElementById('user-avatar-img');
     this.btnSignOut = document.getElementById('btn-sign-out');
     this.btnManualSync = document.getElementById('btn-manual-sync');
 
@@ -376,11 +378,19 @@ export class UIManager {
       this.btnSignOut.addEventListener('click', () => {
         this.modalManager.openConfirmModal({
           title: t('auth.signOut'),
-          desc: 'Bulut oturumunuz kapatılacak. Bütçe verileriniz cihazınızda güvenle saklanmaya devam eder.',
+          desc: t('auth.signOutDesc') || 'Bulut oturumunuz kapatılacak. Gizliliğinizi korumak için bu cihazdaki oturum verileri temizlenir. Tekrar giriş yaptığınızda tüm verileriniz buluttan geri yüklenir.',
           actionText: t('auth.signOut'),
           onConfirm: async () => {
+            if (this.store.hasUnsyncedChanges && this.syncService) {
+              try {
+                await this.syncService.sync();
+              } catch (e) {
+                console.warn('[UIManager] Çıkış öncesi son senkronizasyon uyarısı:', e);
+              }
+            }
             await authService.signOut();
-            showToast('Oturum kapatıldı.', 'info');
+            this.store.clearSessionOnSignOut();
+            showToast('Oturum kapatıldı. Verileriniz bulutta güvendedir.', 'info');
           }
         });
       });
@@ -905,9 +915,17 @@ export class UIManager {
         this.userEmailText.textContent = user.email || 'Kullanıcı';
         this.userEmailText.title = user.email || '';
       }
+      const avatarUrl = user.user_metadata?.avatar_url || user.user_metadata?.picture;
+      if (avatarUrl && this.userAvatarImg) {
+        this.userAvatarImg.src = avatarUrl;
+        this.userAvatarImg.classList.remove('hidden');
+      } else if (this.userAvatarImg) {
+        this.userAvatarImg.classList.add('hidden');
+      }
     } else {
       this.btnOpenAuth?.classList.remove('hidden');
       this.userAuthBadge?.classList.add('hidden');
+      if (this.userAvatarImg) this.userAvatarImg.classList.add('hidden');
     }
     this.refreshIcons();
   }

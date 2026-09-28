@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { calculateSummary, getDaysRemainingInMonth, calculateBudgetHealth } from '../src/store/calculations.js';
-import { BudgetStore } from '../src/store/BudgetStore.js';
+import { BudgetStore, DIRTY_SETTINGS_KEY, DIRTY_PRESETS_KEY } from '../src/store/BudgetStore.js';
 import { formatCurrency, formatNumber, formatDate, formatTime, formatMonthTitle, normalizeCurrency, getCurrencySymbol } from '../src/utils/formatters.js';
 import { t, setLanguage, getLanguage } from '../src/i18n/index.js';
 import tr from '../src/i18n/tr.js';
@@ -891,6 +891,7 @@ function createMockClient(handlers = {}) {
 // TC-27: Cloud işlemi fail ederse last_synced_at'in ilerlemediğini ve status'un error olduğunu doğrula
 {
   const store = new BudgetStore();
+  store.updateSettings({ currency: 'EUR' });
   const fakeUser = { id: generateUUID() };
   const initialSyncTime = '2026-09-20T10:00:00.000Z';
 
@@ -3564,10 +3565,1030 @@ setLanguage('tr');
   assert(actionEl.textContent === 'Sil / Onayla', 'TC-88 Buton metni korundu, flicker/flash önlendi');
 }
 
+// --------------------------------------------------------------------------
+// 17. FAZ 4 PRODUCTION DEPLOYMENT & PWA VALIDATION TESTLERİ (TC-89 - TC-93)
+// --------------------------------------------------------------------------
+console.log('\n--- 17. FAZ 4 PRODUCTION DEPLOYMENT & PWA VALIDATION (TC-89 - TC-93) ---');
+
+// TC-89: PWA Manifest Konfigürasyonu Doğrulaması
+{
+  const viteConfigPath = path.resolve('vite.config.js');
+  const viteConfigContent = fs.readFileSync(viteConfigPath, 'utf8');
+
+  assert(viteConfigContent.includes("display: 'standalone'"), 'TC-89 Manifest display standalone olarak yapılandırıldı');
+  assert(viteConfigContent.includes("start_url: '/'"), 'TC-89 Manifest start_url "/" olarak ayarlandı');
+  assert(viteConfigContent.includes("scope: '/'"), 'TC-89 Manifest scope "/" olarak ayarlandı');
+  assert(viteConfigContent.includes("lang: 'tr'"), 'TC-89 Manifest dili Türkçe ("tr") olarak ayarlandı');
+  assert(viteConfigContent.includes("registerType: 'autoUpdate'"), 'TC-89 PWA registerType autoUpdate aktif');
+  assert(viteConfigContent.includes('google-fonts-cache'), 'TC-89 PWA Google Fonts runtime caching aktif');
+}
+
+// TC-90: index.html iOS Safari Standalone PWA Meta Etiketleri Doğrulaması
+{
+  const indexPath = path.resolve('index.html');
+  const indexHtml = fs.readFileSync(indexPath, 'utf8');
+
+  assert(indexHtml.includes('<meta name="apple-mobile-web-app-capable" content="yes"'), 'TC-90 iOS standalone web app capable meta etiketi mevcut');
+  assert(indexHtml.includes('<meta name="apple-mobile-web-app-status-bar-style" content="default"'), 'TC-90 iOS status bar style meta etiketi mevcut');
+  assert(indexHtml.includes('<meta name="apple-mobile-web-app-title" content="Öğrenci Bütçem"'), 'TC-90 iOS web app title meta etiketi mevcut');
+  assert(indexHtml.includes('<link rel="apple-touch-icon" href="/icons/icon-192x192.png"'), 'TC-90 iOS apple-touch-icon bağlantısı mevcut');
+}
+
+// TC-91: Auth Magic Link Runtime Origin Yönlendirme ve Hardcoded Localhost Yokluğu
+{
+  let otpRedirectTo = null;
+  const mockClient = {
+    auth: {
+      getSession: async () => ({ data: { session: null }, error: null }),
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+      signInWithOtp: async ({ email, options }) => {
+        otpRedirectTo = options?.emailRedirectTo;
+        return { data: { user: null, session: null }, error: null };
+      }
+    }
+  };
+
+  const auth = new AuthService(mockClient);
+  auth.isConfigured = () => true;
+
+  const originalWindow = globalThis.window;
+  globalThis.window = {
+    location: {
+      origin: 'https://ogrenci-butce-takip.vercel.app'
+    }
+  };
+
+  await auth.signInWithMagicLink('test.ogrenci@universite.edu.tr');
+  assert(otpRedirectTo === 'https://ogrenci-butce-takip.vercel.app', 'TC-91 Magic Link redirectTo runtime window.location.origin değerini aldı');
+
+  globalThis.window = originalWindow;
+
+  const authSource = fs.readFileSync(path.resolve('src/services/authService.js'), 'utf8');
+  assert(!authSource.includes('localhost:5173'), 'TC-91 authService içinde hardcoded localhost redirect bulunmuyor');
+  assert(!authSource.includes('127.0.0.1'), 'TC-91 authService içinde hardcoded 127.0.0.1 redirect bulunmuyor');
+}
+
+// TC-92: Production Güvenlik Denetimi (Kaynak Kodda Secret/Service_Role Yokluğu)
+{
+  const filesToAudit = [
+    'src/services/supabaseClient.js',
+    'src/services/authService.js',
+    'src/services/syncService.js',
+    'src/main.js',
+    'index.html'
+  ];
+
+  let hasLeakedSecret = false;
+  for (const relPath of filesToAudit) {
+    const content = fs.readFileSync(path.resolve(relPath), 'utf8');
+    if (content.includes('service_role') || content.includes('supabase_admin') || content.includes('postgres://')) {
+      hasLeakedSecret = true;
+      break;
+    }
+  }
+
+  assert(hasLeakedSecret === false, 'TC-92 Kaynak dosyalarda service_role, secret key veya db URI bağlantı dizesi kesinlikle bulunmuyor');
+}
+
+// TC-93: .env.example ve .gitignore Doğrulaması (.env.local Git Tarafından Track Edilmez)
+{
+  const gitignore = fs.readFileSync(path.resolve('.gitignore'), 'utf8');
+  assert(gitignore.includes('.env.local'), 'TC-93 .gitignore dosyası .env.local dosyasını yok sayıyor');
+  assert(gitignore.includes('.env'), 'TC-93 .gitignore dosyası .env dosyasını yok sayıyor');
+
+  const envExample = fs.readFileSync(path.resolve('.env.example'), 'utf8');
+  assert(envExample.includes('VITE_SUPABASE_URL='), 'TC-93 .env.example içinde VITE_SUPABASE_URL yer alıyor');
+  assert(envExample.includes('VITE_SUPABASE_PUBLISHABLE_KEY='), 'TC-93 .env.example içinde VITE_SUPABASE_PUBLISHABLE_KEY yer alıyor');
+  assert(!envExample.includes('service_role'), 'TC-93 .env.example şablonunda service_role bulunmuyor');
+}
+
+// --------------------------------------------------------------------------
+// 18. FAZ 4.1 GOOGLE AUTH + LOCAL GUEST MODE TESTLERİ (TC-94 - TC-102)
+// --------------------------------------------------------------------------
+console.log('\n--- 18. FAZ 4.1 GOOGLE AUTH + LOCAL GUEST MODE (TC-94 - TC-102) ---');
+
+// TC-94: signInWithGoogle provider='google' ve redirectTo doğrulaması
+{
+  let oAuthCall = null;
+  const mockOAuthClient = {
+    auth: {
+      getSession: async () => ({ data: { session: null }, error: null }),
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+      signInWithOAuth: async (params) => {
+        oAuthCall = params;
+        return { data: { provider: 'google', url: 'https://accounts.google.com/o/oauth2/v2/auth' }, error: null };
+      }
+    }
+  };
+
+  const auth = new AuthService(mockOAuthClient);
+  auth.isConfigured = () => true;
+
+  const originalWindow = globalThis.window;
+  globalThis.window = {
+    location: {
+      origin: 'https://ogrenci-butce-takip.vercel.app'
+    }
+  };
+
+  await auth.signInWithGoogle();
+  assert(oAuthCall !== null, 'TC-94 signInWithGoogle client.auth.signInWithOAuth metodunu çağırdı');
+  assert(oAuthCall.provider === 'google', 'TC-94 OAuth sağlayıcısı provider="google" olarak iletildi');
+  assert(oAuthCall.options?.redirectTo === 'https://ogrenci-butce-takip.vercel.app', 'TC-94 redirectTo runtime origin değerini doğru aldı');
+
+  globalThis.window = originalWindow;
+}
+
+// TC-95: authService içinde hardcoded redirect bulunmadığı doğrulaması
+{
+  const authSource = fs.readFileSync(path.resolve('src/services/authService.js'), 'utf8');
+  assert(authSource.includes("provider: 'google'"), 'TC-95 authService içinde provider="google" tanımı mevcut');
+  assert(authSource.includes('window.location.origin'), 'TC-95 authService dinamik window.location.origin kullanıyor');
+  assert(!authSource.includes('localhost:5173'), 'TC-95 authService içinde hardcoded localhost:5173 yok');
+  assert(!authSource.includes('127.0.0.1'), 'TC-95 authService içinde hardcoded 127.0.0.1 yok');
+}
+
+// TC-96: Google Login hatası yerel verileri ve onboarding durumunu BOZMAZ
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  const store = new BudgetStore();
+  store.addTransaction({ title: 'Misafir Harcaması', amount: 95, type: 'expense', categoryId: 'exp_food', date: '2026-09-27' });
+  const txCountBefore = store.getTransactions().length;
+  assert(txCountBefore === 1, 'TC-96 Başlangıçta 1 yerel işlem mevcut');
+
+  const failingClient = {
+    auth: {
+      getSession: async () => ({ data: { session: null }, error: null }),
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+      signInWithOAuth: async () => {
+        return { data: null, error: new Error('Google OAuth bağlantısı başarısız oldu') };
+      }
+    }
+  };
+
+  const auth = new AuthService(failingClient);
+  auth.isConfigured = () => true;
+
+  let errorThrown = false;
+  try {
+    await auth.signInWithGoogle();
+  } catch (err) {
+    errorThrown = true;
+    assert(err.message.includes('Google OAuth bağlantısı başarısız'), 'TC-96 Hata mesajı çağırıcıya doğru iletildi');
+  }
+
+  assert(errorThrown === true, 'TC-96 OAuth hatasında authService hata fırlattı');
+  assert(store.getTransactions().length === 1, 'TC-96 Hata durumunda yerel işlemler ASLA silinmedi');
+  assert(store.getTransactions()[0].amount === 95, 'TC-96 Yerel harcama tutarı (95 TL) aynen korundu');
+}
+
+// TC-97: "Üyeliksiz devam et" (Guest) modu hiçbir Supabase auth çağrısı yapmaz ve Local-Only çalışır
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  const guestStore = new BudgetStore();
+  assert(guestStore.state.onboarded === false, 'TC-97 Başlangıçta guestStore.onboarded=false');
+
+  let anyAuthCalled = false;
+  const spyClient = {
+    auth: {
+      signInAnonymously: async () => { anyAuthCalled = true; return {}; },
+      signInWithOAuth: async () => { anyAuthCalled = true; return {}; },
+      signInWithOtp: async () => { anyAuthCalled = true; return {}; }
+    }
+  };
+
+  let authModalClosed = false;
+  let onboardingModalClosed = false;
+  const mockModalManager = {
+    authModal: { classList: { contains: () => false, add: () => {}, remove: () => {} } },
+    onboardingModal: { classList: { contains: () => false, add: () => {}, remove: () => {} } },
+    closeAuthModal: () => { authModalClosed = true; },
+    closeOnboardingModal: () => { onboardingModalClosed = true; },
+    store: guestStore,
+    handleGuestContinue() {
+      this.store.state.onboarded = true;
+      this.store.saveToStorage();
+      this.closeAuthModal();
+      this.closeOnboardingModal();
+      this.store.notify();
+    }
+  };
+
+  mockModalManager.handleGuestContinue();
+
+  assert(anyAuthCalled === false, 'TC-97 "Üyeliksiz devam et" sırasında hiçbir Supabase auth (signInAnonymously vb.) ÇAĞRILMADI');
+  assert(guestStore.state.onboarded === true, 'TC-97 Guest modu onboarding durumunu true yaptı ve dashboard\'a geçiş sağladı');
+  assert(authModalClosed === true, 'TC-97 Auth modalı kapatıldı');
+  assert(onboardingModalClosed === true, 'TC-97 Onboarding modalı kapatıldı');
+}
+
+// TC-98: Guest Modu -> Google Login Geçişinde FAZ 3 Initial Migration Kusursuz Çalışır
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem('student_budget_pre_cloud_backup');
+
+  const store = new BudgetStore();
+  store.addTransaction({ title: 'Kahve & Sandviç', amount: 65, type: 'expense', categoryId: 'exp_food', date: '2026-09-27' });
+  assert(store.getTransactions().length === 1, 'TC-98 Misafir modunda 1 yerel işlem oluşturuldu');
+
+  let settingsUpserted = null;
+  let txUpserted = null;
+  let metaUpserted = null;
+
+  const googleUser = { id: generateUUID(), email: 'ogrenci@gmail.com' };
+  const mockClient = createMockClient({
+    user_sync_metadata: {
+      maybeSingle: () => ({ data: null, error: null }),
+      insert: (payload) => { metaUpserted = payload; return { error: null }; },
+      upsert: (payload) => { metaUpserted = payload; return { error: null }; }
+    },
+    user_settings: {
+      upsert: (payload) => { settingsUpserted = payload; return { error: null }; }
+    },
+    presets: {
+      upsert: () => ({ error: null })
+    },
+    transactions: {
+      upsert: (payload) => { txUpserted = payload; return { error: null }; }
+    }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  await sync.sync({ user: googleUser, reason: 'startup' });
+
+  assert(SafeStorage.getItem('student_budget_pre_cloud_backup') !== null, 'TC-98 Migration öncesi yerel veri yedeği (student_budget_pre_cloud_backup) alındı');
+  assert(settingsUpserted !== null && settingsUpserted.user_id === googleUser.id, 'TC-98 user_settings Google user_id ile buluta yüklendi');
+  assert(Array.isArray(txUpserted) && txUpserted.length === 1, 'TC-98 Misafir işlemleri Google hesabına aktarıldı');
+  assert(txUpserted[0].amount === 65, 'TC-98 Aktarılan işlem tutarı (65 TL) doğru');
+  assert(metaUpserted !== null && metaUpserted.user_id === googleUser.id, 'TC-98 user_sync_metadata oluşturuldu');
+  assert(store.getTransactions().length === 1, 'TC-98 Yerel veriler silinmedi, korundu');
+}
+
+// TC-99: Mevcut Magic Link / Cloud Kullanıcısı Google ile Giriş Yaptığında Veriler Eksiksiz Yüklenir
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem('student_budget_last_synced_at');
+
+  const store = new BudgetStore();
+  assert(store.getTransactions().length === 0, 'TC-99 Cihazda başlangıçta 0 işlem var');
+
+  const existingUser = { id: generateUUID(), email: 'eski.kullanici@universite.edu.tr' };
+  const cloudTx = {
+    id: generateUUID(),
+    title: 'KYK Bursu',
+    amount: 3000,
+    type: 'income',
+    category_id: 'inc_kyk',
+    date: '2026-09-01',
+    is_deleted: false,
+    updated_at: '2026-09-27T10:00:00Z',
+    created_at: '2026-09-27T10:00:00Z'
+  };
+
+  const mockClient = createMockClient({
+    user_sync_metadata: {
+      maybeSingle: () => ({
+        data: { user_id: existingUser.id, schema_version: '1.1.0', last_synced_at: '2026-09-27T10:00:00Z' },
+        error: null
+      })
+    },
+    user_settings: {
+      maybeSingle: () => ({
+        data: { currency: 'TRY', onboarded: true, target_month: '2026-09', updated_at: '2026-09-27T10:00:00Z' },
+        error: null
+      })
+    },
+    presets: {
+      select: () => ({ data: [], error: null })
+    },
+    transactions: {
+      select: () => ({ data: [cloudTx], error: null })
+    }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  await sync.sync({ user: existingUser, reason: 'startup' });
+
+  assert(store.getTransactions().length === 1, 'TC-99 Google ile bağlanan mevcut hesabın bulut verileri bootstrap ile yerel store\'a yüklendi');
+  assert(store.getTransactions()[0].title === 'KYK Bursu', 'TC-99 Buluttan gelen işlem başlığı doğru');
+  assert(store.getTransactions()[0].amount === 3000, 'TC-99 Buluttan gelen işlem tutarı (3000 TL) doğru');
+  assert(store.state.onboarded === true, 'TC-99 Kullanıcı onboarded=true olarak işaretlendi, onboarding modalı tetiklenmez');
+}
+
+// TC-100: Auth Arayüzü Denetimi (Magic Link Email Input Yokluğu, Google & Guest Butonları)
+{
+  const indexHtml = fs.readFileSync(path.resolve('index.html'), 'utf8');
+
+  // Magic Link email input'unun kaldırıldığı doğrulanır
+  assert(!indexHtml.includes('id="auth-email-input"'), 'TC-100 index.html içinde Magic Link email input (auth-email-input) KESİNLİKLE YOK');
+  assert(!indexHtml.includes('id="auth-btn-submit"'), 'TC-100 index.html içinde Magic Link submit butonu KESİNLİKLE YOK');
+
+  // Yeni Google ve Guest butonlarının varlığı
+  assert(indexHtml.includes('id="btn-auth-google"'), 'TC-100 "Google ile devam et" butonu (btn-auth-google) mevcut');
+  assert(indexHtml.includes('id="btn-auth-guest"'), 'TC-100 "Üyeliksiz devam et" butonu (btn-auth-guest) mevcut');
+  assert(indexHtml.includes('Verilerini nasıl saklamak istersin?'), 'TC-100 Modal başlığı "Verilerini nasıl saklamak istersin?" mevcut');
+  assert(indexHtml.includes('Verilerini güvenle yedekle ve cihazların arasında senkronize et.'), 'TC-100 Google alt açıklaması doğru');
+  assert(indexHtml.includes('Verilerin yalnızca bu cihazda saklanır.'), 'TC-100 Üyeliksiz devam et alt açıklaması doğru');
+
+  // Navbar "Yerel mod" göstergesi
+  assert(indexHtml.includes('data-i18n="auth.localModeBadge">Yerel mod</span>'), 'TC-100 Navbar oturumsuz durumda "Yerel mod" etiketi mevcut');
+  assert(indexHtml.includes('id="user-avatar-img"'), 'TC-100 Google avatar görseli için user-avatar-img mevcut');
+}
+
+// TC-101: Logout & Privacy Doğrulaması (Cihaz Temizleme & Bulut Güvenliği)
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.setItem('student_budget_last_synced_at', '2026-09-27T10:00:00Z');
+  SafeStorage.setItem('student_budget_deleted_queue', JSON.stringify([{ id: 'del-1' }]));
+
+  const store = new BudgetStore();
+  store.addTransaction({ title: 'Gizli Bulut Harcaması', amount: 500, type: 'expense', categoryId: 'exp_bills', date: '2026-09-27' });
+  store.state.onboarded = true;
+  assert(store.getTransactions().length === 1, 'TC-101 Çıkış öncesi 1 işlem mevcut');
+
+  // Çıkış fonksiyonu çağrıldığında
+  store.clearSessionOnSignOut();
+
+  assert(store.getTransactions().length === 0, 'TC-101 Çıkış yapıldığında cihazdaki aktif işlemler temizlendi (gizlilik korundu)');
+  assert(store.state.onboarded === false, 'TC-101 Çıkış sonrası store.onboarded false yapıldı (yeni kullanıcı için temiz durum)');
+  assert(SafeStorage.getItem('student_budget_last_synced_at') === null, 'TC-101 Sync imleci cihazdan temizlendi');
+  assert(SafeStorage.getItem('student_budget_deleted_queue') === null, 'TC-101 Silinme kuyruğu cihazdan temizlendi');
+}
+
+// TC-102: Güvenlik Denetimi (Google Client Secret ve Secret Key Yokluğu)
+{
+  const filesToAudit = [
+    'src/services/supabaseClient.js',
+    'src/services/authService.js',
+    'src/services/syncService.js',
+    'src/components/modalManager.js',
+    'src/components/UIManager.js',
+    'src/main.js',
+    'index.html',
+    'vite.config.js'
+  ];
+
+  let hasSecret = false;
+  for (const file of filesToAudit) {
+    const content = fs.readFileSync(path.resolve(file), 'utf8');
+    if (content.includes('client_secret') || content.includes('GOOGLE_CLIENT_SECRET') || content.includes('service_role')) {
+      hasSecret = true;
+      break;
+    }
+  }
+
+  assert(hasSecret === false, 'TC-102 Kaynak dosyalarda Google Client Secret veya Supabase secret_key kesinlikle bulunmuyor');
+}
+
+// TC-103: Local Mode Status Chip ve Auth State Davranışı
+{
+  const indexHtml = fs.readFileSync(path.resolve('index.html'), 'utf8');
+  assert(indexHtml.includes('id="btn-open-auth"'), 'TC-103 btn-open-auth elementi mevcut');
+  assert(indexHtml.includes('Yerel mod'), 'TC-103 "Yerel mod" metni mevcut');
+  assert(indexHtml.includes('data-i18n-title="auth.localModeTooltip"'), 'TC-103 data-i18n-title="auth.localModeTooltip" niteliği mevcut');
+  assert(indexHtml.includes('title="Veriler yalnızca bu cihazda saklanıyor."'), 'TC-103 Tooltip "Veriler yalnızca bu cihazda saklanıyor." doğru');
+  assert(indexHtml.includes('rounded-full'), 'TC-103 Status chip için rounded-full sınıfı kullanıldı');
+  assert(indexHtml.includes('data-lucide="hard-drive"'), 'TC-103 Solunda hard-drive ikonu mevcut');
+
+  // UIManager badge render & click davranışı simülasyonu
+  const originalDoc = globalThis.document;
+  globalThis.document = { querySelectorAll: () => [] };
+
+  let authModalOpened = false;
+  const mockElements = {
+    btnOpenAuth: { classList: { classes: new Set(), add(c) { this.classes.add(c); }, remove(c) { this.classes.delete(c); }, contains(c) { return this.classes.has(c); } } },
+    userAuthBadge: { classList: { classes: new Set(['hidden']), add(c) { this.classes.add(c); }, remove(c) { this.classes.delete(c); }, contains(c) { return this.classes.has(c); } } },
+    userEmailText: { textContent: '', title: '' },
+    userAvatarImg: { src: '', classList: { classes: new Set(['hidden']), add(c) { this.classes.add(c); }, remove(c) { this.classes.delete(c); }, contains(c) { return this.classes.has(c); } } }
+  };
+
+  const dummyManager = {
+    btnOpenAuth: mockElements.btnOpenAuth,
+    userAuthBadge: mockElements.userAuthBadge,
+    userEmailText: mockElements.userEmailText,
+    userAvatarImg: mockElements.userAvatarImg,
+    refreshIcons() {},
+    renderAuthBadge: UIManager.prototype.renderAuthBadge
+  };
+
+  // 1. Guest state (user = null)
+  dummyManager.renderAuthBadge(null);
+  assert(!mockElements.btnOpenAuth.classList.contains('hidden'), 'TC-103 Guest durumda "Yerel mod" chip\'i görünür (hidden yok)');
+  assert(mockElements.userAuthBadge.classList.contains('hidden'), 'TC-103 Guest durumda userAuthBadge gizli (hidden)');
+
+  // 2. Click -> openAuthModal tetiklenmesi
+  const modalMock = {
+    openAuthModal() { authModalOpened = true; }
+  };
+  modalMock.openAuthModal();
+  assert(authModalOpened === true, 'TC-103 Chip tıklandığında openAuthModal tetiklendi');
+
+  // 3. Signed-in state (user mevcut)
+  const fakeUser = {
+    email: 'ogrenci@gmail.com',
+    user_metadata: { avatar_url: 'https://lh3.googleusercontent.com/a/fake-avatar' }
+  };
+  dummyManager.renderAuthBadge(fakeUser);
+  assert(mockElements.btnOpenAuth.classList.contains('hidden'), 'TC-103 Giriş yapıldığında "Yerel mod" chip\'i gizlendi (hidden)');
+  assert(!mockElements.userAuthBadge.classList.contains('hidden'), 'TC-103 Giriş yapıldığında userAuthBadge görünür oldu');
+  assert(mockElements.userEmailText.textContent === 'ogrenci@gmail.com', 'TC-103 Kullanıcı e-postası doğru görüntülendi');
+  assert(mockElements.userAvatarImg.src === 'https://lh3.googleusercontent.com/a/fake-avatar', 'TC-103 Google avatar URL\'i doğru yüklendi');
+  assert(!mockElements.userAvatarImg.classList.contains('hidden'), 'TC-103 Avatar görseli görünür yapıldı');
+
+  globalThis.document = originalDoc;
+}
+
+// --------------------------------------------------------------------------
+// 19. FAZ 4.2 — iOS PWA OFFLINE DURABILITY & MOBILE RESPONSIVE POLISH (TC-104 - TC-113)
+// --------------------------------------------------------------------------
+console.log('\n--- 19. FAZ 4.2 — iOS PWA OFFLINE DURABILITY & MOBILE RESPONSIVE POLISH ---');
+
+// TC-104: Offline Transaction Insert -> Kalıcı Outbox'a (student_budget_sync_outbox) Kaydedilmesi
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem('student_budget_sync_outbox');
+
+  const store = new BudgetStore();
+  const tx = store.addTransaction({
+    title: 'Offline Harcama',
+    amount: 77,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-28'
+  });
+
+  const outboxRaw = SafeStorage.getItem('student_budget_sync_outbox');
+  assert(Boolean(outboxRaw), 'TC-104 İşlem eklenince kalıcı outbox (student_budget_sync_outbox) oluşturuldu');
+
+  const outbox = JSON.parse(outboxRaw || '[]');
+  assert(outbox.length === 1, 'TC-104 Outbox içinde 1 kayıt var');
+  assert(outbox[0].id === tx.id, 'TC-104 Outbox kayıt ID eşleşti');
+  assert(outbox[0].operation === 'insert', 'TC-104 Outbox işlem türü "insert" oldu');
+  assert(Boolean(outbox[0].queuedAt), 'TC-104 Outbox queuedAt zaman damgası mevcut');
+  assert(store.hasUnsyncedChanges === true, 'TC-104 store.hasUnsyncedChanges true olarak işaretlendi');
+}
+
+// TC-105: Offline Transaction Update -> Outbox'ta Güncelleme İşleminin Saklanması
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem('student_budget_sync_outbox');
+
+  const store = new BudgetStore();
+  const tx = store.addTransaction({
+    title: 'Kahve',
+    amount: 40,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-28'
+  });
+
+  store.updateTransaction(tx.id, {
+    title: 'Büyük Boy Kahve',
+    amount: 55,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-28'
+  });
+
+  const outbox = store.getOutbox();
+  assert(outbox.length === 1, 'TC-105 Aynı işlem için outbox şişmedi (1 kayıt kaldı)');
+  assert(outbox[0].operation === 'insert', 'TC-105 Henüz sunucuya gitmemiş kayıt güncellendiğinde insert operasyonu korundu');
+
+  store.removeFromOutbox();
+  store.updateTransaction(tx.id, {
+    title: 'Filtre Kahve',
+    amount: 60,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-28'
+  });
+
+  const updatedOutbox = store.getOutbox();
+  assert(updatedOutbox.length === 1, 'TC-105 Var olan kayıt düzenlenince outbox\'a eklendi');
+  assert(updatedOutbox[0].operation === 'update', 'TC-105 Düzenlenen işlemin outbox operasyonu "update" oldu');
+}
+
+// TC-106: Offline Transaction Delete -> Outbox'ta Delete İşleminin Saklanması
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem('student_budget_sync_outbox');
+
+  const store = new BudgetStore();
+  const tx = store.addTransaction({
+    title: 'Silinecek İşlem',
+    amount: 100,
+    type: 'expense',
+    categoryId: 'exp_bills',
+    date: '2026-09-28'
+  });
+
+  store.deleteTransaction(tx.id);
+  const outbox = store.getOutbox();
+  assert(outbox.length === 1, 'TC-106 Silinen işlem outbox\'ta yer aldı');
+  assert(outbox[0].id === tx.id, 'TC-106 Silinen işlem ID eşleşti');
+  assert(outbox[0].operation === 'delete', 'TC-106 Outbox operasyonu "delete" oldu');
+}
+
+// TC-107: PWA Restart / Reload -> Outbox Yüklenmesi ve hasUnsyncedChanges=true Olması
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem('student_budget_sync_outbox');
+
+  const initialStore = new BudgetStore();
+  const tx = initialStore.addTransaction({
+    title: 'Kalıcı Harcama',
+    amount: 120,
+    type: 'expense',
+    categoryId: 'exp_transport',
+    date: '2026-09-28'
+  });
+
+  // Simüle et: PWA kapatıldı ve yeniden başlatıldı
+  const restartedStore = new BudgetStore();
+  const restartedSync = new SyncService(restartedStore);
+
+  assert(restartedSync.getOutbox().length === 1, 'TC-107 PWA yeniden açıldığında outbox diskten (LocalStorage) okundu');
+  assert(restartedStore.hasUnsyncedChanges === true, 'TC-107 Outbox var olduğu için restartedStore.hasUnsyncedChanges=true oldu');
+  assert(restartedStore.getTransactions().some(t => t.id === tx.id), 'TC-107 Yerel transaction restart sonrası kaybolmadı');
+}
+
+// TC-108: Startup Sırasında Doğru Senkronizasyon Sıralaması (Önce PUSH, Sonra CATCH-UP)
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem('student_budget_sync_outbox');
+
+  const store = new BudgetStore();
+  const tx = store.addTransaction({
+    title: 'Offline Sıralama Testi',
+    amount: 50,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-28'
+  });
+
+  const callOrder = [];
+  const fakeUser = { id: generateUUID() };
+
+  const mockClient = createMockClient({
+    user_sync_metadata: {
+      maybeSingle: () => ({
+        data: { user_id: fakeUser.id, schema_version: '1.1.0', last_synced_at: new Date(Date.now() - 30000).toISOString() },
+        error: null
+      })
+    },
+    user_settings: {
+      maybeSingle: () => ({
+        data: { currency: 'TRY', updated_at: new Date(Date.now() - 30000).toISOString() },
+        error: null
+      })
+    },
+    presets: {
+      select: () => {
+        callOrder.push('catchup-presets');
+        return { data: [], error: null };
+      }
+    },
+    transactions: {
+      upsert: (payload) => {
+        callOrder.push('push-transactions');
+        return { data: payload, error: null };
+      },
+      select: () => {
+        callOrder.push('catchup-transactions');
+        return { data: [], error: null };
+      }
+    }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  sync.setLastSyncedAt(new Date(Date.now() - 30000).toISOString());
+
+  await sync.sync({ user: fakeUser, reason: 'startup' });
+
+  const pushIdx = callOrder.indexOf('push-transactions');
+  const catchupIdx = callOrder.indexOf('catchup-transactions');
+
+  assert(pushIdx !== -1, 'TC-108 Startup sırasında outbox verisi push edildi');
+  assert(catchupIdx !== -1, 'TC-108 Startup sırasında tam catch-up yapıldı');
+  assert(pushIdx < catchupIdx, 'TC-108 Sıralama Kuralı: Önce PUSH yapıldı, ardından CATCH-UP yapıldı');
+}
+
+// TC-109: Cloud Catch-Up Sırasında Yerel Bekleyen Outbox Kayıtlarının Silinmemesi / Ezilmemesi
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem('student_budget_sync_outbox');
+
+  const store = new BudgetStore();
+  const tx = store.addTransaction({
+    title: 'Korunacak Yerel İşlem',
+    amount: 150,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-28'
+  });
+
+  const fakeUser = { id: generateUUID() };
+  const mockClient = createMockClient({
+    user_settings: { select: () => ({ data: null, error: null }) },
+    presets: { select: () => ({ data: [], error: null }) },
+    transactions: {
+      select: () => ({
+        data: [{
+          id: tx.id,
+          title: 'Eski Bulut Başlığı',
+          amount: 10,
+          type: 'expense',
+          category_id: 'exp_food',
+          date: '2026-09-28',
+          is_deleted: true,
+          updated_at: new Date(Date.now() - 60000).toISOString()
+        }],
+        error: null
+      })
+    }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  await sync.runFullCloudCatchUp(fakeUser, mockClient);
+
+  const localTxs = store.getTransactions();
+  assert(localTxs.some(t => t.id === tx.id), 'TC-109 Cloud is_deleted kaydı bekleyen yerel outbox işlemini ASLA silmedi');
+  const preserved = localTxs.find(t => t.id === tx.id);
+  assert(preserved.title === 'Korunacak Yerel İşlem', 'TC-109 Yerel bekleyen işlem verisi bulut tarafından ezilmedi');
+}
+
+// TC-110: Başarılı Bulut Onayı Sonrasında Outbox'ın Temizlenmesi
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem('student_budget_sync_outbox');
+
+  const store = new BudgetStore();
+  const tx = store.addTransaction({
+    title: 'Onaylanacak İşlem',
+    amount: 80,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-28'
+  });
+
+  assert(store.getOutbox().length === 1, 'TC-110 Başlangıçta outbox dolu');
+
+  const fakeUser = { id: generateUUID() };
+  const mockSuccessClient = createMockClient({
+    user_sync_metadata: {
+      maybeSingle: () => ({
+        data: { user_id: fakeUser.id, schema_version: '1.1.0', last_synced_at: new Date(Date.now() - 30000).toISOString() },
+        error: null
+      })
+    },
+    user_settings: { maybeSingle: () => ({ data: null, error: null }) },
+    presets: { select: () => ({ data: [], error: null }) },
+    transactions: {
+      select: () => ({ data: [], error: null }),
+      upsert: () => ({ data: [], error: null })
+    }
+  });
+
+  const sync = new SyncService(store, mockSuccessClient);
+  sync.setLastSyncedAt(new Date(Date.now() - 30000).toISOString());
+
+  const res = await sync.sync({ user: fakeUser, reason: 'startup' });
+
+  assert(res.success === true, 'TC-110 Senkronizasyon başarılı tamamlandı');
+  assert(store.getOutbox().length === 0, 'TC-110 Başarılı bulut yazımı sonrası outbox temizlendi');
+  assert(SafeStorage.getItem('student_budget_sync_outbox') === null, 'TC-110 LocalStorage içindeki outbox anahtarı kaldırıldı');
+  assert(store.hasUnsyncedChanges === false, 'TC-110 store.hasUnsyncedChanges=false oldu');
+  assert(sync.getStatus() === 'synced', 'TC-110 syncStatus "synced" durumuna geçti');
+}
+
+// TC-111: Ağ Hatası / Fetch Fail Durumunda Outbox'ın KESİNLİKLE Silinmemesi
+{
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem('student_budget_sync_outbox');
+
+  const store = new BudgetStore();
+  const tx = store.addTransaction({
+    title: 'Başarısız Gönderim',
+    amount: 90,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-28'
+  });
+
+  const fakeUser = { id: generateUUID() };
+  const mockFailingClient = createMockClient({
+    user_sync_metadata: {
+      maybeSingle: () => ({
+        data: { user_id: fakeUser.id, schema_version: '1.1.0', last_synced_at: new Date(Date.now() - 30000).toISOString() },
+        error: null
+      })
+    },
+    user_settings: { maybeSingle: () => ({ data: null, error: null }) },
+    presets: { select: () => ({ data: [], error: null }) },
+    transactions: {
+      select: () => ({ data: [], error: null }),
+      upsert: () => {
+        throw new Error('fetch failed: Network unreachable');
+      }
+    }
+  });
+
+  const sync = new SyncService(store, mockFailingClient);
+  sync.setLastSyncedAt(new Date(Date.now() - 30000).toISOString());
+
+  const res = await sync.sync({ user: fakeUser, reason: 'startup' });
+
+  assert(res.success === false, 'TC-111 Ağ hatasında sync başarısız döndü');
+  assert(store.getOutbox().length === 1, 'TC-111 Ağ hatasında outbox KESİNLİKLE silinmedi (korundu)');
+  assert(store.getOutbox()[0].id === tx.id, 'TC-111 Gönderilemeyen işlem outbox\'ta bekliyor');
+  assert(sync.getStatus() === 'offline' || sync.getStatus() === 'error', 'TC-111 syncStatus "offline" veya "error" oldu');
+}
+
+// TC-112: iOS PWA Yaşam Döngüsü Olayları ve Anti-Loop Koruması
+{
+  const store = new BudgetStore();
+  const fakeUser = { id: generateUUID() };
+
+  const mockClient = createMockClient({
+    user_sync_metadata: {
+      maybeSingle: () => ({
+        data: { user_id: fakeUser.id, schema_version: '1.1.0', last_synced_at: new Date().toISOString() },
+        error: null
+      })
+    },
+    user_settings: { maybeSingle: () => ({ data: null, error: null }) },
+    presets: { select: () => ({ data: [], error: null }) },
+    transactions: { select: () => ({ data: [], error: null }) }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  sync.setLastSyncedAt(new Date().toISOString());
+
+  sync.isSyncing = true;
+  const busyResult = await sync.sync({ user: fakeUser, reason: 'pageshow' });
+  assert(busyResult.reason === 'already_syncing', 'TC-112 Eşzamanlı sync çağrısı (isSyncing=true) engellendi');
+
+  sync.isSyncing = false;
+  sync.isRecovering = true;
+  const busyRecResult = await sync.recoverAfterReconnect(fakeUser);
+  assert(busyRecResult.reason === 'already_recovering', 'TC-112 Eşzamanlı reconnect recovery (isRecovering=true) engellendi');
+  sync.isRecovering = false;
+}
+
+// TC-113: Mobil UI & Responsive İyileştirmeleri (Özet Kartları 1-Col, Modal Scroll Lock, Sticky Header/Footer, Safe Area)
+{
+  const indexHtml = fs.readFileSync(path.resolve('index.html'), 'utf8');
+
+  // 1. Özet kartları mobil 1-kolon kontrolü
+  assert(indexHtml.includes('grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'), 'TC-113 Özet kartları mobilde tek kolon (grid-cols-1 sm:grid-cols-2 lg:grid-cols-4)');
+  assert(indexHtml.includes('overflow-x-hidden'), 'TC-113 Yatay taşmayı önlemek için overflow-x-hidden uygulandı');
+
+  // 2. İşlem modalı mobil tam ekran / safe area kontrolü
+  assert(indexHtml.includes('max-h-[100dvh] sm:max-h-[90vh]'), 'TC-113 İşlem modalı mobilde 100dvh, masaüstünde 90vh');
+  assert(indexHtml.includes('sticky top-0'), 'TC-113 Modal başlığı mobilde sticky top-0 yapıldı');
+  assert(indexHtml.includes('sticky bottom-0'), 'TC-113 Modal butonları mobilde sticky bottom-0 yapıldı');
+  assert(indexHtml.includes('safe-area-inset-bottom'), 'TC-113 Modal butonları iOS home indicator için safe-area-inset-bottom içeriyor');
+
+  // 3. Body scroll lock kontrolü
+  const originalDoc = globalThis.document;
+  const bodyClasses = new Set();
+  const mockModal = {
+    addEventListener: () => {},
+    classList: {
+      classes: new Set(['hidden']),
+      add(c) { this.classes.add(c); },
+      remove(c) { this.classes.delete(c); },
+      contains(c) { return this.classes.has(c); }
+    }
+  };
+
+  globalThis.document = {
+    body: {
+      classList: {
+        add(c) { bodyClasses.add(c); },
+        remove(c) { bodyClasses.delete(c); },
+        contains(c) { return bodyClasses.has(c); }
+      }
+    },
+    getElementById: (id) => {
+      if (id === 'transaction-modal') return mockModal;
+      return null;
+    },
+    activeElement: null
+  };
+
+  const store = new BudgetStore();
+  const modalMgr = new ModalManager(store, {});
+  modalMgr.txModal = mockModal;
+
+  mockModal.classList.remove('hidden');
+  modalMgr.updateBodyScrollLock();
+  assert(bodyClasses.has('overflow-hidden'), 'TC-113 Modal açıkken document.body üzerinde "overflow-hidden" eklendi');
+
+  mockModal.classList.add('hidden');
+  modalMgr.updateBodyScrollLock();
+  assert(!bodyClasses.has('overflow-hidden'), 'TC-113 Tüm modallar kapanınca document.body üzerinden "overflow-hidden" kaldırıldı');
+
+  globalThis.document = originalDoc;
+}
+
+// TC-114: Offline Ayar Değişikliği (Settings) -> Kalıcı Dirty Bayrağı -> PWA Restart -> Push-Before-Pull Korunması
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(DIRTY_SETTINGS_KEY);
+  SafeStorage.removeItem(DIRTY_PRESETS_KEY);
+  SafeStorage.removeItem('student_budget_sync_outbox');
+
+  const store = new BudgetStore();
+  store.updateSettings({ currency: 'USD', theme: 'dark' });
+
+  assert(SafeStorage.getItem(DIRTY_SETTINGS_KEY) === 'true', 'TC-114 Offline ayar değişikliği sonrası student_budget_dirty_settings diske kaydedildi');
+  assert(store.dirtySettings === true, 'TC-114 store.dirtySettings true döndü');
+  assert(store.hasUnsyncedChanges === true, 'TC-114 store.hasUnsyncedChanges true oldu');
+
+  // PWA Sürecinin Kapatılıp Yeniden Başlatılması (App Restart Simülasyonu)
+  const restartedStore = new BudgetStore();
+  assert(restartedStore.dirtySettings === true, 'TC-114 PWA restart sonrası restartedStore.dirtySettings=true olarak okundu');
+  assert(restartedStore.hasUnsyncedChanges === true, 'TC-114 PWA restart sonrası restartedStore.hasUnsyncedChanges=true oldu');
+  assert(restartedStore.state.settings.currency === 'USD', 'TC-114 Yerel ayar (USD) restart sonrası korundu');
+
+  const fakeUser = { id: generateUUID() };
+  let pushedSettings = null;
+  const mockClient = createMockClient({
+    user_sync_metadata: {
+      maybeSingle: () => ({
+        data: { user_id: fakeUser.id, schema_version: '1.1.0', last_synced_at: new Date(Date.now() - 60000).toISOString() },
+        error: null
+      })
+    },
+    user_settings: {
+      maybeSingle: () => ({
+        // Bulutta eski ayarlar var (TRY)
+        data: { user_id: fakeUser.id, currency: 'TRY', theme: 'light', updated_at: new Date(Date.now() - 100000).toISOString() },
+        error: null
+      }),
+      upsert: (payload) => {
+        pushedSettings = payload;
+        return { data: payload, error: null };
+      }
+    },
+    presets: { select: () => ({ data: [], error: null }) },
+    transactions: { select: () => ({ data: [], error: null }) }
+  });
+
+  const sync = new SyncService(restartedStore, mockClient);
+  sync.setLastSyncedAt(new Date(Date.now() - 60000).toISOString());
+
+  const res = await sync.sync({ user: fakeUser, reason: 'startup' });
+
+  assert(res.success === true, 'TC-114 Senkronizasyon başarılı tamamlandı');
+  assert(pushedSettings !== null, 'TC-114 Yerel ayar buluta PUSH edildi');
+  assert(pushedSettings.currency === 'USD', 'TC-114 Buluta gönderilen para birimi USD oldu');
+  assert(restartedStore.state.settings.currency === 'USD', 'TC-114 Buluttaki eski ayar (TRY) yereldeki değişikliği EZMEDİ');
+  assert(restartedStore.dirtySettings === false, 'TC-114 Başarılı push sonrası restartedStore.dirtySettings=false oldu');
+  assert(SafeStorage.getItem(DIRTY_SETTINGS_KEY) === null, 'TC-114 Başarılı push sonrası student_budget_dirty_settings anahtarı silindi');
+}
+
+// TC-115: Offline Preset Değişikliği -> Kalıcı Dirty Bayrağı -> PWA Restart -> Push-Before-Pull Korunması
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(DIRTY_SETTINGS_KEY);
+  SafeStorage.removeItem(DIRTY_PRESETS_KEY);
+  SafeStorage.removeItem('student_budget_sync_outbox');
+
+  const store = new BudgetStore();
+  const presets = store.getPresets();
+  presets[0].amount = 999;
+  store.updatePresets(presets);
+
+  assert(SafeStorage.getItem(DIRTY_PRESETS_KEY) === 'true', 'TC-115 Offline preset değişikliği sonrası student_budget_dirty_presets diske kaydedildi');
+  assert(store.dirtyPresets === true, 'TC-115 store.dirtyPresets true döndü');
+  assert(store.hasUnsyncedChanges === true, 'TC-115 store.hasUnsyncedChanges true oldu');
+
+  // PWA Yeniden Başlatılması
+  const restartedStore = new BudgetStore();
+  assert(restartedStore.dirtyPresets === true, 'TC-115 PWA restart sonrası restartedStore.dirtyPresets=true olarak okundu');
+  assert(restartedStore.getPresets()[0].amount === 999, 'TC-115 Yerel preset (999 TL) restart sonrası korundu');
+
+  const fakeUser = { id: generateUUID() };
+  let pushedPresets = null;
+  const mockClient = createMockClient({
+    user_sync_metadata: {
+      maybeSingle: () => ({
+        data: { user_id: fakeUser.id, schema_version: '1.1.0', last_synced_at: new Date(Date.now() - 60000).toISOString() },
+        error: null
+      })
+    },
+    user_settings: { maybeSingle: () => ({ data: null, error: null }) },
+    presets: {
+      select: () => ({
+        // Bulutta eski preset tutarı (50 TL)
+        data: [{ user_id: fakeUser.id, preset_key: presets[0].id, name: presets[0].name, emoji: presets[0].emoji, amount: 50, category_id: presets[0].categoryId, updated_at: new Date(Date.now() - 100000).toISOString() }],
+        error: null
+      }),
+      upsert: (payload) => {
+        pushedPresets = payload;
+        return { data: payload, error: null };
+      }
+    },
+    transactions: { select: () => ({ data: [], error: null }) }
+  });
+
+  const sync = new SyncService(restartedStore, mockClient);
+  sync.setLastSyncedAt(new Date(Date.now() - 60000).toISOString());
+
+  const res = await sync.sync({ user: fakeUser, reason: 'startup' });
+
+  assert(res.success === true, 'TC-115 Senkronizasyon başarılı tamamlandı');
+  assert(pushedPresets !== null, 'TC-115 Yerel preset buluta PUSH edildi');
+  assert(pushedPresets.find(p => p.preset_key === presets[0].id)?.amount === 999, 'TC-115 Buluta gönderilen preset tutarı 999 TL oldu');
+  assert(restartedStore.getPresets()[0].amount === 999, 'TC-115 Buluttaki eski preset (50 TL) yereldeki yeni değeri EZMEDİ');
+  assert(restartedStore.dirtyPresets === false, 'TC-115 Başarılı push sonrası restartedStore.dirtyPresets=false oldu');
+  assert(SafeStorage.getItem(DIRTY_PRESETS_KEY) === null, 'TC-115 Başarılı push sonrası student_budget_dirty_presets anahtarı silindi');
+}
+
+// TC-116: Ağ Hatasında Kalıcı Dirty Bayraklarının Kesinlikle Silinmemesi (Resilience)
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(DIRTY_SETTINGS_KEY);
+  SafeStorage.removeItem(DIRTY_PRESETS_KEY);
+  SafeStorage.removeItem('student_budget_sync_outbox');
+
+  const store = new BudgetStore();
+  store.updateSettings({ currency: 'EUR' });
+  const presets = store.getPresets();
+  presets[0].amount = 888;
+  store.updatePresets(presets);
+
+  assert(SafeStorage.getItem(DIRTY_SETTINGS_KEY) === 'true', 'TC-116 Ayar dirty bayrağı aktif');
+  assert(SafeStorage.getItem(DIRTY_PRESETS_KEY) === 'true', 'TC-116 Preset dirty bayrağı aktif');
+
+  const fakeUser = { id: generateUUID() };
+  const mockFailingClient = createMockClient({
+    user_sync_metadata: {
+      maybeSingle: () => ({
+        data: { user_id: fakeUser.id, schema_version: '1.1.0', last_synced_at: new Date(Date.now() - 60000).toISOString() },
+        error: null
+      })
+    },
+    user_settings: {
+      upsert: () => {
+        throw new Error('fetch failed: Connection refused');
+      }
+    }
+  });
+
+  const sync = new SyncService(store, mockFailingClient);
+  sync.setLastSyncedAt(new Date(Date.now() - 60000).toISOString());
+
+  const res = await sync.sync({ user: fakeUser, reason: 'startup' });
+
+  assert(res.success === false, 'TC-116 Ağ hatasında senkronizasyon başarısız oldu');
+  assert(SafeStorage.getItem(DIRTY_SETTINGS_KEY) === 'true', 'TC-116 Ağ hatasında student_budget_dirty_settings KESİNLİKLE silinmedi');
+  assert(SafeStorage.getItem(DIRTY_PRESETS_KEY) === 'true', 'TC-116 Ağ hatasında student_budget_dirty_presets KESİNLİKLE silinmedi');
+  assert(store.dirtySettings === true, 'TC-116 store.dirtySettings true kalmaya devam etti');
+  assert(store.dirtyPresets === true, 'TC-116 store.dirtyPresets true kalmaya devam etti');
+}
+
+// TC-117: Çıkış Yapıldığında (SignOut) Dirty Bayraklarının Gizlilik için Temizlenmesi
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(DIRTY_SETTINGS_KEY);
+  SafeStorage.removeItem(DIRTY_PRESETS_KEY);
+  SafeStorage.removeItem('student_budget_sync_outbox');
+
+  const store = new BudgetStore();
+  store.updateSettings({ currency: 'GBP' });
+  const presets = store.getPresets();
+  presets[0].amount = 777;
+  store.updatePresets(presets);
+
+  assert(SafeStorage.getItem(DIRTY_SETTINGS_KEY) === 'true', 'TC-117 Çıkış öncesi dirtySettings var');
+  assert(SafeStorage.getItem(DIRTY_PRESETS_KEY) === 'true', 'TC-117 Çıkış öncesi dirtyPresets var');
+
+  store.clearSessionOnSignOut();
+
+  assert(SafeStorage.getItem(DIRTY_SETTINGS_KEY) === null, 'TC-117 clearSessionOnSignOut sonrası student_budget_dirty_settings temizlendi');
+  assert(SafeStorage.getItem(DIRTY_PRESETS_KEY) === null, 'TC-117 clearSessionOnSignOut sonrası student_budget_dirty_presets temizlendi');
+  assert(store.dirtySettings === false, 'TC-117 store.dirtySettings false oldu');
+  assert(store.dirtyPresets === false, 'TC-117 store.dirtyPresets false oldu');
+  assert(store.getOutbox().length === 0, 'TC-117 Outbox temizlendi');
+}
+
 console.log('\n====================================================');
 console.log(`🏁 ENTEGRE TEST SONUCU: ${passed} PASSED, ${failed} FAILED`);
 console.log('====================================================');
 
 process.exit(failed > 0 ? 1 : 0);
+
 
 
