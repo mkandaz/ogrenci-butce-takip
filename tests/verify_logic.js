@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { calculateSummary, getDaysRemainingInMonth, calculateBudgetHealth } from '../src/store/calculations.js';
-import { BudgetStore, DIRTY_SETTINGS_KEY, DIRTY_PRESETS_KEY } from '../src/store/BudgetStore.js';
+import { BudgetStore, DIRTY_SETTINGS_KEY, DIRTY_PRESETS_KEY, PLANNED_CASHFLOW_OUTBOX_KEY } from '../src/store/BudgetStore.js';
 import { formatCurrency, formatNumber, formatDate, formatTime, formatMonthTitle, normalizeCurrency, getCurrencySymbol } from '../src/utils/formatters.js';
 import { t, setLanguage, getLanguage } from '../src/i18n/index.js';
 import tr from '../src/i18n/tr.js';
@@ -9,7 +9,7 @@ import en from '../src/i18n/en.js';
 import { generateUUID, isValidUUID, getLocalDateString, getCurrentYearMonth, compareTransactions } from '../src/utils/helpers.js';
 import { SafeStorage } from '../src/utils/storage.js';
 import { AuthService, authService } from '../src/services/authService.js';
-import { SyncService } from '../src/services/syncService.js';
+import { SyncService, mapPlannedCashflowToDb, mapPlannedCashflowFromDb } from '../src/services/syncService.js';
 import { UIManager } from '../src/components/UIManager.js';
 import { ModalManager } from '../src/components/modalManager.js';
 import { STORAGE_KEY } from '../src/config/constants.js';
@@ -6932,11 +6932,1640 @@ console.log('\n--- 25. FAZ 5.5A SEMANTIC PATCH: TIGHT & SAME-DAY INCOME ---');
   assert(TIGHT_UTILIZATION_THRESHOLD === 0.80, 'TC-294 TIGHT_UTILIZATION_THRESHOLD strictly 0.80');
 }
 
+// --------------------------------------------------------------------------
+// 26. FAZ 5.5B — PLANNED CASHFLOW PERSISTENCE, SUPABASE & DURABLE SYNC
+// --------------------------------------------------------------------------
+console.log('\n--- 26. FAZ 5.5B — PLANNED CASHFLOW PERSISTENCE, SUPABASE & DURABLE SYNC (TC-295 - TC-352) ---');
+
+// TC-295: Store initialization without plannedCashflows defaults to [] (backward compatibility)
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  assert(Array.isArray(store.state.plannedCashflows) && store.state.plannedCashflows.length === 0, 'TC-295 fresh store has plannedCashflows = []');
+
+  // Eski versiyon JSON yükleme (plannedCashflows alanı yok)
+  const legacyData = {
+    version: '1.0.0',
+    onboarded: true,
+    settings: {},
+    categories: [],
+    transactions: [
+      { id: '11111111-1111-4111-8111-111111111111', title: 'Legacy', amount: 50, type: 'expense', categoryId: 'exp_other', date: '2026-09-01' }
+    ]
+  };
+  SafeStorage.setItem(STORAGE_KEY, JSON.stringify(legacyData));
+  const store2 = new BudgetStore();
+  assert(Array.isArray(store2.state.plannedCashflows) && store2.state.plannedCashflows.length === 0, 'TC-295 legacy state without plannedCashflows defaults to []');
+  assert(store2.state.transactions.length === 1, 'TC-295 legacy transactions preserved');
+}
+
+// TC-296: validatePlannedCashflow integration in addPlannedCashflow (valid input succeeds)
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  const res = store.addPlannedCashflow({
+    name: 'KYK Bursu',
+    type: 'income',
+    amount: 3000,
+    recurrence: 'monthly',
+    dayOfMonth: 8
+  });
+  assert(typeof res === 'object' && res !== null, 'TC-296 addPlannedCashflow returns object');
+  assert(isValidUUID(res.id), 'TC-296 valid UUID generated');
+  assert(res.name === 'KYK Bursu', 'TC-296 name preserved');
+  assert(res.amount === 3000, 'TC-296 amount preserved');
+  assert(res.type === 'income', 'TC-296 type preserved');
+  assert(res.recurrence === 'monthly', 'TC-296 recurrence preserved');
+  assert(res.dayOfMonth === 8, 'TC-296 dayOfMonth preserved');
+}
+
+// TC-297: addPlannedCashflow invalid recurrence rejected
+{
+  const store = new BudgetStore();
+  let threw = false;
+  try {
+    store.addPlannedCashflow({
+      name: 'Geçersiz',
+      type: 'income',
+      amount: 500,
+      recurrence: 'weekly'
+    });
+  } catch (e) {
+    threw = true;
+  }
+  assert(threw, 'TC-297 invalid recurrence rejected');
+}
+
+// TC-298: addPlannedCashflow invalid amount (zero/negative/NaN) rejected
+{
+  const store = new BudgetStore();
+  let threwZero = false;
+  let threwNeg = false;
+  let threwNaN = false;
+  try { store.addPlannedCashflow({ name: 'A', type: 'income', amount: 0, recurrence: 'monthly', dayOfMonth: 5 }); } catch (e) { threwZero = true; }
+  try { store.addPlannedCashflow({ name: 'B', type: 'expense', amount: -50, recurrence: 'monthly', dayOfMonth: 5 }); } catch (e) { threwNeg = true; }
+  try { store.addPlannedCashflow({ name: 'C', type: 'income', amount: NaN, recurrence: 'monthly', dayOfMonth: 5 }); } catch (e) { threwNaN = true; }
+  assert(threwZero, 'TC-298 zero amount rejected');
+  assert(threwNeg, 'TC-298 negative amount rejected');
+  assert(threwNaN, 'TC-298 NaN amount rejected');
+}
+
+// TC-299: addPlannedCashflow monthly without dayOfMonth rejected
+{
+  const store = new BudgetStore();
+  let threwMissing = false;
+  let threwOver31 = false;
+  try { store.addPlannedCashflow({ name: 'Kira', type: 'expense', amount: 2000, recurrence: 'monthly' }); } catch (e) { threwMissing = true; }
+  try { store.addPlannedCashflow({ name: 'Kira', type: 'expense', amount: 2000, recurrence: 'monthly', dayOfMonth: 32 }); } catch (e) { threwOver31 = true; }
+  assert(threwMissing, 'TC-299 monthly without dayOfMonth rejected');
+  assert(threwOver31, 'TC-299 dayOfMonth > 31 rejected');
+}
+
+// TC-300: addPlannedCashflow once without date rejected
+{
+  const store = new BudgetStore();
+  let threwMissingDate = false;
+  let threwInvalidDate = false;
+  try { store.addPlannedCashflow({ name: 'Kitap', type: 'expense', amount: 350, recurrence: 'once' }); } catch (e) { threwMissingDate = true; }
+  try { store.addPlannedCashflow({ name: 'Kitap', type: 'expense', amount: 350, recurrence: 'once', date: 'invalid-date' }); } catch (e) { threwInvalidDate = true; }
+  assert(threwMissingDate, 'TC-300 once without date rejected');
+  assert(threwInvalidDate, 'TC-300 invalid date rejected');
+}
+
+// TC-301: addPlannedCashflow sets UUID, createdAt, updatedAt, isActive default true
+{
+  const store = new BudgetStore();
+  const pc = store.addPlannedCashflow({
+    name: 'Telefon Faturası',
+    type: 'expense',
+    amount: 250,
+    recurrence: 'monthly',
+    dayOfMonth: 20
+  });
+  assert(isValidUUID(pc.id), 'TC-301 UUID valid');
+  assert(typeof pc.createdAt === 'number' && pc.createdAt > 0, 'TC-301 createdAt is epoch number');
+  assert(typeof pc.updatedAt === 'number' && pc.updatedAt > 0, 'TC-301 updatedAt is epoch number');
+  assert(pc.isActive === true, 'TC-301 isActive default true');
+}
+
+// TC-302: addPlannedCashflow queues to student_budget_planned_cashflow_outbox with operation 'create'
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  const pc = store.addPlannedCashflow({
+    name: 'Burs',
+    type: 'income',
+    amount: 3000,
+    recurrence: 'monthly',
+    dayOfMonth: 8
+  });
+  const outbox = store.getPlannedCashflowOutbox();
+  assert(outbox.length === 1, 'TC-302 outbox has 1 entry');
+  assert(outbox[0].id === pc.id, 'TC-302 outbox entry id matches');
+  assert(outbox[0].operation === 'create', 'TC-302 outbox operation is create');
+  assert(outbox[0].payload && outbox[0].payload.name === 'Burs', 'TC-302 outbox payload contains template');
+}
+
+// TC-303: updatePlannedCashflow updates fields, preserves createdAt, updates updatedAt
+{
+  const store = new BudgetStore();
+  const pc = store.addPlannedCashflow({
+    name: 'Eski Burs',
+    type: 'income',
+    amount: 2000,
+    recurrence: 'monthly',
+    dayOfMonth: 8,
+    createdAt: 1000000000000,
+    updatedAt: 1000000000000
+  });
+  const ok = store.updatePlannedCashflow(pc.id, {
+    name: 'Yeni Burs',
+    amount: 3000
+  });
+  assert(ok === true, 'TC-303 update returned true');
+  const updated = store.getPlannedCashflowById(pc.id);
+  assert(updated.name === 'Yeni Burs', 'TC-303 name updated');
+  assert(updated.amount === 3000, 'TC-303 amount updated');
+  assert(updated.createdAt === 1000000000000, 'TC-303 createdAt preserved strictly');
+  assert(updated.updatedAt > 1000000000000, 'TC-303 updatedAt increased');
+}
+
+// TC-304: updatePlannedCashflow invalid fields rejected
+{
+  const store = new BudgetStore();
+  const pc = store.addPlannedCashflow({
+    name: 'Kira',
+    type: 'expense',
+    amount: 4000,
+    recurrence: 'monthly',
+    dayOfMonth: 1
+  });
+  let threw = false;
+  try {
+    store.updatePlannedCashflow(pc.id, { amount: -100 });
+  } catch (e) {
+    threw = true;
+  }
+  assert(threw, 'TC-304 invalid update rejected');
+  assert(store.getPlannedCashflowById(pc.id).amount === 4000, 'TC-304 original amount unaffected');
+}
+
+// TC-305: updatePlannedCashflow queues to outbox with operation 'update'
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  const pc = store.addPlannedCashflow({
+    name: 'Elektrik',
+    type: 'expense',
+    amount: 300,
+    recurrence: 'monthly',
+    dayOfMonth: 15
+  });
+  // Outbox'ı temizleyelim (sanki sunucuya push edilmiş gibi)
+  store.clearPlannedCashflowOutbox();
+  assert(store.getPlannedCashflowOutbox().length === 0, 'TC-305 outbox cleared after push');
+
+  // Şimdi update yapalım
+  store.updatePlannedCashflow(pc.id, { amount: 350 });
+  const outbox = store.getPlannedCashflowOutbox();
+  assert(outbox.length === 1, 'TC-305 outbox has 1 entry after update');
+  assert(outbox[0].id === pc.id, 'TC-305 outbox item id matches');
+  assert(outbox[0].operation === 'update', 'TC-305 outbox operation is update');
+}
+
+// TC-306: updatePlannedCashflow on pending 'create' keeps operation 'create'
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  const pc = store.addPlannedCashflow({
+    name: 'Spor Salonu',
+    type: 'expense',
+    amount: 500,
+    recurrence: 'monthly',
+    dayOfMonth: 10
+  });
+  assert(store.getPlannedCashflowOutbox()[0].operation === 'create', 'TC-306 initial is create');
+  store.updatePlannedCashflow(pc.id, { amount: 550 });
+  const outbox = store.getPlannedCashflowOutbox();
+  assert(outbox.length === 1, 'TC-306 still 1 entry in outbox');
+  assert(outbox[0].operation === 'create', 'TC-306 pending create remains create');
+  assert(outbox[0].payload.amount === 550, 'TC-306 payload reflects updated amount');
+}
+
+// TC-307: deletePlannedCashflow removes from state
+{
+  const store = new BudgetStore();
+  const pc = store.addPlannedCashflow({
+    name: 'Geçici Gider',
+    type: 'expense',
+    amount: 100,
+    recurrence: 'once',
+    date: '2026-10-15'
+  });
+  assert(store.getPlannedCashflowById(pc.id) !== null, 'TC-307 item exists');
+  const deleted = store.deletePlannedCashflow(pc.id);
+  assert(deleted === true, 'TC-307 delete returns true');
+  assert(store.getPlannedCashflowById(pc.id) === null, 'TC-307 item removed from state');
+}
+
+// TC-308: deletePlannedCashflow queues to outbox with operation 'delete'
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  const pc = store.addPlannedCashflow({
+    name: 'Silinecek',
+    type: 'income',
+    amount: 500,
+    recurrence: 'once',
+    date: '2026-10-20'
+  });
+  store.clearPlannedCashflowOutbox();
+  store.deletePlannedCashflow(pc.id);
+  const outbox = store.getPlannedCashflowOutbox();
+  assert(outbox.length === 1, 'TC-308 outbox has delete item');
+  assert(outbox[0].id === pc.id, 'TC-308 delete id matches');
+  assert(outbox[0].operation === 'delete', 'TC-308 operation is delete');
+}
+
+// TC-309: deletePlannedCashflow non-existent id returns false
+{
+  const store = new BudgetStore();
+  const res = store.deletePlannedCashflow('non-existent-uuid');
+  assert(res === false, 'TC-309 non-existent delete returns false');
+}
+
+// TC-310: getPlannedCashflows returns all templates
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  store.addPlannedCashflow({ name: 'A', type: 'income', amount: 100, recurrence: 'monthly', dayOfMonth: 1, isActive: true });
+  store.addPlannedCashflow({ name: 'B', type: 'expense', amount: 200, recurrence: 'monthly', dayOfMonth: 5, isActive: false });
+  assert(store.getPlannedCashflows().length === 2, 'TC-310 getPlannedCashflows returns all 2 items');
+}
+
+// TC-311: getActivePlannedCashflows filters out isActive: false
+{
+  const store = new BudgetStore();
+  const activeList = store.getActivePlannedCashflows();
+  assert(activeList.length === 1 && activeList[0].name === 'A', 'TC-311 getActivePlannedCashflows returns only active');
+}
+
+// TC-312: Outbox durability on SafeStorage reload (simulating browser reload)
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const storeA = new BudgetStore();
+  storeA.addPlannedCashflow({
+    name: 'Offline Durable Template',
+    type: 'income',
+    amount: 4500,
+    recurrence: 'monthly',
+    dayOfMonth: 15
+  });
+
+  // Tarayıcı kapanıp açılmış gibi yeni store örneği başlatalım
+  const storeB = new BudgetStore();
+  const outboxB = storeB.getPlannedCashflowOutbox();
+  assert(outboxB.length === 1, 'TC-312 outbox persists across instance reload');
+  assert(outboxB[0].payload.name === 'Offline Durable Template', 'TC-312 payload intact after reload');
+  assert(storeB.hasUnsyncedChanges === true, 'TC-312 hasUnsyncedChanges is true on reloaded instance with outbox');
+}
+
+// TC-313: mapPlannedCashflowToDb maps camelCase to snake_case properly
+{
+  const input = {
+    id: '11111111-2222-3333-4444-555555555555',
+    name: 'Kira',
+    type: 'expense',
+    amount: 5000,
+    recurrence: 'monthly',
+    dayOfMonth: 3,
+    startDate: '2026-09-01',
+    endDate: '2027-06-30',
+    categoryId: 'exp_housing',
+    isActive: true,
+    isDeleted: false,
+    createdAt: 1727000000000,
+    updatedAt: 1727500000000
+  };
+  const mapped = mapPlannedCashflowToDb(input, 'user-123');
+  assert(mapped.id === input.id, 'TC-313 id mapped');
+  assert(mapped.user_id === 'user-123', 'TC-313 user_id mapped');
+  assert(mapped.day_of_month === 3, 'TC-313 day_of_month mapped');
+  assert(mapped.start_date === '2026-09-01', 'TC-313 start_date mapped');
+  assert(mapped.end_date === '2027-06-30', 'TC-313 end_date mapped');
+  assert(mapped.category_id === 'exp_housing', 'TC-313 category_id mapped');
+  assert(mapped.is_active === true, 'TC-313 is_active mapped');
+  assert(mapped.is_deleted === false, 'TC-313 is_deleted mapped');
+  assert(typeof mapped.created_at === 'string', 'TC-313 created_at ISO mapped');
+  assert(typeof mapped.updated_at === 'string', 'TC-313 updated_at ISO mapped');
+}
+
+// TC-314: mapPlannedCashflowFromDb maps snake_case to camelCase properly
+{
+  const row = {
+    id: '22222222-3333-4444-5555-666666666666',
+    name: 'Burs',
+    type: 'income',
+    amount: '3500.00',
+    recurrence: 'monthly',
+    day_of_month: 8,
+    start_date: '2026-10-01',
+    end_date: null,
+    category_id: 'inc_kyk',
+    is_active: true,
+    is_deleted: false,
+    deleted_at: null,
+    created_at: '2026-09-20T10:00:00.000Z',
+    updated_at: '2026-09-25T12:00:00.000Z'
+  };
+  const fromDb = mapPlannedCashflowFromDb(row);
+  assert(fromDb.id === row.id, 'TC-314 id mapped');
+  assert(fromDb.dayOfMonth === 8, 'TC-314 dayOfMonth mapped');
+  assert(fromDb.startDate === '2026-10-01', 'TC-314 startDate mapped');
+  assert(fromDb.categoryId === 'inc_kyk', 'TC-314 categoryId mapped');
+  assert(fromDb.amount === 3500, 'TC-314 amount parsed to number');
+  assert(typeof fromDb.createdAt === 'number', 'TC-314 createdAt parsed to epoch ms');
+  assert(typeof fromDb.updatedAt === 'number', 'TC-314 updatedAt parsed to epoch ms');
+}
+
+// TC-315: pushLocalChanges pushes create/update to Supabase planned_cashflows table
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  const pc = store.addPlannedCashflow({
+    name: 'KYK Burs',
+    type: 'income',
+    amount: 3000,
+    recurrence: 'monthly',
+    dayOfMonth: 8
+  });
+
+  let upsertedTable = null;
+  let upsertedPayload = null;
+  const mockClient = createMockClient({
+    planned_cashflows: {
+      upsert: (payload) => {
+        upsertedTable = 'planned_cashflows';
+        upsertedPayload = payload;
+        return { data: payload, error: null };
+      }
+    },
+    user_sync_metadata: { update: () => ({ data: [], error: null }) }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  await sync.pushLocalChanges({ id: 'user-xyz' }, mockClient);
+  assert(upsertedTable === 'planned_cashflows', 'TC-315 pushed to planned_cashflows table');
+  assert(Array.isArray(upsertedPayload) && upsertedPayload.length === 1, 'TC-315 1 item pushed');
+  assert(upsertedPayload[0].id === pc.id, 'TC-315 pushed item id matches');
+  assert(upsertedPayload[0].name === 'KYK Burs', 'TC-315 pushed name matches');
+}
+
+// TC-316: pushLocalChanges pushes delete as soft delete (is_deleted: true, deleted_at)
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  const pc = store.addPlannedCashflow({
+    name: 'Fatura',
+    type: 'expense',
+    amount: 200,
+    recurrence: 'monthly',
+    dayOfMonth: 10
+  });
+  store.clearPlannedCashflowOutbox(); // push edilmiş gibi
+  store.deletePlannedCashflow(pc.id);
+
+  let updatedTable = null;
+  let updatedPayload = null;
+  const mockClient = createMockClient({
+    planned_cashflows: {
+      update: (payload, eqs) => {
+        updatedTable = 'planned_cashflows';
+        updatedPayload = payload;
+        return { data: [payload], error: null };
+      }
+    },
+    user_sync_metadata: { update: () => ({ data: [], error: null }) }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  await sync.pushLocalChanges({ id: 'user-xyz' }, mockClient);
+  assert(updatedTable === 'planned_cashflows', 'TC-316 update on planned_cashflows');
+  assert(updatedPayload.is_deleted === true, 'TC-316 is_deleted set to true');
+  assert(Boolean(updatedPayload.deleted_at), 'TC-316 deleted_at timestamp set');
+}
+
+// TC-317: pushLocalChanges clears outbox only on success
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  store.addPlannedCashflow({ name: 'A', type: 'income', amount: 100, recurrence: 'monthly', dayOfMonth: 1 });
+  assert(store.getPlannedCashflowOutbox().length === 1, 'TC-317 outbox has 1 before push');
+
+  const mockClient = createMockClient({
+    planned_cashflows: { upsert: () => ({ data: [], error: null }) },
+    user_sync_metadata: { update: () => ({ data: [], error: null }) }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  await sync.pushLocalChanges({ id: 'user-xyz' }, mockClient);
+  assert(store.getPlannedCashflowOutbox().length === 0, 'TC-317 outbox cleared after successful push');
+}
+
+// TC-318: pushLocalChanges failure keeps outbox intact for retry
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  store.addPlannedCashflow({ name: 'A', type: 'income', amount: 100, recurrence: 'monthly', dayOfMonth: 1 });
+
+  const mockFailingClient = createMockClient({
+    planned_cashflows: { upsert: () => ({ data: null, error: { message: 'Network offline' } }) }
+  });
+
+  const sync = new SyncService(store, mockFailingClient);
+  let threw = false;
+  try {
+    await sync.pushLocalChanges({ id: 'user-xyz' }, mockFailingClient);
+  } catch (e) {
+    threw = true;
+  }
+  assert(threw, 'TC-318 push error thrown upwards');
+  assert(store.getPlannedCashflowOutbox().length === 1, 'TC-318 outbox intact after failure for durable retry');
+}
+
+// TC-319: runDeltaSync pulls updated planned_cashflows from Supabase
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+
+  const cloudRecords = [
+    {
+      id: '33333333-3333-3333-3333-333333333333',
+      name: 'Bulut Burs',
+      type: 'income',
+      amount: 4000,
+      recurrence: 'monthly',
+      day_of_month: 7,
+      is_active: true,
+      is_deleted: false,
+      created_at: '2026-09-20T10:00:00Z',
+      updated_at: '2026-09-28T10:00:00Z'
+    }
+  ];
+
+  const mockClient = createMockClient({
+    user_settings: { select: () => ({ data: null, error: null }) },
+    presets: { select: () => ({ data: [], error: null }) },
+    transactions: { select: () => ({ data: [], error: null }) },
+    planned_cashflows: { select: () => ({ data: cloudRecords, error: null }) },
+    user_sync_metadata: { update: () => ({ data: [], error: null }) }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  await sync.runDeltaSync({ id: 'user-xyz' }, { last_synced_at: '2026-09-25T00:00:00Z' }, { pullOnly: true });
+  const localList = store.getPlannedCashflows();
+  assert(localList.length === 1, 'TC-319 pulled 1 planned cashflow');
+  assert(localList[0].name === 'Bulut Burs', 'TC-319 pulled item name matches');
+  assert(localList[0].amount === 4000, 'TC-319 pulled item amount matches');
+}
+
+// TC-320: runDeltaSync applies cloud delete to local
+{
+  const store = new BudgetStore();
+  const pc = store.addPlannedCashflow({
+    id: '44444444-4444-4444-4444-444444444444',
+    name: 'Silinecek Bulutta',
+    type: 'expense',
+    amount: 150,
+    recurrence: 'monthly',
+    dayOfMonth: 12
+  });
+  store.clearPlannedCashflowOutbox(); // push edilmiş kabul edilsin
+
+  const cloudRecords = [
+    {
+      id: pc.id,
+      name: 'Silinecek Bulutta',
+      type: 'expense',
+      amount: 150,
+      recurrence: 'monthly',
+      day_of_month: 12,
+      is_active: true,
+      is_deleted: true,
+      deleted_at: '2026-09-28T11:00:00Z',
+      updated_at: '2026-09-28T11:00:00Z'
+    }
+  ];
+
+  const mockClient = createMockClient({
+    user_settings: { select: () => ({ data: null, error: null }) },
+    presets: { select: () => ({ data: [], error: null }) },
+    transactions: { select: () => ({ data: [], error: null }) },
+    planned_cashflows: { select: () => ({ data: cloudRecords, error: null }) }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  await sync.runDeltaSync({ id: 'user-xyz' }, { last_synced_at: '2026-09-25T00:00:00Z' }, { pullOnly: true });
+  assert(store.getPlannedCashflowById(pc.id) === null, 'TC-320 cloud deleted record removed from local');
+}
+
+// TC-321: runDeltaSync LWW: cloud newer overwrites local
+{
+  const store = new BudgetStore();
+  const pc = store.addPlannedCashflow({
+    id: '55555555-5555-5555-5555-555555555555',
+    name: 'Kira Eski',
+    type: 'expense',
+    amount: 3000,
+    recurrence: 'monthly',
+    dayOfMonth: 1,
+    updatedAt: 1727000000000 // daha eski
+  });
+  store.clearPlannedCashflowOutbox();
+
+  const cloudRecords = [
+    {
+      id: pc.id,
+      name: 'Kira Yeni Zamlı',
+      type: 'expense',
+      amount: 4500,
+      recurrence: 'monthly',
+      day_of_month: 1,
+      is_active: true,
+      is_deleted: false,
+      updated_at: '2026-09-28T12:00:00Z' // daha yeni
+    }
+  ];
+
+  const mockClient = createMockClient({
+    user_settings: { select: () => ({ data: null, error: null }) },
+    presets: { select: () => ({ data: [], error: null }) },
+    transactions: { select: () => ({ data: [], error: null }) },
+    planned_cashflows: { select: () => ({ data: cloudRecords, error: null }) }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  await sync.runDeltaSync({ id: 'user-xyz' }, { last_synced_at: '2026-09-25T00:00:00Z' }, { pullOnly: true });
+  const item = store.getPlannedCashflowById(pc.id);
+  assert(item.amount === 4500, 'TC-321 cloud newer amount overwrote local (LWW)');
+  assert(item.name === 'Kira Yeni Zamlı', 'TC-321 cloud newer name overwrote local');
+}
+
+// TC-322: runDeltaSync LWW: local pending outbox change wins over cloud
+{
+  const store = new BudgetStore();
+  const pc = store.addPlannedCashflow({
+    id: '66666666-6666-6666-6666-666666666666',
+    name: 'Yerel Bekleyen',
+    type: 'income',
+    amount: 5000,
+    recurrence: 'monthly',
+    dayOfMonth: 5
+  });
+  // Outbox'ta kaldı (push edilmedi)
+  assert(store.getPlannedCashflowOutbox().length > 0, 'TC-322 outbox has pending item');
+
+  const cloudRecords = [
+    {
+      id: pc.id,
+      name: 'Bulut Eski/Farklı',
+      type: 'income',
+      amount: 4000,
+      recurrence: 'monthly',
+      day_of_month: 5,
+      is_active: true,
+      is_deleted: false,
+      updated_at: '2026-09-28T15:00:00Z'
+    }
+  ];
+
+  const mockClient = createMockClient({
+    user_settings: { select: () => ({ data: null, error: null }) },
+    presets: { select: () => ({ data: [], error: null }) },
+    transactions: { select: () => ({ data: [], error: null }) },
+    planned_cashflows: { select: () => ({ data: cloudRecords, error: null }) }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  await sync.runDeltaSync({ id: 'user-xyz' }, { last_synced_at: '2026-09-25T00:00:00Z' }, { pullOnly: true });
+  const item = store.getPlannedCashflowById(pc.id);
+  assert(item.amount === 5000, 'TC-322 local pending outbox item preserved over cloud');
+  assert(item.name === 'Yerel Bekleyen', 'TC-322 local pending outbox name preserved');
+}
+
+// TC-323: runFullCloudBootstrap loads all cloud planned_cashflows on fresh device
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const freshStore = new BudgetStore();
+
+  const cloudPlanned = [
+    { id: 'p1', name: 'Burs 1', type: 'income', amount: 2000, recurrence: 'monthly', day_of_month: 5, is_active: true, is_deleted: false },
+    { id: 'p2', name: 'Kira 1', type: 'expense', amount: 3000, recurrence: 'monthly', day_of_month: 1, is_active: true, is_deleted: false }
+  ];
+
+  const mockClient = createMockClient({
+    user_settings: { select: () => ({ data: null, error: null }) },
+    presets: { select: () => ({ data: [], error: null }) },
+    transactions: { select: () => ({ data: [], error: null }) },
+    planned_cashflows: { select: () => ({ data: cloudPlanned, error: null }) }
+  });
+
+  const sync = new SyncService(freshStore, mockClient);
+  await sync.runFullCloudBootstrap({ id: 'user-xyz' }, {});
+  assert(freshStore.getPlannedCashflows().length === 2, 'TC-323 fresh device loaded 2 cloud planned cashflows');
+  assert(freshStore.getPlannedCashflowById('p1').name === 'Burs 1', 'TC-323 p1 loaded');
+}
+
+// TC-324: runFullCloudBootstrap ignores cloud records with is_deleted = true
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const freshStore = new BudgetStore();
+
+  const cloudPlanned = [
+    { id: 'p1', name: 'Aktif', type: 'income', amount: 1000, recurrence: 'monthly', day_of_month: 5, is_active: true, is_deleted: false },
+    { id: 'p2', name: 'Silinmiş', type: 'expense', amount: 500, recurrence: 'monthly', day_of_month: 1, is_active: true, is_deleted: true }
+  ];
+
+  const mockClient = createMockClient({
+    user_settings: { select: () => ({ data: null, error: null }) },
+    presets: { select: () => ({ data: [], error: null }) },
+    transactions: { select: () => ({ data: [], error: null }) },
+    planned_cashflows: { select: () => ({ data: cloudPlanned, error: null }) }
+  });
+
+  const sync = new SyncService(freshStore, mockClient);
+  await sync.runFullCloudBootstrap({ id: 'user-xyz' }, {});
+  assert(freshStore.getPlannedCashflows().length === 1, 'TC-324 deleted cloud record excluded');
+  assert(freshStore.getPlannedCashflowById('p2') === null, 'TC-324 p2 not present in local state');
+}
+
+// TC-325: runFullCloudCatchUp merges cloud and local planned_cashflows
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  store.addPlannedCashflow({ id: 'local1', name: 'Yerel 1', type: 'income', amount: 1000, recurrence: 'monthly', dayOfMonth: 5 });
+  store.clearPlannedCashflowOutbox();
+
+  const cloudRecords = [
+    { id: 'cloud1', name: 'Bulut 1', type: 'expense', amount: 700, recurrence: 'monthly', day_of_month: 10, is_active: true, is_deleted: false }
+  ];
+
+  const mockClient = createMockClient({
+    user_settings: { select: () => ({ data: null, error: null }) },
+    presets: { select: () => ({ data: [], error: null }) },
+    transactions: { select: () => ({ data: [], error: null }) },
+    planned_cashflows: { select: () => ({ data: cloudRecords, error: null }) }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  await sync.runFullCloudCatchUp({ id: 'user-xyz' }, mockClient);
+  assert(store.getPlannedCashflows().length === 2, 'TC-325 catch-up merged local and cloud items');
+  assert(store.getPlannedCashflowById('local1') !== null, 'TC-325 local1 preserved');
+  assert(store.getPlannedCashflowById('cloud1') !== null, 'TC-325 cloud1 added');
+}
+
+// TC-326: runFullCloudCatchUp preserves pending local outbox edits
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  const pc = store.addPlannedCashflow({
+    id: 'pendingEdit',
+    name: 'Benim Değişikliğim',
+    type: 'expense',
+    amount: 1200,
+    recurrence: 'monthly',
+    dayOfMonth: 1
+  });
+
+  const cloudRecords = [
+    { id: 'pendingEdit', name: 'Buluttaki Farklı', type: 'expense', amount: 999, recurrence: 'monthly', day_of_month: 1, is_active: true, is_deleted: false, updated_at: '2030-01-01T00:00:00Z' }
+  ];
+
+  const mockClient = createMockClient({
+    user_settings: { select: () => ({ data: null, error: null }) },
+    presets: { select: () => ({ data: [], error: null }) },
+    transactions: { select: () => ({ data: [], error: null }) },
+    planned_cashflows: { select: () => ({ data: cloudRecords, error: null }) }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  await sync.runFullCloudCatchUp({ id: 'user-xyz' }, mockClient);
+  const item = store.getPlannedCashflowById('pendingEdit');
+  assert(item.amount === 1200, 'TC-326 pending local outbox edit preserved during catch-up');
+  assert(item.name === 'Benim Değişikliğim', 'TC-326 pending local name preserved');
+}
+
+// TC-327: recoverAfterReconnect executes push-before-pull for planned_cashflows
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  store.addPlannedCashflow({
+    id: 'offlineItem',
+    name: 'Çevrimdışı Eklenen',
+    type: 'income',
+    amount: 2500,
+    recurrence: 'monthly',
+    dayOfMonth: 8
+  });
+
+  const callOrder = [];
+  const mockClient = createMockClientWithRealtime({
+    user_settings: {
+      select: () => { callOrder.push('settings:select'); return { data: null, error: null }; },
+      upsert: () => { callOrder.push('settings:upsert'); return { data: {}, error: null }; }
+    },
+    presets: {
+      select: () => { callOrder.push('presets:select'); return { data: [], error: null }; },
+      upsert: () => { callOrder.push('presets:upsert'); return { data: [], error: null }; }
+    },
+    transactions: {
+      select: () => { callOrder.push('transactions:select'); return { data: [], error: null }; },
+      upsert: () => { callOrder.push('transactions:upsert'); return { data: [], error: null }; }
+    },
+    planned_cashflows: {
+      select: () => { callOrder.push('planned:select'); return { data: [], error: null }; },
+      upsert: (payload) => { callOrder.push('planned:upsert'); return { data: payload, error: null }; }
+    },
+    user_sync_metadata: { update: () => ({ data: [], error: null }) }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  await sync.recoverAfterReconnect({ id: 'user-xyz' });
+  assert(callOrder.includes('planned:upsert'), 'TC-327 planned:upsert was called');
+  assert(callOrder.includes('planned:select'), 'TC-327 planned:select was called');
+  const pushIdx = callOrder.indexOf('planned:upsert');
+  const pullIdx = callOrder.indexOf('planned:select');
+  assert(pushIdx < pullIdx, 'TC-327 push happened BEFORE pull (push-before-pull priority)');
+}
+
+// TC-328: handleInitialMigration migrates local planned_cashflows to cloud
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  store.addPlannedCashflow({
+    name: 'Misafir Bursu',
+    type: 'income',
+    amount: 3200,
+    recurrence: 'monthly',
+    dayOfMonth: 8
+  });
+
+  let migratedPlanned = null;
+  const mockClient = createMockClient({
+    user_settings: { upsert: () => ({ data: {}, error: null }) },
+    presets: { upsert: () => ({ data: [], error: null }) },
+    transactions: { upsert: () => ({ data: [], error: null }) },
+    planned_cashflows: {
+      upsert: (payload) => {
+        migratedPlanned = payload;
+        return { data: payload, error: null };
+      }
+    },
+    user_sync_metadata: { insert: () => ({ data: [], error: null }) }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  await sync.runInitialMigration({ id: 'user-xyz' });
+  assert(migratedPlanned !== null, 'TC-328 planned_cashflows migrated in runInitialMigration');
+  assert(migratedPlanned.length === 1, 'TC-328 1 planned cashflow migrated');
+  assert(migratedPlanned[0].name === 'Misafir Bursu', 'TC-328 migrated name matches');
+}
+
+// TC-329: handleInitialMigration migration order: planned_cashflows before user_sync_metadata
+{
+  const store = new BudgetStore();
+  store.addPlannedCashflow({ name: 'Plan', type: 'income', amount: 100, recurrence: 'monthly', dayOfMonth: 1 });
+
+  const sequence = [];
+  const mockClient = createMockClient({
+    user_settings: { upsert: () => { sequence.push('user_settings'); return { data: {}, error: null }; } },
+    presets: { upsert: () => { sequence.push('presets'); return { data: [], error: null }; } },
+    transactions: { upsert: () => { sequence.push('transactions'); return { data: [], error: null }; } },
+    planned_cashflows: { upsert: () => { sequence.push('planned_cashflows'); return { data: [], error: null }; } },
+    user_sync_metadata: { insert: () => { sequence.push('user_sync_metadata'); return { data: [], error: null }; } }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  await sync.runInitialMigration({ id: 'user-xyz' });
+  const plannedPos = sequence.indexOf('planned_cashflows');
+  const metaPos = sequence.indexOf('user_sync_metadata');
+  assert(plannedPos !== -1 && metaPos !== -1, 'TC-329 both steps executed');
+  assert(plannedPos < metaPos, 'TC-329 planned_cashflows executed before user_sync_metadata');
+}
+
+// TC-330: Realtime subscription listens to planned_cashflows table
+{
+  const store = new BudgetStore();
+  const subscribedTables = [];
+  const mockRealtimeClient = {
+    channel: (name) => {
+      const ch = {
+        name,
+        on: (event, filter, callback) => {
+          if (filter?.table) subscribedTables.push(filter.table);
+          return ch;
+        },
+        subscribe: (cb) => { if (cb) cb('SUBSCRIBED'); return ch; }
+      };
+      return ch;
+    },
+    removeChannel: () => {}
+  };
+
+  const sync = new SyncService(store, mockRealtimeClient);
+  sync.setupRealtimeSubscription({ id: 'user-xyz' });
+  assert(subscribedTables.includes('planned_cashflows'), 'TC-330 Realtime subscribed to planned_cashflows table');
+}
+
+// TC-331: Realtime self-echo protection prevents duplicate processing
+{
+  const store = new BudgetStore();
+  const sync = new SyncService(store, createMockClientWithRealtime());
+  sync.recordLocalWrite('item-echo-1', '2026-09-28T12:00:00.000Z');
+
+  const echoPayload = {
+    eventType: 'UPDATE',
+    new: { id: 'item-echo-1', updated_at: '2026-09-28T12:00:00.000Z' }
+  };
+  const isEcho = sync.isSelfEcho('planned_cashflows', echoPayload);
+  assert(isEcho === true, 'TC-331 self echo correctly recognized and filtered');
+
+  const remotePayload = {
+    eventType: 'UPDATE',
+    new: { id: 'remote-item-2', updated_at: '2026-09-28T12:05:00.000Z' }
+  };
+  const isNotEcho = sync.isSelfEcho('planned_cashflows', remotePayload);
+  assert(isNotEcho === false, 'TC-331 foreign remote update recognized as not echo');
+}
+
+// TC-332: Realtime remote insert/update triggers remote delta sync
+{
+  const store = new BudgetStore();
+  let deltaSyncTriggered = false;
+  let remoteHandler = null;
+
+  const mockClient = {
+    channel: (name) => {
+      const ch = {
+        name,
+        on: (event, filter, callback) => {
+          if (filter?.table === 'planned_cashflows') {
+            remoteHandler = callback;
+          }
+          return ch;
+        },
+        subscribe: (cb) => { if (cb) cb('SUBSCRIBED'); return ch; }
+      };
+      return ch;
+    },
+    removeChannel: () => {}
+  };
+
+  const sync = new SyncService(store, mockClient);
+  sync.scheduleRemoteDeltaSync = () => { deltaSyncTriggered = true; };
+  sync.setupRealtimeSubscription({ id: 'user-xyz' });
+
+  assert(typeof remoteHandler === 'function', 'TC-332 planned_cashflows handler registered');
+  remoteHandler({ eventType: 'INSERT', new: { id: 'foreign-id-999', updated_at: '2026-09-28T16:00:00Z' } });
+  assert(deltaSyncTriggered === true, 'TC-332 remote change triggered delta sync schedule');
+}
+
+// TC-333: clearSessionOnSignOut wipes local plannedCashflows and clears outbox
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  store.addPlannedCashflow({ name: 'Secret Plan', type: 'income', amount: 1000, recurrence: 'monthly', dayOfMonth: 1 });
+  assert(store.getPlannedCashflows().length === 1, 'TC-333 item added');
+  assert(store.getPlannedCashflowOutbox().length === 1, 'TC-333 outbox has item');
+
+  store.clearSessionOnSignOut();
+  assert(store.getPlannedCashflows().length === 0, 'TC-333 plannedCashflows wiped on sign out');
+  assert(store.getPlannedCashflowOutbox().length === 0, 'TC-333 outbox cleared on sign out');
+  assert(SafeStorage.getItem(PLANNED_CASHFLOW_OUTBOX_KEY) === null, 'TC-333 outbox removed from SafeStorage');
+}
+
+// TC-334: exportData includes plannedCashflows array
+{
+  const store = new BudgetStore();
+  store.addPlannedCashflow({ name: 'Exported Burs', type: 'income', amount: 3000, recurrence: 'monthly', dayOfMonth: 8 });
+  const exported = store.exportData();
+  assert(Array.isArray(exported.plannedCashflows), 'TC-334 exportData includes plannedCashflows array');
+  assert(exported.plannedCashflows.length === 1, 'TC-334 1 item in exported plannedCashflows');
+  assert(exported.plannedCashflows[0].name === 'Exported Burs', 'TC-334 exported name matches');
+}
+
+// TC-335: importData imports plannedCashflows in replace mode
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  const fileData = {
+    version: '1.1.0',
+    transactions: [
+      { id: '11111111-1111-4111-8111-111111111111', title: 'Tx', amount: 10, type: 'expense', categoryId: 'exp_other', date: '2026-09-01' }
+    ],
+    plannedCashflows: [
+      { id: 'import1', name: 'İçe Aktarılan', type: 'income', amount: 2000, recurrence: 'monthly', dayOfMonth: 5 }
+    ]
+  };
+  const ok = store.importData(fileData, 'replace');
+  assert(ok === true, 'TC-335 import succeeded in replace mode');
+  assert(store.getPlannedCashflows().length === 1, 'TC-335 replaced plannedCashflows count 1');
+  assert(store.getPlannedCashflows()[0].name === 'İçe Aktarılan', 'TC-335 replaced item name matches');
+}
+
+// TC-336: importData imports plannedCashflows in merge mode
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  store.addPlannedCashflow({ id: 'existing1', name: 'Mevcut', type: 'expense', amount: 500, recurrence: 'monthly', dayOfMonth: 1 });
+  const fileData = {
+    version: '1.1.0',
+    transactions: [
+      { id: '11111111-1111-4111-8111-111111111111', title: 'Tx', amount: 10, type: 'expense', categoryId: 'exp_other', date: '2026-09-01' }
+    ],
+    plannedCashflows: [
+      { id: 'imported2', name: 'Yeni Eklenen', type: 'income', amount: 3000, recurrence: 'monthly', dayOfMonth: 8 }
+    ]
+  };
+  const ok = store.importData(fileData, 'merge');
+  assert(ok === true, 'TC-336 merge import succeeded');
+  assert(store.getPlannedCashflows().length === 2, 'TC-336 merged plannedCashflows count 2');
+  assert(store.getPlannedCashflowById('existing1') !== null, 'TC-336 existing item kept');
+  assert(store.getPlannedCashflowById('imported2') !== null, 'TC-336 imported item merged');
+}
+
+// TC-337: importData backward compatibility: import file without plannedCashflows succeeds
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  const oldBackup = {
+    version: '1.0.0',
+    transactions: [
+      { id: '11111111-1111-4111-8111-111111111111', title: 'Eski Tx', amount: 100, type: 'expense', categoryId: 'exp_food', date: '2026-09-01' }
+    ]
+  };
+  let ok = false;
+  try {
+    ok = store.importData(oldBackup, 'merge');
+  } catch (e) {
+    ok = false;
+  }
+  assert(ok === true, 'TC-337 old backup without plannedCashflows imports without error');
+}
+
+// TC-338: importData rejects invalid planned cashflow items
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  const corruptData = {
+    version: '1.1.0',
+    transactions: [
+      { id: '11111111-1111-4111-8111-111111111111', title: 'Tx', amount: 10, type: 'expense', categoryId: 'exp_other', date: '2026-09-01' }
+    ],
+    plannedCashflows: [
+      { name: 'Bozuk', type: 'income', amount: -50, recurrence: 'monthly', dayOfMonth: 5 }
+    ]
+  };
+  let threw = false;
+  try {
+    store.importData(corruptData, 'merge');
+  } catch (e) {
+    threw = true;
+  }
+  assert(threw, 'TC-338 corrupt planned cashflow in import throws error');
+}
+
+// TC-339: Pre-cloud backup includes plannedCashflows
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  SafeStorage.removeItem('student_budget_pre_cloud_backup');
+  const store = new BudgetStore();
+  store.addPlannedCashflow({ name: 'Yedeklenecek Plan', type: 'income', amount: 3000, recurrence: 'monthly', dayOfMonth: 8 });
+
+  const sync = new SyncService(store, createMockClient());
+  sync.createPreCloudBackup();
+
+  const rawBackup = SafeStorage.getItem('student_budget_pre_cloud_backup');
+  assert(rawBackup !== null, 'TC-339 backup item written to SafeStorage');
+  const parsedBackup = JSON.parse(rawBackup);
+  assert(parsedBackup.plannedCashflows && parsedBackup.plannedCashflows.length === 1, 'TC-339 backup includes plannedCashflows');
+  assert(parsedBackup.plannedCashflows[0].name === 'Yedeklenecek Plan', 'TC-339 backup planned cashflow name matches');
+}
+
+// TC-340: Offline cashflow planner engine consumes persisted plannedCashflows from BudgetStore
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  store.addPlannedCashflow({
+    name: 'KYK Bursu',
+    type: 'income',
+    amount: 3000,
+    recurrence: 'monthly',
+    dayOfMonth: 8
+  });
+  store.addPlannedCashflow({
+    name: 'Ev Kirası',
+    type: 'expense',
+    amount: 2500,
+    recurrence: 'monthly',
+    dayOfMonth: 3
+  });
+
+  const plan = planCashflow({
+    plannedCashflows: store.getPlannedCashflows(),
+    options: { now: new Date(2026, 8, 28, 12, 0, 0), currentAvailableBalance: 4000 },
+    forecast: { metadata: { isForecastApplicable: true }, dailyRates: { blended: 100 } }
+  });
+
+  assert(plan.nextIncome.found === true, 'TC-340 nextIncome identified from store templates');
+  assert(plan.nextIncome.name === 'KYK Bursu', 'TC-340 next income is KYK Bursu');
+  assert(plan.nextIncome.daysUntil === 10, 'TC-340 10 days until next income');
+  assert(plan.obligations.totalBeforeIncome === 2500, 'TC-340 obligations total before income is 2500 (kira)');
+  assert(plan.spending.availableAfterPlannedObligations === 1500, 'TC-340 availableAfterPlannedObligations is 1500 (4000 - 2500)');
+}
+
+// TC-341: Offline flow: add planned cashflow while offline, planner engine immediately reflects next income & safe daily spend
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  const sept28Date = new Date(2026, 8, 28, 12, 0, 0);
+
+  // Başlangıçta hiç planlı gelir yok
+  let plan = planCashflow({
+    plannedCashflows: store.getPlannedCashflows(),
+    options: { now: sept28Date, currentAvailableBalance: 1000 }
+  });
+  assert(plan.status.coverageStatus === COVERAGE_STATUS.NO_NEXT_INCOME, 'TC-341 initially NO_NEXT_INCOME');
+
+  // Çevrimdışıyken kullanıcı yeni bir burs tanımlar
+  store.addPlannedCashflow({
+    name: 'Yeni Tanımlanan Gelir',
+    type: 'income',
+    amount: 5000,
+    recurrence: 'once',
+    date: '2026-10-05'
+  });
+
+  // Planner anında yeniden hesaplar
+  plan = planCashflow({
+    plannedCashflows: store.getPlannedCashflows(),
+    options: { now: sept28Date, currentAvailableBalance: 1400 },
+    forecast: { metadata: { isForecastApplicable: true }, dailyRates: { blended: 100 } }
+  });
+  assert(plan.nextIncome.daysUntil === 7, 'TC-341 immediate 7 days until new income');
+  assert(plan.spending.safeDailySpendUntilNextIncome === 200, 'TC-341 safeDailySpend calculated (1400 / 7 = 200)');
+}
+
+// TC-342: Offline flow: update planned cashflow while offline, planner engine recalculates runway & obligations
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  const sept28Date = new Date(2026, 8, 28, 12, 0, 0);
+  const pc = store.addPlannedCashflow({
+    name: 'Kira',
+    type: 'expense',
+    amount: 1000,
+    recurrence: 'once',
+    date: '2026-10-02'
+  });
+
+  let plan = planCashflow({
+    plannedCashflows: store.getPlannedCashflows(),
+    options: { now: sept28Date, currentAvailableBalance: 2000 }
+  });
+  assert(plan.obligations.totalBeforeIncome === 1000, 'TC-342 initial obligation 1000');
+  assert(plan.spending.availableAfterPlannedObligations === 1000, 'TC-342 initial available 1000');
+
+  // Kullanıcı kirayı 1600 TL'ye günceller
+  store.updatePlannedCashflow(pc.id, { amount: 1600 });
+  plan = planCashflow({
+    plannedCashflows: store.getPlannedCashflows(),
+    options: { now: sept28Date, currentAvailableBalance: 2000 }
+  });
+  assert(plan.obligations.totalBeforeIncome === 1600, 'TC-342 updated obligation 1600');
+  assert(plan.spending.availableAfterPlannedObligations === 400, 'TC-342 updated available 400');
+}
+
+// TC-343: Offline flow: delete planned cashflow while offline, planner engine removes obligation
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  const sept28Date = new Date(2026, 8, 28, 12, 0, 0);
+  const pc = store.addPlannedCashflow({
+    name: 'İptal Edilecek Fatura',
+    type: 'expense',
+    amount: 400,
+    recurrence: 'once',
+    date: '2026-10-01'
+  });
+
+  let plan = planCashflow({
+    plannedCashflows: store.getPlannedCashflows(),
+    options: { now: sept28Date, currentAvailableBalance: 1000 }
+  });
+  assert(plan.obligations.totalBeforeIncome === 400, 'TC-343 obligation present');
+
+  store.deletePlannedCashflow(pc.id);
+  plan = planCashflow({
+    plannedCashflows: store.getPlannedCashflows(),
+    options: { now: sept28Date, currentAvailableBalance: 1000 }
+  });
+  assert(plan.obligations.totalBeforeIncome === 0, 'TC-343 obligation cleared after deletion');
+  assert(plan.spending.availableAfterPlannedObligations === 1000, 'TC-343 full balance available after deletion');
+}
+
+// TC-344: Concurrent offline edits: multiple planned cashflows queued in outbox in order
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  const pc1 = store.addPlannedCashflow({ name: 'A', type: 'income', amount: 100, recurrence: 'monthly', dayOfMonth: 1 });
+  const pc2 = store.addPlannedCashflow({ name: 'B', type: 'expense', amount: 200, recurrence: 'monthly', dayOfMonth: 5 });
+  const pc3 = store.addPlannedCashflow({ name: 'C', type: 'expense', amount: 300, recurrence: 'once', date: '2026-10-10' });
+
+  const outbox = store.getPlannedCashflowOutbox();
+  assert(outbox.length === 3, 'TC-344 3 items queued in outbox');
+  assert(outbox[0].id === pc1.id && outbox[1].id === pc2.id && outbox[2].id === pc3.id, 'TC-344 outbox order strictly preserved');
+}
+
+// TC-345: Migration SQL file exists and contains valid DDL, constraints, indexes, RLS policies
+{
+  const sqlPath = path.resolve(process.cwd(), 'supabase/migrations/20260928000000_planned_cashflows.sql');
+  assert(fs.existsSync(sqlPath), 'TC-345 migration file exists on disk');
+  const sqlContent = fs.readFileSync(sqlPath, 'utf8');
+  assert(sqlContent.includes('CREATE TABLE IF NOT EXISTS planned_cashflows'), 'TC-345 DDL table creation included');
+  assert(sqlContent.includes('ALTER TABLE planned_cashflows ENABLE ROW LEVEL SECURITY'), 'TC-345 RLS enabled');
+}
+
+// TC-346: Migration SQL contains check constraint for monthly (day_of_month 1..31, date null)
+{
+  const sqlPath = path.resolve(process.cwd(), 'supabase/migrations/20260928000000_planned_cashflows.sql');
+  const sqlContent = fs.readFileSync(sqlPath, 'utf8');
+  assert(sqlContent.includes('chk_monthly_planned'), 'TC-346 chk_monthly_planned constraint defined');
+  assert(sqlContent.includes("recurrence = 'monthly' AND day_of_month IS NOT NULL AND day_of_month BETWEEN 1 AND 31 AND date IS NULL"), 'TC-346 monthly check constraint condition verified');
+}
+
+// TC-347: Migration SQL contains check constraint for once (date not null, day_of_month null)
+{
+  const sqlPath = path.resolve(process.cwd(), 'supabase/migrations/20260928000000_planned_cashflows.sql');
+  const sqlContent = fs.readFileSync(sqlPath, 'utf8');
+  assert(sqlContent.includes('chk_once_planned'), 'TC-347 chk_once_planned constraint defined');
+  assert(sqlContent.includes("recurrence = 'once' AND date IS NOT NULL AND day_of_month IS NULL"), 'TC-347 once check constraint condition verified');
+}
+
+// TC-348: Migration SQL enables RLS and defines policies for user_id = auth.uid()
+{
+  const sqlPath = path.resolve(process.cwd(), 'supabase/migrations/20260928000000_planned_cashflows.sql');
+  const sqlContent = fs.readFileSync(sqlPath, 'utf8');
+  assert(sqlContent.includes('CREATE POLICY "Users can view own planned cashflows"'), 'TC-348 SELECT policy defined');
+  assert(sqlContent.includes('CREATE POLICY "Users can insert own planned cashflows"'), 'TC-348 INSERT policy defined');
+  assert(sqlContent.includes('CREATE POLICY "Users can update own planned cashflows"'), 'TC-348 UPDATE policy defined');
+  assert(sqlContent.includes('CREATE POLICY "Users can delete own planned cashflows"'), 'TC-348 DELETE policy defined');
+  assert(sqlContent.includes('auth.uid() = user_id'), 'TC-348 auth.uid() = user_id check present in policies');
+}
+
+// TC-349: Only template stored in local state (no generated occurrences saved)
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  const pc = store.addPlannedCashflow({
+    name: 'Her Ay Burs',
+    type: 'income',
+    amount: 3000,
+    recurrence: 'monthly',
+    dayOfMonth: 8
+  });
+  const savedState = JSON.parse(SafeStorage.getItem(STORAGE_KEY));
+  assert(savedState.plannedCashflows.length === 1, 'TC-349 exactly 1 template saved in storage');
+  assert(savedState.plannedCashflows[0].recurrence === 'monthly', 'TC-349 template has recurrence monthly');
+  assert(!savedState.plannedCashflows[0].occurrences, 'TC-349 no occurrences property saved');
+  assert(savedState.plannedCashflows[0].dayOfMonth === 8, 'TC-349 dayOfMonth saved');
+}
+
+// TC-350: Currency ISO normalizer and money precision (amount rounded to 2 decimals)
+{
+  const store = new BudgetStore();
+  const pc = store.addPlannedCashflow({
+    name: 'Kuruşlu Harcama',
+    type: 'expense',
+    amount: 123.4567,
+    recurrence: 'monthly',
+    dayOfMonth: 10
+  });
+  assert(pc.amount === 123.46, 'TC-350 amount rounded to 2 decimals');
+}
+
+// TC-351: Guest mode: planned cashflows work 100% offline without auth/Supabase
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  const pc = store.addPlannedCashflow({
+    name: 'Misafir Modu Bursu',
+    type: 'income',
+    amount: 2500,
+    recurrence: 'monthly',
+    dayOfMonth: 8
+  });
+  assert(store.getPlannedCashflows().length === 1, 'TC-351 guest can add planned cashflow without auth');
+  const plan = planCashflow({
+    plannedCashflows: store.getPlannedCashflows(),
+    options: { now: new Date(2026, 8, 28, 12, 0, 0), currentAvailableBalance: 2000 }
+  });
+  assert(plan.nextIncome.found === true, 'TC-351 guest planner calculates next income completely offline');
+  assert(plan.nextIncome.name === 'Misafir Modu Bursu', 'TC-351 guest planner next income name matches');
+}
+
+// TC-352: Migration failure rollback / safe retry: if planned cashflow push fails during migration, metadata is not written
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  store.addPlannedCashflow({ name: 'Failing Migrate', type: 'income', amount: 100, recurrence: 'monthly', dayOfMonth: 1 });
+
+  let metadataWritten = false;
+  const mockFailingMigrationClient = createMockClient({
+    user_settings: { upsert: () => ({ data: {}, error: null }) },
+    presets: { upsert: () => ({ data: [], error: null }) },
+    transactions: { upsert: () => ({ data: [], error: null }) },
+    planned_cashflows: { upsert: () => ({ data: null, error: { message: 'Planned cashflow table blocked' } }) },
+    user_sync_metadata: {
+      insert: () => {
+        metadataWritten = true;
+        return { data: [], error: null };
+      }
+    }
+  });
+
+  const sync = new SyncService(store, mockFailingMigrationClient);
+  let threw = false;
+  try {
+    await sync.runInitialMigration({ id: 'user-xyz' });
+  } catch (e) {
+    threw = true;
+  }
+  assert(threw, 'TC-352 migration error caught');
+  assert(metadataWritten === false, 'TC-352 user_sync_metadata NOT written when planned cashflows fails');
+}
+
+// --------------------------------------------------------------------------
+// 27. FAZ 5.5B — PRODUCTION HARDENING: REALTIME PUBLICATION, TOMBSTONES & IMPORT SYNC
+// --------------------------------------------------------------------------
+console.log('\n--- 27. FAZ 5.5B — PRODUCTION HARDENING: REALTIME PUBLICATION, TOMBSTONES & IMPORT SYNC (TC-353 - TC-365) ---');
+
+// TC-353: Migration SQL includes safe/idempotent addition of planned_cashflows to supabase_realtime publication
+{
+  const sqlPath = path.resolve(process.cwd(), 'supabase/migrations/20260928000000_planned_cashflows.sql');
+  const sqlContent = fs.readFileSync(sqlPath, 'utf8');
+  assert(sqlContent.includes("ALTER PUBLICATION supabase_realtime ADD TABLE planned_cashflows;"), 'TC-353 publication alter command present');
+  assert(sqlContent.includes("pubname = 'supabase_realtime'"), 'TC-353 publication name check present');
+  assert(sqlContent.includes("tablename = 'planned_cashflows'"), 'TC-353 tablename check present');
+}
+
+// TC-354: Offline create -> delete before any sync converts outbox entry from create to delete tombstone
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  const pc = store.addPlannedCashflow({ name: 'Geçici Plan', type: 'expense', amount: 500, recurrence: 'monthly', dayOfMonth: 1 });
+  assert(store.getPlannedCashflowOutbox().length === 1, 'TC-354 outbox has 1 create');
+  assert(store.getPlannedCashflowOutbox()[0].operation === 'create', 'TC-354 operation is create');
+
+  // Şimdi çevrimdışıyken silinir
+  const deleted = store.deletePlannedCashflow(pc.id);
+  assert(deleted === true, 'TC-354 delete returned true');
+  assert(store.getPlannedCashflows().length === 0, 'TC-354 removed from store');
+  const outbox = store.getPlannedCashflowOutbox();
+  assert(outbox.length === 1, 'TC-354 outbox retains entry');
+  assert(outbox[0].id === pc.id, 'TC-354 outbox entry matches id');
+  assert(outbox[0].operation === 'delete', 'TC-354 outbox operation converted to delete tombstone');
+}
+
+// TC-355: PWA restart / SafeStorage reload preserves delete tombstone across instance restarts
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const storeA = new BudgetStore();
+  const pc = storeA.addPlannedCashflow({ name: 'Tombstone Test', type: 'income', amount: 2000, recurrence: 'monthly', dayOfMonth: 5 });
+  storeA.deletePlannedCashflow(pc.id);
+  assert(storeA.getPlannedCashflowOutbox()[0].operation === 'delete', 'TC-355 storeA has tombstone');
+
+  // Tarayıcı / PWA kapandı, yeni store örneği açıldı
+  const storeB = new BudgetStore();
+  const outboxB = storeB.getPlannedCashflowOutbox();
+  assert(outboxB.length === 1, 'TC-355 storeB has 1 outbox item');
+  assert(outboxB[0].operation === 'delete', 'TC-355 tombstone preserved across restart');
+  assert(storeB.hasUnsyncedChanges === true, 'TC-355 hasUnsyncedChanges true on restart with tombstone');
+}
+
+// TC-356: Ambiguous network: create push committed on Supabase but response lost (network failure), client deletes locally -> outbox retains durable DELETE tombstone
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  const pc = store.addPlannedCashflow({ name: 'Ghost Candidate', type: 'expense', amount: 800, recurrence: 'monthly', dayOfMonth: 12 });
+
+  // Simüle edelim: create bulutta commit oldu ama istemci ağ kopması nedeniyle yanıt alamadı
+  assert(store.getPlannedCashflowOutbox().length === 1, 'TC-356 outbox has pending create');
+
+  // Kullanıcı yerelde siliyor
+  store.deletePlannedCashflow(pc.id);
+  const outbox = store.getPlannedCashflowOutbox();
+  assert(outbox.length === 1, 'TC-356 outbox not dropped');
+  assert(outbox[0].operation === 'delete', 'TC-356 outbox has durable DELETE tombstone preventing cloud ghost');
+}
+
+// TC-357: Reconnect push sends soft-delete for DELETE tombstone, clearing ghost record on Supabase and clearing outbox upon confirmation
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  const pc = store.addPlannedCashflow({ name: 'Ghost To Clear', type: 'expense', amount: 350, recurrence: 'monthly', dayOfMonth: 2 });
+  store.deletePlannedCashflow(pc.id);
+
+  let softDeleteCalled = false;
+  let softDeletePayload = null;
+  const mockClient = createMockClient({
+    planned_cashflows: {
+      update: (payload) => {
+        softDeleteCalled = true;
+        softDeletePayload = payload;
+        return { data: [payload], error: null };
+      }
+    },
+    user_sync_metadata: { update: () => ({ data: [], error: null }) }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  await sync.pushLocalChanges({ id: 'user-xyz' }, mockClient);
+  assert(softDeleteCalled === true, 'TC-357 soft-delete update called on Supabase');
+  assert(softDeletePayload.is_deleted === true, 'TC-357 is_deleted set to true on Supabase');
+  assert(Boolean(softDeletePayload.deleted_at), 'TC-357 deleted_at set on Supabase');
+  assert(store.getPlannedCashflowOutbox().length === 0, 'TC-357 tombstone cleared from outbox after Supabase confirmation');
+}
+
+// TC-358: Zero-row update resilience: if row never existed on Supabase, soft-delete succeeds cleanly and removes tombstone
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  const pc = store.addPlannedCashflow({ name: 'Never Reached Cloud', type: 'income', amount: 1200, recurrence: 'once', date: '2026-10-15' });
+  store.deletePlannedCashflow(pc.id);
+
+  const mockClient = createMockClient({
+    planned_cashflows: {
+      update: () => {
+        // 0 row updated, error null
+        return { data: [], error: null };
+      }
+    },
+    user_sync_metadata: { update: () => ({ data: [], error: null }) }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  await sync.pushLocalChanges({ id: 'user-xyz' }, mockClient);
+  assert(store.getPlannedCashflowOutbox().length === 0, 'TC-358 tombstone cleanly removed even if 0 rows matched on remote');
+}
+
+// TC-359: Cloud catch-up / delta pull with pending local DELETE tombstone prevents ghost record resurrection in local state
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  const pc = store.addPlannedCashflow({ id: 'ghost-item-1', name: 'Buluttaki Hayalet', type: 'expense', amount: 1500, recurrence: 'monthly', dayOfMonth: 1 });
+  // Kullanıcı sildi, tombstone bekliyor
+  store.deletePlannedCashflow('ghost-item-1');
+  assert(store.getPlannedCashflows().length === 0, 'TC-359 store has 0 items');
+  assert(store.getPlannedCashflowOutbox()[0].operation === 'delete', 'TC-359 outbox has tombstone');
+
+  // Bulutta hâlâ is_deleted = false olarak duran eski kayıt dönsün
+  const cloudRecords = [
+    { id: 'ghost-item-1', name: 'Buluttaki Hayalet', type: 'expense', amount: 1500, recurrence: 'monthly', day_of_month: 1, is_active: true, is_deleted: false, updated_at: '2026-09-28T18:00:00Z' }
+  ];
+
+  const mockClient = createMockClient({
+    user_settings: { select: () => ({ data: null, error: null }) },
+    presets: { select: () => ({ data: [], error: null }) },
+    transactions: { select: () => ({ data: [], error: null }) },
+    planned_cashflows: { select: () => ({ data: cloudRecords, error: null }) }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  await sync.runFullCloudCatchUp({ id: 'user-xyz' }, mockClient);
+  assert(store.getPlannedCashflowById('ghost-item-1') === null, 'TC-359 ghost record NOT resurrected during catchup');
+  assert(store.getPlannedCashflows().length === 0, 'TC-359 local state remains empty');
+}
+
+// TC-360: Second device pulling from cloud after tombstone sync receives is_deleted: true and deletes/does not resurrect item
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const device2Store = new BudgetStore();
+  device2Store.addPlannedCashflow({ id: 'shared-item-2', name: 'Ortak Plan', type: 'income', amount: 2000, recurrence: 'monthly', dayOfMonth: 8 });
+  device2Store.clearPlannedCashflowOutbox(); // senkronize kabul edilsin
+
+  // Cihaz 1 tombstone push etti ve bulutta is_deleted: true oldu
+  const cloudRecords = [
+    { id: 'shared-item-2', name: 'Ortak Plan', type: 'income', amount: 2000, recurrence: 'monthly', day_of_month: 8, is_active: true, is_deleted: true, deleted_at: '2026-09-28T18:10:00Z', updated_at: '2026-09-28T18:10:00Z' }
+  ];
+
+  const mockClient = createMockClient({
+    user_settings: { select: () => ({ data: null, error: null }) },
+    presets: { select: () => ({ data: [], error: null }) },
+    transactions: { select: () => ({ data: [], error: null }) },
+    planned_cashflows: { select: () => ({ data: cloudRecords, error: null }) }
+  });
+
+  const sync2 = new SyncService(device2Store, mockClient);
+  await sync2.runDeltaSync({ id: 'user-xyz' }, { last_synced_at: '2026-09-25T00:00:00Z' }, { pullOnly: true });
+  assert(device2Store.getPlannedCashflowById('shared-item-2') === null, 'TC-360 device 2 deleted item based on cloud is_deleted');
+}
+
+// TC-361: Authenticated import in MERGE mode enqueues durable create for new plans and update for existing plans
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  store.addPlannedCashflow({ id: 'exist-p1', name: 'Mevcut Plan', type: 'income', amount: 1000, recurrence: 'monthly', dayOfMonth: 1 });
+  store.clearPlannedCashflowOutbox(); // push edilmiş kabul edilsin
+
+  const importPayload = {
+    version: '1.1.0',
+    transactions: [{ id: '11111111-1111-4111-8111-111111111111', title: 'T', amount: 10, type: 'expense', categoryId: 'exp_other', date: '2026-09-01' }],
+    plannedCashflows: [
+      { id: 'exist-p1', name: 'Mevcut Plan Zamlı', type: 'income', amount: 1500, recurrence: 'monthly', dayOfMonth: 1 },
+      { id: 'new-p2', name: 'Yeni İçe Aktarılan', type: 'expense', amount: 400, recurrence: 'monthly', dayOfMonth: 15 }
+    ]
+  };
+
+  store.importData(importPayload, 'merge');
+  const outbox = store.getPlannedCashflowOutbox();
+  assert(outbox.length === 2, 'TC-361 outbox has 2 items');
+  const existEntry = outbox.find(o => o.id === 'exist-p1');
+  const newEntry = outbox.find(o => o.id === 'new-p2');
+  assert(existEntry && existEntry.operation === 'update', 'TC-361 exist-p1 enqueued as update');
+  assert(existEntry.payload.amount === 1500, 'TC-361 exist-p1 payload has new amount');
+  assert(newEntry && newEntry.operation === 'create', 'TC-361 new-p2 enqueued as create');
+  assert(store.hasUnsyncedChanges === true, 'TC-361 hasUnsyncedChanges is true');
+}
+
+// TC-362: Subsequent pushLocalChanges after MERGE import successfully pushes all imported plans to Supabase
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  const importPayload = {
+    version: '1.1.0',
+    transactions: [{ id: '11111111-1111-4111-8111-111111111111', title: 'T', amount: 10, type: 'expense', categoryId: 'exp_other', date: '2026-09-01' }],
+    plannedCashflows: [
+      { id: 'import-p1', name: 'Plan 1', type: 'income', amount: 1000, recurrence: 'monthly', dayOfMonth: 5 }
+    ]
+  };
+  store.importData(importPayload, 'merge');
+
+  let pushedRows = [];
+  const mockClient = createMockClient({
+    planned_cashflows: {
+      upsert: (rows) => {
+        pushedRows = rows;
+        return { data: rows, error: null };
+      }
+    },
+    user_sync_metadata: { update: () => ({ data: [], error: null }) }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  await sync.pushLocalChanges({ id: 'user-xyz' }, mockClient);
+  assert(pushedRows.length === 1, 'TC-362 1 planned cashflow pushed to Supabase');
+  assert(pushedRows[0].id === 'import-p1', 'TC-362 pushed id matches');
+  assert(store.getPlannedCashflowOutbox().length === 0, 'TC-362 outbox cleared after push');
+}
+
+// TC-363: Authenticated import in REPLACE mode enqueues durable delete tombstones for omitted plans and create/update for included plans
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  store.addPlannedCashflow({ id: 'stay-p1', name: 'Kalan Plan', type: 'income', amount: 1000, recurrence: 'monthly', dayOfMonth: 1 });
+  store.addPlannedCashflow({ id: 'drop-p2', name: 'Kaldırılacak Plan', type: 'expense', amount: 300, recurrence: 'monthly', dayOfMonth: 10 });
+  store.clearPlannedCashflowOutbox(); // push edilmiş kabul edilsin
+
+  const replacePayload = {
+    version: '1.1.0',
+    transactions: [{ id: '11111111-1111-4111-8111-111111111111', title: 'T', amount: 10, type: 'expense', categoryId: 'exp_other', date: '2026-09-01' }],
+    plannedCashflows: [
+      { id: 'stay-p1', name: 'Kalan Plan Güncellendi', type: 'income', amount: 1200, recurrence: 'monthly', dayOfMonth: 1 },
+      { id: 'new-p3', name: 'Yeni Eklenen Plan', type: 'expense', amount: 500, recurrence: 'monthly', dayOfMonth: 20 }
+    ]
+  };
+
+  store.importData(replacePayload, 'replace');
+  const outbox = store.getPlannedCashflowOutbox();
+  assert(outbox.length === 3, 'TC-363 outbox has 3 operations (1 delete, 1 update, 1 create)');
+  const delEntry = outbox.find(o => o.id === 'drop-p2');
+  const updateEntry = outbox.find(o => o.id === 'stay-p1');
+  const createEntry = outbox.find(o => o.id === 'new-p3');
+
+  assert(delEntry && delEntry.operation === 'delete', 'TC-363 omitted drop-p2 enqueued as DELETE tombstone');
+  assert(updateEntry && updateEntry.operation === 'update', 'TC-363 stay-p1 enqueued as update');
+  assert(createEntry && createEntry.operation === 'create', 'TC-363 new-p3 enqueued as create');
+}
+
+// TC-364: Subsequent pushLocalChanges after REPLACE import sends soft-deletes for omitted plans and upsert for replacement plans
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  store.addPlannedCashflow({ id: 'old-to-delete', name: 'Eski Silinecek', type: 'income', amount: 500, recurrence: 'monthly', dayOfMonth: 1 });
+  store.clearPlannedCashflowOutbox();
+
+  const replacePayload = {
+    version: '1.1.0',
+    transactions: [{ id: '11111111-1111-4111-8111-111111111111', title: 'T', amount: 10, type: 'expense', categoryId: 'exp_other', date: '2026-09-01' }],
+    plannedCashflows: [
+      { id: 'fresh-p1', name: 'Taze Plan', type: 'expense', amount: 750, recurrence: 'monthly', dayOfMonth: 15 }
+    ]
+  };
+  store.importData(replacePayload, 'replace');
+
+  let softDeletedId = null;
+  let upsertedIds = [];
+  const mockClient = createMockClient({
+    planned_cashflows: {
+      update: (payload, eqs) => {
+        softDeletedId = 'old-to-delete';
+        return { data: [payload], error: null };
+      },
+      upsert: (rows) => {
+        upsertedIds = rows.map(r => r.id);
+        return { data: rows, error: null };
+      }
+    },
+    user_sync_metadata: { update: () => ({ data: [], error: null }) }
+  });
+
+  const sync = new SyncService(store, mockClient);
+  await sync.pushLocalChanges({ id: 'user-xyz' }, mockClient);
+  assert(softDeletedId === 'old-to-delete', 'TC-364 omitted plan soft-deleted in Supabase');
+  assert(upsertedIds.includes('fresh-p1'), 'TC-364 fresh plan upserted in Supabase');
+  assert(store.getPlannedCashflowOutbox().length === 0, 'TC-364 outbox cleared after push');
+}
+
+// TC-365: Old backup file without plannedCashflows imported in MERGE/REPLACE preserves existing planned cashflows and does not touch outbox
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+  store.addPlannedCashflow({ id: 'existing-untouched', name: 'Dokunulmayacak Plan', type: 'income', amount: 3000, recurrence: 'monthly', dayOfMonth: 8 });
+  store.clearPlannedCashflowOutbox();
+
+  const legacyBackup = {
+    version: '1.0.0',
+    transactions: [{ id: '11111111-1111-4111-8111-111111111111', title: 'Old Tx', amount: 50, type: 'expense', categoryId: 'exp_food', date: '2026-09-01' }]
+  };
+
+  store.importData(legacyBackup, 'replace');
+  assert(store.getPlannedCashflows().length === 1, 'TC-365 existing planned cashflows preserved');
+  assert(store.getPlannedCashflowById('existing-untouched') !== null, 'TC-365 untouched item intact');
+  assert(store.getPlannedCashflowOutbox().length === 0, 'TC-365 outbox unchanged (no redundant tombstones created)');
+}
+
 console.log('\n====================================================');
 console.log(`🏁 ENTEGRE TEST SONUCU: ${passed} PASSED, ${failed} FAILED`);
 console.log('====================================================');
 
 process.exit(failed > 0 ? 1 : 0);
+
 
 
 

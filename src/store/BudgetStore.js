@@ -3,10 +3,13 @@ import { DEFAULT_PRESETS, DEFAULT_SETTINGS, DEFAULT_CATEGORIES, DEFAULT_SEED_TRA
 import { SafeStorage } from '../utils/storage.js';
 import { generateUUID, getCurrentYearMonth, getLocalDateString, compareTransactions } from '../utils/helpers.js';
 import { normalizeCurrency } from '../utils/formatters.js';
+import { validatePlannedCashflow } from '../services/cashflowPlannerEngine.js';
 
 export const SYNC_OUTBOX_KEY = 'student_budget_sync_outbox';
 export const DIRTY_SETTINGS_KEY = 'student_budget_dirty_settings';
 export const DIRTY_PRESETS_KEY = 'student_budget_dirty_presets';
+export const PLANNED_CASHFLOW_OUTBOX_KEY = 'student_budget_planned_cashflow_outbox';
+export const DIRTY_PLANNED_CASHFLOW_OUTBOX_KEY = 'student_budget_planned_cashflow_outbox';
 
 export class BudgetStore {
   constructor() {
@@ -18,6 +21,7 @@ export class BudgetStore {
     this.state = this.loadState();
     this.hasUnsyncedChanges = Boolean(
       this.getOutbox().length > 0 ||
+      this.getPlannedCashflowOutbox().length > 0 ||
       this.dirtySettings ||
       this.dirtyPresets
     );
@@ -70,6 +74,7 @@ export class BudgetStore {
       const raw = SafeStorage.getItem(STORAGE_KEY);
       if (!raw) {
         this.clearOutbox();
+        this.clearPlannedCashflowOutbox();
         SafeStorage.removeItem(DIRTY_SETTINGS_KEY);
         SafeStorage.removeItem(DIRTY_PRESETS_KEY);
         return {
@@ -77,7 +82,8 @@ export class BudgetStore {
           onboarded: false,
           settings: { ...DEFAULT_SETTINGS, presets: DEFAULT_PRESETS },
           categories: [...DEFAULT_CATEGORIES],
-          transactions: []
+          transactions: [],
+          plannedCashflows: []
         };
       }
       if (raw) {
@@ -101,6 +107,24 @@ export class BudgetStore {
           const rawCurrency = (parsed.settings && parsed.settings.currency) || DEFAULT_CURRENCY;
           const normalizedCurrency = normalizeCurrency(rawCurrency);
 
+          // Planned cashflows: geriye dönük uyumluluk (eksikse boş dizi)
+          const rawPlanned = Array.isArray(parsed.plannedCashflows) ? parsed.plannedCashflows : [];
+          const plannedCashflows = rawPlanned.map(pc => ({
+            id: pc.id || generateUUID(),
+            name: String(pc.name || '').trim(),
+            type: pc.type === 'income' ? 'income' : 'expense',
+            amount: Math.round(Number(pc.amount) * 100) / 100,
+            recurrence: pc.recurrence === 'monthly' ? 'monthly' : 'once',
+            dayOfMonth: pc.recurrence === 'monthly' ? (Number(pc.dayOfMonth) || null) : null,
+            date: pc.recurrence === 'once' ? (pc.date || null) : null,
+            startDate: pc.startDate || null,
+            endDate: pc.endDate || null,
+            categoryId: pc.categoryId || null,
+            isActive: pc.isActive !== false,
+            createdAt: pc.createdAt ? (typeof pc.createdAt === 'number' ? pc.createdAt : new Date(pc.createdAt).getTime()) : Date.now(),
+            updatedAt: pc.updatedAt ? (typeof pc.updatedAt === 'number' ? pc.updatedAt : new Date(pc.updatedAt).getTime()) : Date.now()
+          }));
+
           return {
             version: SCHEMA_VERSION,
             onboarded: isOnboarded,
@@ -123,7 +147,8 @@ export class BudgetStore {
               notes: t.notes ? String(t.notes).trim() : '',
               createdAt: t.createdAt ? (typeof t.createdAt === 'number' ? t.createdAt : new Date(t.createdAt).getTime()) : null,
               updatedAt: t.updatedAt ? (typeof t.updatedAt === 'number' ? t.updatedAt : new Date(t.updatedAt).getTime()) : null
-            })).sort((a, b) => compareTransactions(a, b, 'date-desc'))
+            })).sort((a, b) => compareTransactions(a, b, 'date-desc')),
+            plannedCashflows
           };
         }
       }
@@ -137,7 +162,8 @@ export class BudgetStore {
       onboarded: false,
       settings: { ...DEFAULT_SETTINGS },
       categories: [...DEFAULT_CATEGORIES],
-      transactions: []
+      transactions: [],
+      plannedCashflows: []
     };
   }
 
@@ -286,6 +312,96 @@ export class BudgetStore {
     }
   }
 
+  // --- Planned Cashflows Durable Outbox (student_budget_planned_cashflow_outbox) ---
+  getPlannedCashflowOutbox() {
+    try {
+      const raw = SafeStorage.getItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  addToPlannedCashflowOutbox(item) {
+    if (this.isApplyingRemote || !item || !item.id) return;
+    try {
+      const queue = this.getPlannedCashflowOutbox();
+      const existingIdx = queue.findIndex(q => q.id === item.id);
+      const queuedAt = item.queuedAt || Date.now();
+      const updatedAt = item.updatedAt || Date.now();
+      const payload = item.payload || null;
+
+      if (existingIdx >= 0) {
+        const existing = queue[existingIdx];
+        if (item.operation === 'delete') {
+          queue[existingIdx] = {
+            id: item.id,
+            operation: 'delete',
+            payload: null,
+            updatedAt,
+            queuedAt
+          };
+        } else if (item.operation === 'update') {
+          queue[existingIdx] = {
+            id: item.id,
+            operation: (existing.operation === 'create' || existing.operation === 'insert') ? existing.operation : 'update',
+            payload,
+            updatedAt,
+            queuedAt
+          };
+        } else {
+          queue[existingIdx] = {
+            id: item.id,
+            operation: item.operation,
+            payload,
+            updatedAt,
+            queuedAt
+          };
+        }
+      } else {
+        queue.push({
+          id: item.id,
+          operation: item.operation,
+          payload,
+          updatedAt,
+          queuedAt
+        });
+      }
+
+      SafeStorage.setItem(PLANNED_CASHFLOW_OUTBOX_KEY, JSON.stringify(queue));
+      this.hasUnsyncedChanges = true;
+    } catch (e) {
+      console.warn('[BudgetStore] addToPlannedCashflowOutbox hatası:', e);
+    }
+  }
+
+  removeFromPlannedCashflowOutbox(ids = []) {
+    try {
+      if (!ids || !ids.length) {
+        SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+      } else {
+        const idSet = new Set(ids);
+        const queue = this.getPlannedCashflowOutbox();
+        const filtered = queue.filter(item => !idSet.has(item.id));
+        if (filtered.length === 0) {
+          SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+        } else {
+          SafeStorage.setItem(PLANNED_CASHFLOW_OUTBOX_KEY, JSON.stringify(filtered));
+        }
+      }
+    } catch (e) {
+      console.warn('[BudgetStore] removeFromPlannedCashflowOutbox hatası:', e);
+    }
+  }
+
+  clearPlannedCashflowOutbox() {
+    try {
+      SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+    } catch (e) {
+      console.warn('[BudgetStore] clearPlannedCashflowOutbox hatası:', e);
+    }
+  }
+
   getTransactions() {
     return this.state.transactions || [];
   }
@@ -425,6 +541,150 @@ export class BudgetStore {
     } catch (e) {
       // sessizce geç
     }
+  }
+
+  // --- Planned Cashflows CRUD ---
+  getPlannedCashflows() {
+    return this.state.plannedCashflows || [];
+  }
+
+  getActivePlannedCashflows() {
+    return (this.state.plannedCashflows || []).filter(c => c.isActive !== false);
+  }
+
+  getPlannedCashflowById(id) {
+    return (this.state.plannedCashflows || []).find(c => c.id === id) || null;
+  }
+
+  addPlannedCashflow(cashflowData) {
+    if (!cashflowData || typeof cashflowData !== 'object') {
+      throw new Error('Geçersiz planlı nakit akışı verisi.');
+    }
+
+    const id = cashflowData.id || generateUUID();
+    const candidate = {
+      ...cashflowData,
+      id
+    };
+
+    const validation = validatePlannedCashflow(candidate);
+    if (!validation.isValid) {
+      throw new Error(validation.reason || validation.error || 'Geçersiz planlı nakit akışı');
+    }
+
+    const now = Date.now();
+    const amount = Math.round(Number(candidate.amount) * 100) / 100;
+
+    const newCashflow = {
+      id,
+      name: String(candidate.name).trim(),
+      type: candidate.type,
+      amount,
+      recurrence: candidate.recurrence,
+      dayOfMonth: candidate.recurrence === 'monthly' ? Number(candidate.dayOfMonth) : null,
+      date: candidate.recurrence === 'once' ? candidate.date : null,
+      startDate: candidate.startDate || null,
+      endDate: candidate.endDate || null,
+      categoryId: candidate.categoryId || null,
+      isActive: candidate.isActive !== false,
+      createdAt: candidate.createdAt ? (typeof candidate.createdAt === 'number' ? candidate.createdAt : new Date(candidate.createdAt).getTime()) : now,
+      updatedAt: candidate.updatedAt ? (typeof candidate.updatedAt === 'number' ? candidate.updatedAt : new Date(candidate.updatedAt).getTime()) : now
+    };
+
+    if (!Array.isArray(this.state.plannedCashflows)) {
+      this.state.plannedCashflows = [];
+    }
+
+    this.state.plannedCashflows.push(newCashflow);
+
+    this.addToPlannedCashflowOutbox({
+      id: newCashflow.id,
+      operation: 'create',
+      payload: newCashflow,
+      updatedAt: newCashflow.updatedAt,
+      queuedAt: Date.now()
+    });
+
+    this.emitLocalChange('plannedCashflow:add', newCashflow);
+    this.notify();
+    return newCashflow;
+  }
+
+  updatePlannedCashflow(id, updatedFields) {
+    if (!id || !updatedFields || typeof updatedFields !== 'object') {
+      return false;
+    }
+    const idx = (this.state.plannedCashflows || []).findIndex(c => c.id === id);
+    if (idx === -1) return false;
+
+    const existing = this.state.plannedCashflows[idx];
+    const candidate = {
+      ...existing,
+      ...updatedFields,
+      id: existing.id,
+      createdAt: existing.createdAt // createdAt ASLA değişmez!
+    };
+
+    if (candidate.amount !== undefined) {
+      candidate.amount = Math.round(Number(candidate.amount) * 100) / 100;
+    }
+    if (candidate.name !== undefined) {
+      candidate.name = String(candidate.name).trim();
+    }
+    if (candidate.recurrence === 'monthly') {
+      candidate.date = null;
+      if (candidate.dayOfMonth !== undefined && candidate.dayOfMonth !== null) {
+        candidate.dayOfMonth = Number(candidate.dayOfMonth);
+      }
+    } else if (candidate.recurrence === 'once') {
+      candidate.dayOfMonth = null;
+    }
+
+    const validation = validatePlannedCashflow(candidate);
+    if (!validation.isValid) {
+      throw new Error(validation.reason || validation.error || 'Geçersiz planlı nakit akışı güncellemesi');
+    }
+
+    const now = Date.now();
+    candidate.updatedAt = now;
+
+    this.state.plannedCashflows[idx] = candidate;
+
+    this.addToPlannedCashflowOutbox({
+      id,
+      operation: 'update',
+      payload: candidate,
+      updatedAt: now,
+      queuedAt: now
+    });
+
+    this.emitLocalChange('plannedCashflow:update', candidate);
+    this.notify();
+    return true;
+  }
+
+  deletePlannedCashflow(id) {
+    if (!id) return false;
+    const prevLen = (this.state.plannedCashflows || []).length;
+    this.state.plannedCashflows = (this.state.plannedCashflows || []).filter(c => c.id !== id);
+    const wasInState = this.state.plannedCashflows.length !== prevLen;
+    const outbox = this.getPlannedCashflowOutbox();
+    const wasInOutbox = outbox.some(item => item.id === id);
+
+    if (wasInState || wasInOutbox) {
+      const now = Date.now();
+      this.addToPlannedCashflowOutbox({
+        id,
+        operation: 'delete',
+        payload: null,
+        updatedAt: now,
+        queuedAt: now
+      });
+      this.emitLocalChange('plannedCashflow:delete', { id });
+      this.notify();
+      return true;
+    }
+    return false;
   }
 
   startWithDemo() {
@@ -611,17 +871,20 @@ export class BudgetStore {
 
   resetAndRestartOnboarding() {
     this.state.transactions = [];
+    this.state.plannedCashflows = [];
     this.state.categories = [...DEFAULT_CATEGORIES];
     this.state.onboarded = false;
     this.hasUnsyncedChanges = false;
     this.dirtySettings = false;
     this.dirtyPresets = false;
     this.clearOutbox();
+    this.clearPlannedCashflowOutbox();
     this.notify();
   }
 
   clearSessionOnSignOut() {
     this.state.transactions = [];
+    this.state.plannedCashflows = [];
     this.state.onboarded = false;
     this.state.hasUnsyncedChanges = false;
     SafeStorage.removeItem('student_budget_last_synced_at');
@@ -629,6 +892,7 @@ export class BudgetStore {
     this.dirtySettings = false;
     this.dirtyPresets = false;
     this.clearOutbox();
+    this.clearPlannedCashflowOutbox();
     this.saveToStorage();
     this.notify();
   }
@@ -744,13 +1008,102 @@ export class BudgetStore {
       this.state.categories = Array.from(catMap.values());
     }
 
-    if (mode === 'replace') {
-      this.state.transactions = validatedTxs;
+    // Planned cashflows parsing & validation
+    let rawPlannedCashflows = null;
+    if (importedData && typeof importedData === 'object' && Array.isArray(importedData.plannedCashflows)) {
+      rawPlannedCashflows = importedData.plannedCashflows;
+    }
+
+    let validatedPlanned = [];
+    if (rawPlannedCashflows) {
+      validatedPlanned = rawPlannedCashflows.map(pc => {
+        const candidate = {
+          ...pc,
+          id: pc.id || generateUUID()
+        };
+        const val = validatePlannedCashflow(candidate);
+        if (!val.isValid) {
+          throw new Error(`Dosyadaki planlı akış kaydı geçersiz (${pc.name || 'isimsiz'}): ${val.reason || val.error || 'Geçersiz veri'}`);
+        }
+        return {
+          id: candidate.id,
+          name: String(pc.name).trim(),
+          type: pc.type,
+          amount: Math.round(Number(pc.amount) * 100) / 100,
+          recurrence: pc.recurrence,
+          dayOfMonth: pc.recurrence === 'monthly' ? Number(pc.dayOfMonth) : null,
+          date: pc.recurrence === 'once' ? pc.date : null,
+          startDate: pc.startDate || null,
+          endDate: pc.endDate || null,
+          categoryId: pc.categoryId || null,
+          isActive: pc.isActive !== false,
+          createdAt: pc.createdAt ? (typeof pc.createdAt === 'number' ? pc.createdAt : new Date(pc.createdAt).getTime()) : Date.now(),
+          updatedAt: pc.updatedAt ? (typeof pc.updatedAt === 'number' ? pc.updatedAt : new Date(pc.updatedAt).getTime()) : Date.now()
+        };
+      });
+    }
+
+    if (rawPlannedCashflows) {
+      const prevPlanned = this.state.plannedCashflows || [];
+      const prevPlannedMap = new Map(prevPlanned.map(p => [p.id, p]));
+      const importedIds = new Set(validatedPlanned.map(p => p.id));
+
+      if (mode === 'replace') {
+        this.state.transactions = validatedTxs;
+        this.state.plannedCashflows = validatedPlanned;
+
+        // REPLACE Sözleşmesi: Yeni anlık görüntüde bulunmayan eski planlar için DELETE tombstone
+        prevPlanned.forEach(oldP => {
+          if (!importedIds.has(oldP.id)) {
+            this.addToPlannedCashflowOutbox({
+              id: oldP.id,
+              operation: 'delete',
+              payload: null,
+              updatedAt: Date.now(),
+              queuedAt: Date.now()
+            });
+          }
+        });
+
+        // İçe aktarılan planları outbox'a ekle (yeni: create, mevcut: update)
+        validatedPlanned.forEach(p => {
+          this.addToPlannedCashflowOutbox({
+            id: p.id,
+            operation: prevPlannedMap.has(p.id) ? 'update' : 'create',
+            payload: p,
+            updatedAt: p.updatedAt || Date.now(),
+            queuedAt: Date.now()
+          });
+        });
+      } else {
+        // Merge
+        const txMap = new Map(this.state.transactions.map(t => [t.id, t]));
+        validatedTxs.forEach(t => txMap.set(t.id, t));
+        this.state.transactions = Array.from(txMap.values());
+
+        const pcMap = new Map((this.state.plannedCashflows || []).map(p => [p.id, p]));
+        validatedPlanned.forEach(p => pcMap.set(p.id, p));
+        this.state.plannedCashflows = Array.from(pcMap.values());
+
+        // MERGE Sözleşmesi: İçe aktarılan planları outbox'a ekle
+        validatedPlanned.forEach(p => {
+          this.addToPlannedCashflowOutbox({
+            id: p.id,
+            operation: prevPlannedMap.has(p.id) ? 'update' : 'create',
+            payload: p,
+            updatedAt: p.updatedAt || Date.now(),
+            queuedAt: Date.now()
+          });
+        });
+      }
     } else {
-      // Merge
-      const txMap = new Map(this.state.transactions.map(t => [t.id, t]));
-      validatedTxs.forEach(t => txMap.set(t.id, t));
-      this.state.transactions = Array.from(txMap.values());
+      if (mode === 'replace') {
+        this.state.transactions = validatedTxs;
+      } else {
+        const txMap = new Map(this.state.transactions.map(t => [t.id, t]));
+        validatedTxs.forEach(t => txMap.set(t.id, t));
+        this.state.transactions = Array.from(txMap.values());
+      }
     }
 
     this.sortTransactions('date-desc');
@@ -766,7 +1119,8 @@ export class BudgetStore {
       exportedAt: new Date().toISOString(),
       settings: this.state.settings,
       categories: this.state.categories,
-      transactions: this.state.transactions
+      transactions: this.state.transactions,
+      plannedCashflows: this.state.plannedCashflows || []
     };
   }
 }
