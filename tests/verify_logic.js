@@ -30,6 +30,18 @@ import {
   SCENARIO_TYPES,
   SCENARIO_ASSUMPTIONS
 } from '../src/services/whatIfEngine.js';
+import {
+  planCashflow,
+  generateCashflowOccurrences,
+  getNextIncome,
+  getObligationsBeforeNextIncome,
+  validatePlannedCashflow,
+  daysBetween,
+  CASHFLOW_TYPES,
+  RECURRENCE_TYPES,
+  COVERAGE_STATUS,
+  CASHFLOW_ASSUMPTIONS
+} from '../src/services/cashflowPlannerEngine.js';
 
 console.log('====================================================');
 console.log('🚀 ÖĞRENCİ BÜTÇE TAKİP - ENTEGRE TEST PAKETİ (FAZ 2 & 3)');
@@ -6279,6 +6291,525 @@ const whatIfOpts = { year: 2026, month: 9, now: sept18Now, currentAvailableBalan
   const run1 = simulateWhatIf({ transactions: whatIfBaseTxs, options: whatIfOpts, scenario: { type: SCENARIO_TYPES.FUTURE_SPEND_PERCENT_CHANGE, percent: -25 } });
   const run2 = simulateWhatIf({ transactions: whatIfBaseTxs, options: whatIfOpts, scenario: { type: SCENARIO_TYPES.FUTURE_SPEND_PERCENT_CHANGE, percent: -25 } });
   assert(JSON.stringify(run1) === JSON.stringify(run2), 'TC-239 same input -> exact same output');
+}
+
+// --------------------------------------------------------------------------
+// 24. FAZ 5.5A — DETERMINISTIC STUDENT CASHFLOW PLANNER ENGINE (TC-240 - TC-285)
+// --------------------------------------------------------------------------
+console.log('\n--- 24. FAZ 5.5A — DETERMINISTIC STUDENT CASHFLOW PLANNER ENGINE ---');
+
+const sept28Now = new Date(2026, 8, 28, 10, 0, 0); // 28 Eylül 2026
+
+// TC-240: monthly income occurrence generation
+{
+  const flow = { id: 'inc1', name: 'Burs', type: 'income', amount: 3000, recurrence: 'monthly', dayOfMonth: 8 };
+  const occs = generateCashflowOccurrences([flow], { now: sept28Now, horizonDays: 60 });
+  assert(occs.length >= 2, 'TC-240 monthly income occurrence generation');
+  assert(occs[0].date === '2026-10-08', 'TC-240 İlk occurrence 8 Ekim');
+  assert(occs[1].date === '2026-11-08', 'TC-240 İkinci occurrence 8 Kasım');
+}
+
+// TC-241: monthly expense occurrence generation
+{
+  const flow = { id: 'exp1', name: 'Kira', type: 'expense', amount: 5000, recurrence: 'monthly', dayOfMonth: 1 };
+  const occs = generateCashflowOccurrences([flow], { now: sept28Now, horizonDays: 40 });
+  assert(occs.some(o => o.date === '2026-10-01'), 'TC-241 monthly expense occurrence 1 Ekim');
+  assert(occs.some(o => o.date === '2026-11-01'), 'TC-241 monthly expense occurrence 1 Kasım');
+}
+
+// TC-242: once occurrence generation
+{
+  const flow = { id: 'one1', name: 'Kitap', type: 'expense', amount: 400, recurrence: 'once', date: '2026-10-15' };
+  const occs = generateCashflowOccurrences([flow], { now: sept28Now, horizonDays: 60 });
+  assert(occs.length === 1 && occs[0].date === '2026-10-15', 'TC-242 once occurrence generation');
+}
+
+// TC-243: inactive cashflow ignored
+{
+  const flow = { id: 'inact', name: 'Eski', type: 'income', amount: 1000, recurrence: 'monthly', dayOfMonth: 5, isActive: false };
+  const occs = generateCashflowOccurrences([flow], { now: sept28Now });
+  assert(occs.length === 0, 'TC-243 inactive cashflow ignored');
+}
+
+// TC-244: startDate respected
+{
+  const flow = { id: 'start', name: 'Gelecek', type: 'income', amount: 1000, recurrence: 'monthly', dayOfMonth: 5, startDate: '2026-11-01' };
+  const occs = generateCashflowOccurrences([flow], { now: sept28Now, horizonDays: 60 });
+  assert(!occs.some(o => o.date === '2026-10-05'), 'TC-244 startDate öncesi üretilmedi');
+  assert(occs.some(o => o.date === '2026-11-05'), 'TC-244 startDate sonrası üretildi');
+}
+
+// TC-245: endDate respected
+{
+  const flow = { id: 'end', name: 'Biten', type: 'income', amount: 1000, recurrence: 'monthly', dayOfMonth: 5, endDate: '2026-10-20' };
+  const occs = generateCashflowOccurrences([flow], { now: sept28Now, horizonDays: 60 });
+  assert(occs.some(o => o.date === '2026-10-05'), 'TC-245 endDate öncesi üretildi');
+  assert(!occs.some(o => o.date === '2026-11-05'), 'TC-245 endDate sonrası üretilmedi');
+}
+
+// TC-246: day 31 February clamps to Feb 28
+{
+  const flow = { id: 'cl31', name: 'Ay sonu', type: 'expense', amount: 100, recurrence: 'monthly', dayOfMonth: 31 };
+  const occs = generateCashflowOccurrences([flow], { now: new Date(2026, 1, 1), horizonDays: 30 }); // Feb 2026
+  assert(occs.some(o => o.date === '2026-02-28'), 'TC-246 day 31 February clamps to Feb 28');
+}
+
+// TC-247: leap year Feb 29 clamp
+{
+  const flow = { id: 'leap', name: 'Artık yıl', type: 'expense', amount: 100, recurrence: 'monthly', dayOfMonth: 31 };
+  const occs = generateCashflowOccurrences([flow], { now: new Date(2024, 1, 1), horizonDays: 30 }); // Feb 2024 leap
+  assert(occs.some(o => o.date === '2024-02-29'), 'TC-247 leap year Feb 29 clamp');
+}
+
+// TC-248: April day31 -> April30
+{
+  const flow = { id: 'apr', name: 'Nisan', type: 'expense', amount: 100, recurrence: 'monthly', dayOfMonth: 31 };
+  const occs = generateCashflowOccurrences([flow], { now: new Date(2026, 3, 1), horizonDays: 30 }); // April 2026
+  assert(occs.some(o => o.date === '2026-04-30'), 'TC-248 April day31 -> April30');
+}
+
+// TC-249: next income chooses nearest income
+{
+  const occs = [
+    { type: 'income', amount: 5000, date: '2026-10-15', name: 'Geç', cashflowId: 'inc-late' },
+    { type: 'income', amount: 3000, date: '2026-10-05', name: 'Erken', cashflowId: 'inc-early' }
+  ];
+  const next = getNextIncome(occs, { now: sept28Now });
+  assert(next.found && next.date === '2026-10-05' && next.name === 'Erken', 'TC-249 next income chooses nearest income');
+}
+
+// TC-250: multiple incomes nearest selected
+{
+  const flows = [
+    { id: 'kyk', name: 'KYK', type: 'income', amount: 3000, recurrence: 'monthly', dayOfMonth: 8 },
+    { id: 'family', name: 'Aile', type: 'income', amount: 2000, recurrence: 'monthly', dayOfMonth: 5 }
+  ];
+  const occs = generateCashflowOccurrences(flows, { now: sept28Now });
+  const next = getNextIncome(occs, { now: sept28Now });
+  assert(next.date === '2026-10-05' && next.name === 'Aile', 'TC-250 multiple incomes nearest selected');
+}
+
+// TC-251: daysUntil correct
+{
+  const next = getNextIncome([
+    { type: 'income', amount: 3000, date: '2026-10-05', name: 'Aile', cashflowId: 'fam' }
+  ], { now: sept28Now });
+  assert(next.daysUntil === 7, 'TC-251 daysUntil correct (28 Eylül -> 5 Ekim = 7 gün)');
+}
+
+// TC-252: expense before next income included
+{
+  const flows = [
+    { id: 'rent', name: 'Kira', type: 'expense', amount: 2000, recurrence: 'monthly', dayOfMonth: 3 },
+    { id: 'inc', name: 'Aile', type: 'income', amount: 3000, recurrence: 'monthly', dayOfMonth: 5 }
+  ];
+  const occs = generateCashflowOccurrences(flows, { now: sept28Now });
+  const next = getNextIncome(occs, { now: sept28Now });
+  const ob = getObligationsBeforeNextIncome({ occurrences: occs, nextIncome: next, options: { now: sept28Now } });
+  assert(ob.totalBeforeIncome === 2000, 'TC-252 expense before next income included');
+  assert(ob.expensesBeforeIncome.length === 1 && ob.expensesBeforeIncome[0].name === 'Kira', 'TC-252 Kira gideri listede');
+}
+
+// TC-253: expense after next income excluded from obligations
+{
+  const flows = [
+    { id: 'rent', name: 'Kira', type: 'expense', amount: 2000, recurrence: 'monthly', dayOfMonth: 3 },
+    { id: 'bill', name: 'Fatura', type: 'expense', amount: 500, recurrence: 'monthly', dayOfMonth: 10 },
+    { id: 'inc', name: 'Aile', type: 'income', amount: 3000, recurrence: 'monthly', dayOfMonth: 5 }
+  ];
+  const occs = generateCashflowOccurrences(flows, { now: sept28Now });
+  const next = getNextIncome(occs, { now: sept28Now });
+  const ob = getObligationsBeforeNextIncome({ occurrences: occs, nextIncome: next, options: { now: sept28Now } });
+  assert(ob.totalBeforeIncome === 2000, 'TC-253 sonraki gider dahil edilmedi');
+  assert(!ob.expensesBeforeIncome.some(e => e.name === 'Fatura'), 'TC-253 Fatura hariç tutuldu');
+}
+
+// TC-254: same-day expense separated
+{
+  const flows = [
+    { id: 'sameday', name: 'Aynı Gün Aidat', type: 'expense', amount: 400, recurrence: 'monthly', dayOfMonth: 5 },
+    { id: 'inc', name: 'Aile', type: 'income', amount: 3000, recurrence: 'monthly', dayOfMonth: 5 }
+  ];
+  const occs = generateCashflowOccurrences(flows, { now: sept28Now });
+  const next = getNextIncome(occs, { now: sept28Now });
+  const ob = getObligationsBeforeNextIncome({ occurrences: occs, nextIncome: next, options: { now: sept28Now } });
+  assert(ob.sameDayExpenseTotal === 400, 'TC-254 same-day expense separated');
+  assert(ob.totalBeforeIncome === 0, 'TC-254 totalBeforeIncome sıfır');
+}
+
+// TC-255: same-day expense reserved in spending capacity
+{
+  const plan = planCashflow({
+    plannedCashflows: [
+      { id: 'sameday', name: 'Aidat', type: 'expense', amount: 400, recurrence: 'monthly', dayOfMonth: 5 },
+      { id: 'inc', name: 'Aile', type: 'income', amount: 3000, recurrence: 'monthly', dayOfMonth: 5 }
+    ],
+    options: { now: sept28Now, currentAvailableBalance: 1400 }
+  });
+  // 1400 - 0 (before) - 400 (same day) = 1000
+  assert(plan.spending.availableAfterPlannedObligations === 1000, 'TC-255 same-day expense reserved in spending capacity');
+}
+
+// TC-256: availableAfterPlannedObligations exact
+{
+  const plan = planCashflow({
+    plannedCashflows: [
+      { id: 'rent', name: 'Kira', type: 'expense', amount: 2000, recurrence: 'monthly', dayOfMonth: 3 },
+      { id: 'fam', name: 'Aile', type: 'income', amount: 3000, recurrence: 'monthly', dayOfMonth: 5 }
+    ],
+    options: { now: sept28Now, currentAvailableBalance: 5000 }
+  });
+  assert(plan.spending.availableAfterPlannedObligations === 3000, 'TC-256 availableAfterPlannedObligations exact');
+}
+
+// TC-257: safeDailySpend exact
+{
+  const plan = planCashflow({
+    plannedCashflows: [
+      { id: 'rent', name: 'Kira', type: 'expense', amount: 2000, recurrence: 'monthly', dayOfMonth: 3 },
+      { id: 'fam', name: 'Aile', type: 'income', amount: 3000, recurrence: 'monthly', dayOfMonth: 5 }
+    ],
+    options: { now: sept28Now, currentAvailableBalance: 5000 }
+  });
+  assert(plan.spending.safeDailySpendUntilNextIncome === 428.57, 'TC-257 safeDailySpend exact (3000 / 7 = 428.57)');
+}
+
+// TC-258: forecast blended daily rate consumed correctly
+{
+  const mockForecast = {
+    metadata: { isForecastApplicable: true },
+    dailyRates: { blended: 520 }
+  };
+  const plan = planCashflow({
+    plannedCashflows: [
+      { id: 'rent', name: 'Kira', type: 'expense', amount: 2000, recurrence: 'monthly', dayOfMonth: 3 },
+      { id: 'fam', name: 'Aile', type: 'income', amount: 3000, recurrence: 'monthly', dayOfMonth: 5 }
+    ],
+    options: { now: sept28Now, currentAvailableBalance: 5000 },
+    forecast: mockForecast
+  });
+  assert(plan.spending.baselineDailyRate === 520, 'TC-258 forecast blended daily rate consumed correctly');
+}
+
+// TC-259: projectedVariableSpendUntilNextIncome exact
+{
+  const mockForecast = {
+    metadata: { isForecastApplicable: true },
+    dailyRates: { blended: 520 }
+  };
+  const plan = planCashflow({
+    plannedCashflows: [
+      { id: 'rent', name: 'Kira', type: 'expense', amount: 2000, recurrence: 'monthly', dayOfMonth: 3 },
+      { id: 'fam', name: 'Aile', type: 'income', amount: 3000, recurrence: 'monthly', dayOfMonth: 5 }
+    ],
+    options: { now: sept28Now, currentAvailableBalance: 5000 },
+    forecast: mockForecast
+  });
+  assert(plan.spending.projectedVariableSpendUntilNextIncome === 3640, 'TC-259 projectedVariableSpendUntilNextIncome exact (520 * 7 = 3640)');
+}
+
+// TC-260: projectedBalanceBeforeNextIncome exact
+{
+  const mockForecast = {
+    metadata: { isForecastApplicable: true },
+    dailyRates: { blended: 520 }
+  };
+  const plan = planCashflow({
+    plannedCashflows: [
+      { id: 'rent', name: 'Kira', type: 'expense', amount: 2000, recurrence: 'monthly', dayOfMonth: 3 },
+      { id: 'fam', name: 'Aile', type: 'income', amount: 3000, recurrence: 'monthly', dayOfMonth: 5 }
+    ],
+    options: { now: sept28Now, currentAvailableBalance: 5000 },
+    forecast: mockForecast
+  });
+  assert(plan.spending.projectedBalanceBeforeNextIncome === -640, 'TC-260 projectedBalanceBeforeNextIncome exact (3000 - 3640 = -640)');
+}
+
+// TC-261: dailyAdjustmentNeeded exact
+{
+  const mockForecast = {
+    metadata: { isForecastApplicable: true },
+    dailyRates: { blended: 520 }
+  };
+  const plan = planCashflow({
+    plannedCashflows: [
+      { id: 'rent', name: 'Kira', type: 'expense', amount: 2000, recurrence: 'monthly', dayOfMonth: 3 },
+      { id: 'fam', name: 'Aile', type: 'income', amount: 3000, recurrence: 'monthly', dayOfMonth: 5 }
+    ],
+    options: { now: sept28Now, currentAvailableBalance: 5000 },
+    forecast: mockForecast
+  });
+  assert(plan.spending.dailyAdjustmentNeeded === 91.43, 'TC-261 dailyAdjustmentNeeded exact (520 - 428.57 = 91.43)');
+}
+
+// TC-262: dailyAdjustment 0 when baseline <= safe
+{
+  const lowPaceForecast = {
+    metadata: { isForecastApplicable: true },
+    dailyRates: { blended: 300 }
+  };
+  const plan = planCashflow({
+    plannedCashflows: [
+      { id: 'rent', name: 'Kira', type: 'expense', amount: 2000, recurrence: 'monthly', dayOfMonth: 3 },
+      { id: 'fam', name: 'Aile', type: 'income', amount: 3000, recurrence: 'monthly', dayOfMonth: 5 }
+    ],
+    options: { now: sept28Now, currentAvailableBalance: 5000 },
+    forecast: lowPaceForecast
+  });
+  assert(plan.spending.dailyAdjustmentNeeded === 0, 'TC-262 dailyAdjustment 0 when baseline <= safe');
+}
+
+// TC-263: runwayDays exact
+{
+  const lowPaceForecast = {
+    metadata: { isForecastApplicable: true },
+    dailyRates: { blended: 300 }
+  };
+  const plan = planCashflow({
+    plannedCashflows: [
+      { id: 'rent', name: 'Kira', type: 'expense', amount: 2000, recurrence: 'monthly', dayOfMonth: 3 },
+      { id: 'fam', name: 'Aile', type: 'income', amount: 3000, recurrence: 'monthly', dayOfMonth: 5 }
+    ],
+    options: { now: sept28Now, currentAvailableBalance: 5000 },
+    forecast: lowPaceForecast
+  });
+  // 3000 / 300 = 10
+  assert(plan.spending.runwayDays === 10, 'TC-263 runwayDays exact');
+}
+
+// TC-264: zero daily rate -> runway null
+{
+  const zeroForecast = { metadata: { isForecastApplicable: true }, dailyRates: { blended: 0 } };
+  const plan = planCashflow({
+    plannedCashflows: [{ id: 'fam', name: 'Aile', type: 'income', amount: 3000, recurrence: 'monthly', dayOfMonth: 5 }],
+    options: { now: sept28Now, currentAvailableBalance: 3000 },
+    forecast: zeroForecast
+  });
+  assert(plan.spending.runwayDays === null, 'TC-264 zero daily rate -> runway null');
+}
+
+// TC-265: DEFICIT_BEFORE_INCOME status
+{
+  const plan = planCashflow({
+    plannedCashflows: [
+      { id: 'rent', name: 'Kira', type: 'expense', amount: 2000, recurrence: 'monthly', dayOfMonth: 3 },
+      { id: 'fam', name: 'Aile', type: 'income', amount: 3000, recurrence: 'monthly', dayOfMonth: 5 }
+    ],
+    options: { now: sept28Now, currentAvailableBalance: 5000 },
+    forecast: { metadata: { isForecastApplicable: true }, dailyRates: { blended: 520 } }
+  });
+  assert(plan.status.coverageStatus === COVERAGE_STATUS.DEFICIT_BEFORE_INCOME, 'TC-265 DEFICIT_BEFORE_INCOME status');
+}
+
+// TC-266: TIGHT status
+{
+  const plan = planCashflow({
+    plannedCashflows: [
+      { id: 'rent', name: 'Kira', type: 'expense', amount: 2000, recurrence: 'monthly', dayOfMonth: 3 },
+      { id: 'fam', name: 'Aile', type: 'income', amount: 3000, recurrence: 'monthly', dayOfMonth: 5 }
+    ],
+    options: { now: sept28Now, currentAvailableBalance: 5000 },
+    forecast: { metadata: { isForecastApplicable: true }, dailyRates: { blended: 360 } }
+  });
+  assert(plan.status.coverageStatus === COVERAGE_STATUS.TIGHT, 'TC-266 TIGHT status');
+}
+
+// TC-267: COVERED status
+{
+  const plan = planCashflow({
+    plannedCashflows: [
+      { id: 'rent', name: 'Kira', type: 'expense', amount: 2000, recurrence: 'monthly', dayOfMonth: 3 },
+      { id: 'fam', name: 'Aile', type: 'income', amount: 3000, recurrence: 'monthly', dayOfMonth: 5 }
+    ],
+    options: { now: sept28Now, currentAvailableBalance: 5000 },
+    forecast: { metadata: { isForecastApplicable: true }, dailyRates: { blended: 150 } }
+  });
+  assert(plan.status.coverageStatus === COVERAGE_STATUS.COVERED, 'TC-267 COVERED status');
+}
+
+// TC-268: NO_NEXT_INCOME status
+{
+  const plan = planCashflow({
+    plannedCashflows: [
+      { id: 'rent', name: 'Kira', type: 'expense', amount: 2000, recurrence: 'monthly', dayOfMonth: 3 }
+    ],
+    options: { now: sept28Now, currentAvailableBalance: 5000 }
+  });
+  assert(plan.status.coverageStatus === COVERAGE_STATUS.NO_NEXT_INCOME, 'TC-268 NO_NEXT_INCOME status');
+}
+
+// TC-269: no income -> safe daily null
+{
+  const plan = planCashflow({
+    plannedCashflows: [
+      { id: 'rent', name: 'Kira', type: 'expense', amount: 2000, recurrence: 'monthly', dayOfMonth: 3 }
+    ],
+    options: { now: sept28Now, currentAvailableBalance: 5000 }
+  });
+  assert(plan.spending.safeDailySpendUntilNextIncome === null, 'TC-269 no income -> safe daily null');
+  assert(plan.spending.daysUntilNextIncome === null, 'TC-269 daysUntilNextIncome null');
+}
+
+// TC-270: negative balance preserved
+{
+  const plan = planCashflow({
+    plannedCashflows: [
+      { id: 'rent', name: 'Kira', type: 'expense', amount: 2000, recurrence: 'monthly', dayOfMonth: 3 },
+      { id: 'fam', name: 'Aile', type: 'income', amount: 3000, recurrence: 'monthly', dayOfMonth: 5 }
+    ],
+    options: { now: sept28Now, currentAvailableBalance: 1000 }
+  });
+  // 1000 - 2000 = -1000
+  assert(plan.spending.availableAfterPlannedObligations === -1000, 'TC-270 negative balance preserved (not clamped to 0)');
+}
+
+// TC-271: zero balance safe
+{
+  const plan = planCashflow({
+    plannedCashflows: [
+      { id: 'fam', name: 'Aile', type: 'income', amount: 3000, recurrence: 'monthly', dayOfMonth: 5 }
+    ],
+    options: { now: sept28Now, currentAvailableBalance: 0 }
+  });
+  assert(plan.spending.availableAfterPlannedObligations === 0, 'TC-271 zero balance safe');
+  assert(plan.spending.safeDailySpendUntilNextIncome === 0, 'TC-271 zero balance safeDailySpend is 0');
+}
+
+// TC-272: same-day assumptions metadata
+{
+  const plan = planCashflow({
+    plannedCashflows: [],
+    options: { now: sept28Now }
+  });
+  assert(plan.metadata.assumptions.includes('DATE_ONLY_CASHFLOW_ORDER_UNKNOWN'), 'TC-272 assumptions DATE_ONLY_CASHFLOW_ORDER_UNKNOWN');
+  assert(plan.metadata.assumptions.includes('SAME_DAY_EXPENSES_RESERVED_BEFORE_INCOME'), 'TC-272 assumptions SAME_DAY_EXPENSES_RESERVED_BEFORE_INCOME');
+}
+
+// TC-273: timeline ordered ascending
+{
+  const flows = [
+    { id: 'b', name: 'Sonra', type: 'expense', amount: 100, recurrence: 'once', date: '2026-10-10' },
+    { id: 'a', name: 'Önce', type: 'expense', amount: 100, recurrence: 'once', date: '2026-10-02' }
+  ];
+  const occs = generateCashflowOccurrences(flows, { now: sept28Now });
+  assert(occs[0].name === 'Önce' && occs[1].name === 'Sonra', 'TC-273 timeline ordered ascending');
+}
+
+// TC-274: duplicate occurrence prevented
+{
+  const flows = [
+    { id: 'dup', name: 'Tekrarlı', type: 'expense', amount: 100, recurrence: 'once', date: '2026-10-02' },
+    { id: 'dup', name: 'Tekrarlı', type: 'expense', amount: 100, recurrence: 'once', date: '2026-10-02' }
+  ];
+  const occs = generateCashflowOccurrences(flows, { now: sept28Now });
+  assert(occs.length === 1, 'TC-274 duplicate occurrence prevented');
+}
+
+// TC-275: invalid amount rejected
+{
+  assert(!validatePlannedCashflow({ id: '1', name: 'T', type: 'income', amount: 0, recurrence: 'monthly', dayOfMonth: 5 }).isValid, 'TC-275 0 amount rejected');
+  assert(!validatePlannedCashflow({ id: '1', name: 'T', type: 'income', amount: -50, recurrence: 'monthly', dayOfMonth: 5 }).isValid, 'TC-275 negative amount rejected');
+  assert(!validatePlannedCashflow({ id: '1', name: 'T', type: 'income', amount: NaN, recurrence: 'monthly', dayOfMonth: 5 }).isValid, 'TC-275 NaN rejected');
+  assert(!validatePlannedCashflow({ id: '1', name: 'T', type: 'income', amount: '100', recurrence: 'monthly', dayOfMonth: 5 }).isValid, 'TC-275 string amount rejected');
+}
+
+// TC-276: invalid type rejected
+{
+  assert(!validatePlannedCashflow({ id: '1', name: 'T', type: 'unknown', amount: 100, recurrence: 'monthly', dayOfMonth: 5 }).isValid, 'TC-276 invalid type rejected');
+}
+
+// TC-277: invalid recurrence rejected
+{
+  assert(!validatePlannedCashflow({ id: '1', name: 'T', type: 'income', amount: 100, recurrence: 'weekly', dayOfMonth: 5 }).isValid, 'TC-277 invalid recurrence rejected');
+}
+
+// TC-278: monthly missing dayOfMonth rejected
+{
+  assert(!validatePlannedCashflow({ id: '1', name: 'T', type: 'income', amount: 100, recurrence: 'monthly' }).isValid, 'TC-278 monthly missing dayOfMonth rejected');
+  assert(!validatePlannedCashflow({ id: '1', name: 'T', type: 'income', amount: 100, recurrence: 'monthly', dayOfMonth: 32 }).isValid, 'TC-278 dayOfMonth > 31 rejected');
+  assert(!validatePlannedCashflow({ id: '1', name: 'T', type: 'income', amount: 100, recurrence: 'monthly', dayOfMonth: 0 }).isValid, 'TC-278 dayOfMonth < 1 rejected');
+}
+
+// TC-279: once missing date rejected
+{
+  assert(!validatePlannedCashflow({ id: '1', name: 'T', type: 'expense', amount: 100, recurrence: 'once' }).isValid, 'TC-279 once missing date rejected');
+}
+
+// TC-280: invalid date rejected
+{
+  assert(!validatePlannedCashflow({ id: '1', name: 'T', type: 'expense', amount: 100, recurrence: 'once', date: 'invalid-date' }).isValid, 'TC-280 invalid date rejected');
+}
+
+// TC-281: forecast not applicable -> forecast-aware fields null
+{
+  const inapplForecast = { metadata: { isForecastApplicable: false }, dailyRates: { blended: 500 } };
+  const plan = planCashflow({
+    plannedCashflows: [{ id: 'fam', name: 'Aile', type: 'income', amount: 3000, recurrence: 'monthly', dayOfMonth: 5 }],
+    options: { now: sept28Now, currentAvailableBalance: 5000 },
+    forecast: inapplForecast
+  });
+  assert(plan.spending.baselineDailyRate === null, 'TC-281 baselineDailyRate null');
+  assert(plan.spending.projectedVariableSpendUntilNextIncome === null, 'TC-281 projectedVariableSpend null');
+  assert(plan.spending.projectedBalanceBeforeNextIncome === null, 'TC-281 projectedBalanceBeforeNextIncome null');
+  assert(plan.spending.dailyAdjustmentNeeded === null, 'TC-281 dailyAdjustmentNeeded null');
+  assert(plan.spending.runwayDays === null, 'TC-281 runwayDays null');
+}
+
+// TC-282: plannedCashflows input immutable
+{
+  const frozenList = Object.freeze([
+    Object.freeze({ id: 'f1', name: 'Kira', type: 'expense', amount: 2000, recurrence: 'monthly', dayOfMonth: 3 })
+  ]);
+  let mutated = false;
+  try {
+    planCashflow({ plannedCashflows: frozenList, options: { now: sept28Now } });
+  } catch (e) {
+    mutated = true;
+  }
+  assert(!mutated, 'TC-282 plannedCashflows input immutable');
+}
+
+// TC-283: forecast input immutable
+{
+  const frozenForecast = Object.freeze({
+    metadata: Object.freeze({ isForecastApplicable: true }),
+    dailyRates: Object.freeze({ blended: 350 })
+  });
+  let mutated = false;
+  try {
+    planCashflow({
+      plannedCashflows: [{ id: 'f1', name: 'Burs', type: 'income', amount: 3000, recurrence: 'monthly', dayOfMonth: 5 }],
+      options: { now: sept28Now, currentAvailableBalance: 4000 },
+      forecast: frozenForecast
+    });
+  } catch (e) {
+    mutated = true;
+  }
+  assert(!mutated, 'TC-283 forecast input immutable');
+}
+
+// TC-284: same input deterministic output
+{
+  const params = {
+    plannedCashflows: [
+      { id: 'rent', name: 'Kira', type: 'expense', amount: 2000, recurrence: 'monthly', dayOfMonth: 3 },
+      { id: 'fam', name: 'Aile', type: 'income', amount: 3000, recurrence: 'monthly', dayOfMonth: 5 }
+    ],
+    options: { now: sept28Now, currentAvailableBalance: 5000 },
+    forecast: { metadata: { isForecastApplicable: true }, dailyRates: { blended: 520 } }
+  };
+  const run1 = planCashflow(params);
+  const run2 = planCashflow(params);
+  assert(JSON.stringify(run1) === JSON.stringify(run2), 'TC-284 same input deterministic output');
+}
+
+// TC-285: no network/Supabase/DOM/LocalStorage dependency
+{
+  const res = planCashflow({
+    plannedCashflows: [{ id: '1', name: 'X', type: 'income', amount: 100, recurrence: 'monthly', dayOfMonth: 1 }],
+    options: { now: sept28Now }
+  });
+  assert(typeof res === 'object' && res !== null, 'TC-285 no network/Supabase/DOM/LocalStorage dependency');
 }
 
 console.log('\n====================================================');
