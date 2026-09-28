@@ -14,6 +14,14 @@ import { UIManager } from '../src/components/UIManager.js';
 import { ModalManager } from '../src/components/modalManager.js';
 import { STORAGE_KEY } from '../src/config/constants.js';
 import { analyzeMonth, round as roundMetric } from '../src/services/analyticsEngine.js';
+import {
+  forecastMonth,
+  evaluateHistoricalForecast,
+  calculateDailyVolatility,
+  calculateConfidence,
+  RECENT_WEIGHT,
+  MTD_WEIGHT
+} from '../src/services/forecastEngine.js';
 
 console.log('====================================================');
 console.log('🚀 ÖĞRENCİ BÜTÇE TAKİP - ENTEGRE TEST PAKETİ (FAZ 2 & 3)');
@@ -4963,6 +4971,405 @@ console.log('\n--- 20. FAZ 5.1 — STUDENT FINANCIAL ANALYTICS ENGINE ---');
   const run2 = analyzeMonth(txs, opts);
 
   assert(JSON.stringify(run1) === JSON.stringify(run2), 'TC-142 İki ardışık çalıştırma birebir aynı sonucu üretti (Deterministik)');
+}
+
+// --------------------------------------------------------------------------
+// 21. FAZ 5.2 — DETERMINISTIC STUDENT FINANCIAL FORECAST ENGINE (TC-143 - TC-170)
+// --------------------------------------------------------------------------
+console.log('\n--- 21. FAZ 5.2 — DETERMINISTIC STUDENT FINANCIAL FORECAST ENGINE ---');
+
+// Ortak senaryo verisi (Örnek: 18 Eylül 2026, 18 gün geçmiş, 12 gün kalmış)
+// Toplam gider: 5.400 TL (18 günde -> MTD günlük = 300 TL)
+// Son 7 günde (12-18 Eylül): 1.400 TL (7 günde -> Recent günlük = 200 TL)
+const sampleTxsTC143 = [
+  // 1-11 Eylül arası harcamalar: 5400 - 1400 = 4000 TL
+  { id: 't1', amount: 2000, type: 'expense', categoryId: 'exp_rent', date: '2026-09-02' },
+  { id: 't2', amount: 1000, type: 'expense', categoryId: 'exp_food', date: '2026-09-05' },
+  { id: 't3', amount: 1000, type: 'expense', categoryId: 'exp_bills', date: '2026-09-08' },
+  // Son 7 gün (12-18 Eylül) harcamalar: 1400 TL
+  { id: 't4', amount: 200, type: 'expense', categoryId: 'exp_food', date: '2026-09-12' },
+  { id: 't5', amount: 500, type: 'expense', categoryId: 'exp_transport', date: '2026-09-14' },
+  { id: 't6', amount: 700, type: 'expense', categoryId: 'exp_social', date: '2026-09-17' },
+  // Gelir işlemi
+  { id: 't7', amount: 12000, type: 'income', categoryId: 'inc_scholarship', date: '2026-09-01' }
+];
+const sept18Now = new Date(2026, 8, 18, 12, 0, 0); // 18 Eylül 2026
+
+// TC-143: MTD Run-Rate Forecast Doğru
+// MTD = 5400 / 18 = 300 TL. Kalan 12 gün -> 12 * 300 = 3600 TL. Tahmin = 5400 + 3600 = 9000 TL
+{
+  const res = forecastMonth(sampleTxsTC143, { year: 2026, month: 9, now: sept18Now });
+  assert(res.dailyRates.monthToDate === 300, 'TC-143 MTD günlük ortalama 300 TL');
+  assert(res.models.runRate.projectedRemainingExpense === 3600, 'TC-143 MTD kalan harcama tahmini 3600 TL');
+  assert(res.models.runRate.projectedExpense === 9000, 'TC-143 MTD toplam ay sonu tahmini 9000 TL');
+}
+
+// TC-144: Recent Pace Forecast Doğru
+// Son 7 gün = 1400 / 7 = 200 TL. Kalan 12 gün -> 12 * 200 = 2400 TL. Tahmin = 5400 + 2400 = 7800 TL
+{
+  const res = forecastMonth(sampleTxsTC143, { year: 2026, month: 9, now: sept18Now });
+  assert(res.dailyRates.recent === 200, 'TC-144 Son 7 gün günlük ortalama 200 TL');
+  assert(res.models.recentPace.projectedRemainingExpense === 2400, 'TC-144 Recent pace kalan harcama tahmini 2400 TL');
+  assert(res.models.recentPace.projectedExpense === 7800, 'TC-144 Recent pace toplam ay sonu tahmini 7800 TL');
+}
+
+// TC-145: 60/40 Blended Daily Rate Doğru
+// (200 * 0.60) + (300 * 0.40) = 120 + 120 = 240 TL
+{
+  const res = forecastMonth(sampleTxsTC143, { year: 2026, month: 9, now: sept18Now });
+  assert(res.dailyRates.blended === 240, 'TC-145 60/40 Blended günlük harcama oranı 240 TL');
+}
+
+// TC-146: Blended Projected Remaining Expense Doğru
+// 240 TL * 12 gün = 2880 TL
+{
+  const res = forecastMonth(sampleTxsTC143, { year: 2026, month: 9, now: sept18Now });
+  assert(res.models.blended.projectedRemainingExpense === 2880, 'TC-146 Model blended kalan harcama 2880 TL');
+  assert(res.forecast.projectedRemainingExpense === 2880, 'TC-146 Ana forecast kalan harcama 2880 TL');
+}
+
+// TC-147: Blended Projected Month Expense Doğru
+// 5400 + 2880 = 8280 TL
+{
+  const res = forecastMonth(sampleTxsTC143, { year: 2026, month: 9, now: sept18Now });
+  assert(res.models.blended.projectedExpense === 8280, 'TC-147 Model blended ay sonu tahmini 8280 TL');
+  assert(res.forecast.projectedExpense === 8280, 'TC-147 Ana forecast ay sonu tahmini 8280 TL');
+}
+
+// TC-148: Projection Range Min/Max Doğru
+// Min(9000, 7800, 8280) = 7800 (lower)
+// Max(9000, 7800, 8280) = 9000 (upper)
+{
+  const res = forecastMonth(sampleTxsTC143, { year: 2026, month: 9, now: sept18Now });
+  assert(res.forecast.lowerProjection === 7800, 'TC-148 lowerProjection minimum model tahmini olan 7800 TL');
+  assert(res.forecast.upperProjection === 9000, 'TC-148 upperProjection maksimum model tahmini olan 9000 TL');
+}
+
+// TC-149: Ayın İlk Günü Güvenli (Day 1)
+{
+  const day1Now = new Date(2026, 8, 1, 12, 0, 0);
+  const txDay1 = [{ id: '1', amount: 150, type: 'expense', date: '2026-09-01' }];
+  const res = forecastMonth(txDay1, { year: 2026, month: 9, now: day1Now });
+
+  assert(!isNaN(res.forecast.projectedExpense), 'TC-149 Ayın 1. gününde projectedExpense NaN değil');
+  assert(isFinite(res.forecast.projectedExpense), 'TC-149 Ayın 1. gününde projectedExpense sonlu bir sayı');
+  assert(res.actual.daysElapsed === 1, 'TC-149 Geçen gün sayısı 1');
+  assert(res.actual.daysRemaining === 29, 'TC-149 Kalan gün sayısı 29');
+  assert(res.dailyRates.monthToDate === 150, 'TC-149 Günlük oran 150 TL');
+  // 150 + (29 * 150) = 4500 TL
+  assert(res.forecast.projectedExpense === 4500, 'TC-149 1. gün projeksiyonu (150 + 29*150 = 4500 TL) doğru');
+}
+
+// TC-150: 7 Günden Az Sample Güvenli (Day 4)
+{
+  const day4Now = new Date(2026, 8, 4, 12, 0, 0);
+  const txDay4 = [
+    { id: '1', amount: 400, type: 'expense', date: '2026-09-02' }
+  ];
+  const res = forecastMonth(txDay4, { year: 2026, month: 9, now: day4Now });
+
+  assert(res.actual.daysElapsed === 4, 'TC-150 Geçen gün 4');
+  assert(res.actual.daysRemaining === 26, 'TC-150 Kalan gün 26');
+  assert(res.dailyRates.monthToDate === 100, 'TC-150 MTD günlük ortalama 100 TL');
+  assert(res.dailyRates.recent === 100, 'TC-150 4 günlük sample ortalaması 100 TL');
+  assert(res.forecast.projectedExpense === 3000, 'TC-150 4 günlük veriyle tahmin (400 + 26*100 = 3000 TL) doğru');
+  assert(!isNaN(res.forecast.projectedExpense), 'TC-150 Sonuç NaN değil');
+}
+
+// TC-151: 7+ Günlük Recent Model Doğru (Day 15)
+{
+  const day15Now = new Date(2026, 8, 15, 12, 0, 0);
+  // Son 7 gün: 9-15 Eylül
+  const txDay15 = [
+    { id: '1', amount: 1000, type: 'expense', date: '2026-09-02' }, // 7 gün öncesi
+    { id: '2', amount: 700, type: 'expense', date: '2026-09-10' }   // son 7 gün içi
+  ];
+  const res = forecastMonth(txDay15, { year: 2026, month: 9, now: day15Now });
+  assert(res.dailyRates.recent === 100, 'TC-151 Son 7 gün (700 / 7 = 100 TL) günlük ortalama doğru');
+  assert(res.dailyRates.monthToDate === roundMetric(1700 / 15), 'TC-151 MTD ortalama 15 güne bölündü');
+}
+
+// TC-152: Zero Expense -> Sıfır Tahmin / NaN Yok
+{
+  const resZero = forecastMonth([], { year: 2026, month: 9, now: sept18Now });
+  assert(resZero.forecast.projectedExpense === 0, 'TC-152 Sıfır işlemde projectedExpense 0');
+  assert(resZero.forecast.projectedRemainingExpense === 0, 'TC-152 Sıfır işlemde projectedRemainingExpense 0');
+  assert(resZero.forecast.lowerProjection === 0, 'TC-152 Sıfır işlemde lowerProjection 0');
+  assert(resZero.forecast.upperProjection === 0, 'TC-152 Sıfır işlemde upperProjection 0');
+  assert(!isNaN(resZero.forecast.projectedExpense), 'TC-152 Sıfır işlemde NaN yok');
+
+  // Sadece gelir varsa
+  const txIncomeOnly = [{ id: 'inc', amount: 10000, type: 'income', date: '2026-09-05' }];
+  const resIncomeOnly = forecastMonth(txIncomeOnly, { year: 2026, month: 9, now: sept18Now });
+  assert(resIncomeOnly.forecast.projectedExpense === 0, 'TC-152 Sadece gelir varken projectedExpense 0');
+}
+
+// TC-153: Future-Dated Transaction Actual/Forecast Başlangıcını Bozmuyor
+{
+  const txFuture = [
+    { id: '1', amount: 500, type: 'expense', date: '2026-09-10' },
+    { id: '2', amount: 2000, type: 'expense', date: '2026-09-25' } // bugünden (18 Eylül) sonra
+  ];
+  const res = forecastMonth(txFuture, { year: 2026, month: 9, now: sept18Now });
+  assert(res.actual.expenseToDate === 500, 'TC-153 25 Eylül tarihli 2000 TL actual harcamaya dahil edilmedi');
+}
+
+// TC-154: Historical Month Forecast Applicable=False
+{
+  const augTxs = [
+    { id: '1', amount: 4500, type: 'expense', date: '2026-08-10' },
+    { id: '2', amount: 1500, type: 'expense', date: '2026-08-25' }
+  ];
+  const resHist = forecastMonth(augTxs, { year: 2026, month: 8, now: sept18Now });
+  assert(resHist.metadata.isForecastApplicable === false, 'TC-154 Geçmiş ay için isForecastApplicable=false');
+  assert(resHist.forecast.projectedExpense === 6000, 'TC-154 Geçmiş ay tahmini gerçek toplam gider olan 6000 TL');
+  assert(resHist.forecast.projectedRemainingExpense === 0, 'TC-154 Geçmiş ay kalan harcama 0');
+  assert(resHist.confidence.reasons.includes('HISTORICAL_MONTH_CLOSED'), 'TC-154 Geçmiş ay reason code HISTORICAL_MONTH_CLOSED');
+}
+
+// TC-155: Future Month Forecast Applicable=False
+{
+  const resFuture = forecastMonth([], { year: 2026, month: 10, now: sept18Now });
+  assert(resFuture.metadata.isForecastApplicable === false, 'TC-155 Gelecek ay için isForecastApplicable=false');
+  assert(resFuture.forecast.projectedExpense === 0, 'TC-155 Gelecek ay tahmini 0');
+  assert(resFuture.confidence.reasons.includes('FUTURE_MONTH_NOT_APPLICABLE'), 'TC-155 Gelecek ay reason code FUTURE_MONTH_NOT_APPLICABLE');
+}
+
+// TC-156: currentAvailableBalance Verilirse projectedEndBalanceAssumingNoNewIncome Doğru
+{
+  const res = forecastMonth(sampleTxsTC143, {
+    year: 2026,
+    month: 9,
+    now: sept18Now,
+    currentAvailableBalance: 10000
+  });
+  // blendedRemaining = 2880. Bakiye = 10000 - 2880 = 7120 TL
+  assert(res.forecast.projectedEndBalanceAssumingNoNewIncome === 7120, 'TC-156 Bakiye projeksiyonu (10000 - 2880 = 7120 TL) doğru');
+}
+
+// TC-157: balance Verilmezse projected balance null
+{
+  const res = forecastMonth(sampleTxsTC143, { year: 2026, month: 9, now: sept18Now });
+  assert(res.forecast.projectedEndBalanceAssumingNoNewIncome === null, 'TC-157 Bakiye parametresi verilmediğinde projected balance null');
+}
+
+// TC-158: LOW Confidence Insufficient History
+{
+  const day2Now = new Date(2026, 8, 2, 12, 0, 0);
+  const txsLow = [{ id: '1', amount: 100, type: 'expense', date: '2026-09-01' }];
+  const resLow = forecastMonth(txsLow, { year: 2026, month: 9, now: day2Now });
+  assert(resLow.confidence.level === 'low', 'TC-158 2 günlük geçmişte güvenilirlik seviyesi LOW');
+  assert(resLow.confidence.reasons.includes('INSUFFICIENT_HISTORY'), 'TC-158 INSUFFICIENT_HISTORY sebebi üretildi');
+}
+
+// TC-159: MEDIUM Confidence Scenario
+{
+  const day12Now = new Date(2026, 8, 12, 12, 0, 0);
+  const txsMed = [
+    { id: '1', amount: 100, type: 'expense', date: '2026-09-01' },
+    { id: '2', amount: 120, type: 'expense', date: '2026-09-03' },
+    { id: '3', amount: 110, type: 'expense', date: '2026-09-05' },
+    { id: '4', amount: 130, type: 'expense', date: '2026-09-07' },
+    { id: '5', amount: 105, type: 'expense', date: '2026-09-09' }
+  ];
+  const resMed = forecastMonth(txsMed, { year: 2026, month: 9, now: day12Now });
+  assert(resMed.confidence.level === 'medium', 'TC-159 12 günlük ve orta aktiviteli veride güvenilirlik MEDIUM');
+}
+
+// TC-160: HIGH Confidence Sufficient/Stable History
+{
+  // 25 günlük veri, 20 gün stabil harcama aktivitesi, düşük oynaklık
+  const day25Now = new Date(2026, 8, 25, 12, 0, 0);
+  const txsHigh = [];
+  // Geçmiş ay verisi (historyDaysAvailable artırmak için)
+  txsHigh.push({ id: 'p1', amount: 50, type: 'expense', date: '2026-08-10' });
+  // Bu ay 20 günde stabil 100 TL harcama
+  for (let d = 1; d <= 20; d++) {
+    txsHigh.push({
+      id: `h_${d}`,
+      amount: 100,
+      type: 'expense',
+      date: `2026-09-${String(d).padStart(2, '0')}`
+    });
+  }
+  const resHigh = forecastMonth(txsHigh, { year: 2026, month: 9, now: day25Now });
+  assert(resHigh.confidence.level === 'high', 'TC-160 Yeterli gün ve stabil harcamada güvenilirlik HIGH');
+  assert(resHigh.confidence.score >= 70, 'TC-160 HIGH seviyede güven puanı >= 70');
+  assert(resHigh.confidence.reasons.includes('SUFFICIENT_HISTORY'), 'TC-160 SUFFICIENT_HISTORY sebebi var');
+  assert(resHigh.confidence.reasons.includes('SUFFICIENT_ACTIVITY'), 'TC-160 SUFFICIENT_ACTIVITY sebebi var');
+}
+
+// TC-161: Volatility Calculation Doğru
+{
+  // Tamamen sabit harcama serisi: [100, 100, 100] -> varyans 0, stdDev 0, CV 0
+  const seriesFlat = [
+    { date: '2026-09-01', expense: 100 },
+    { date: '2026-09-02', expense: 100 },
+    { date: '2026-09-03', expense: 100 }
+  ];
+  const volFlat = calculateDailyVolatility(seriesFlat);
+  assert(volFlat.mean === 100, 'TC-161 Sabit seride ortalama 100');
+  assert(volFlat.standardDeviation === 0, 'TC-161 Sabit seride standart sapma 0');
+  assert(volFlat.coefficientOfVariation === 0, 'TC-161 Sabit seride CV 0');
+
+  // Değişken seri: [0, 200] -> ortalama 100, varyans: ((0-100)^2 + (200-100)^2) / 1 = 20000 -> stdDev = 141.42
+  const seriesVar = [
+    { date: '2026-09-01', expense: 0 },
+    { date: '2026-09-02', expense: 200 }
+  ];
+  const volVar = calculateDailyVolatility(seriesVar);
+  assert(volVar.mean === 100, 'TC-161 Değişken seride ortalama 100');
+  assert(volVar.standardDeviation === 141.42, 'TC-161 Standart sapma 141.42 TL doğru');
+  assert(volVar.coefficientOfVariation === 1.4142, 'TC-161 Varyasyon katsayısı (CV) 1.4142 doğru');
+}
+
+// TC-162: High Volatility HIGH Confidence Üretmiyor
+{
+  const day25Now = new Date(2026, 8, 25, 12, 0, 0);
+  const txsVolatile = [];
+  txsVolatile.push({ id: 'p1', amount: 50, type: 'expense', date: '2026-08-01' });
+  // Aşırı dalgalı harcama (günlerin çoğunda 0, bir günde 15.000 TL)
+  txsVolatile.push({ id: 'v1', amount: 10, type: 'expense', date: '2026-09-01' });
+  txsVolatile.push({ id: 'v2', amount: 10, type: 'expense', date: '2026-09-03' });
+  txsVolatile.push({ id: 'v3', amount: 10, type: 'expense', date: '2026-09-05' });
+  txsVolatile.push({ id: 'v4', amount: 10, type: 'expense', date: '2026-09-07' });
+  txsVolatile.push({ id: 'v5', amount: 10, type: 'expense', date: '2026-09-09' });
+  txsVolatile.push({ id: 'v6', amount: 10, type: 'expense', date: '2026-09-11' });
+  txsVolatile.push({ id: 'v7', amount: 10, type: 'expense', date: '2026-09-13' });
+  txsVolatile.push({ id: 'v8', amount: 15000, type: 'expense', date: '2026-09-15' }); // Dev spike
+
+  const resVol = forecastMonth(txsVolatile, { year: 2026, month: 9, now: day25Now });
+  assert(resVol.confidence.volatility.coefficientOfVariation > 1.0, 'TC-162 CV > 1.0 yüksek volatilite oluştu');
+  assert(resVol.confidence.level !== 'high', 'TC-162 Yüksek volatilitede (CV > 1.0) güvenilirlik seviyesi KESİNLİKLE HIGH olmadı');
+  assert(resVol.confidence.reasons.includes('HIGH_VOLATILITY'), 'TC-162 HIGH_VOLATILITY reason kodu üretildi');
+}
+
+// TC-163: Confidence Reasons Doğru Kodları İçeriyor
+{
+  const emptyRes = forecastMonth([], { year: 2026, month: 9, now: sept18Now });
+  assert(Array.isArray(emptyRes.confidence.reasons), 'TC-163 reasons bir dizi');
+  assert(emptyRes.confidence.reasons.includes('NO_EXPENSE_ACTIVITY'), 'TC-163 Boş işlemde NO_EXPENSE_ACTIVITY mevcut');
+}
+
+// TC-164: Historical Backtest Known-Data Cutoff'u Sonrası İşlemleri Forecast Input'una Almıyor
+{
+  // Ağustos ayı simülasyonu: 15 Ağustos cutoff
+  // 1-15 Ağustos: 3000 TL harcama
+  // 16-31 Ağustos: 2000 TL harcama
+  // Toplam gerçekleşen: 5000 TL
+  const backtestTxs = [
+    { id: 'b1', amount: 1000, type: 'expense', date: '2026-08-05' },
+    { id: 'b2', amount: 2000, type: 'expense', date: '2026-08-12' },
+    // Cutoff (15 Ağustos) sonrası:
+    { id: 'b3', amount: 1200, type: 'expense', date: '2026-08-20' },
+    { id: 'b4', amount: 800, type: 'expense', date: '2026-08-28' }
+  ];
+
+  const evalRes = evaluateHistoricalForecast(backtestTxs, {
+    year: 2026,
+    month: 8,
+    cutoffDay: 15
+  });
+
+  assert(evalRes.cutoffDay === 15, 'TC-164 Cutoff günü 15');
+  assert(evalRes.forecast.actual.expenseToDate === 3000, 'TC-164 Cutoff tarihindeki bilinen harcama 3000 TL');
+  assert(evalRes.forecast.actual.daysElapsed === 15, 'TC-164 Cutoff tarihinde geçen gün 15');
+  assert(evalRes.forecast.actual.daysRemaining === 16, 'TC-164 Cutoff tarihinde kalan gün 16');
+}
+
+// TC-165: Backtest Actual Expense Tam Ayı Kullanıyor
+{
+  const backtestTxs = [
+    { id: 'b1', amount: 1000, type: 'expense', date: '2026-08-05' },
+    { id: 'b2', amount: 2000, type: 'expense', date: '2026-08-12' },
+    { id: 'b3', amount: 1200, type: 'expense', date: '2026-08-20' },
+    { id: 'b4', amount: 800, type: 'expense', date: '2026-08-28' }
+  ];
+
+  const evalRes = evaluateHistoricalForecast(backtestTxs, {
+    year: 2026,
+    month: 8,
+    cutoffDay: 15
+  });
+
+  assert(evalRes.actualExpense === 5000, 'TC-165 Backtest tüm ay gerçekleşen harcamayı (5000 TL) doğru hesapladı');
+}
+
+// TC-166: Backtest Absolute Error Doğru
+{
+  const backtestTxs = [
+    { id: 'b1', amount: 1500, type: 'expense', date: '2026-08-05' },
+    { id: 'b2', amount: 1500, type: 'expense', date: '2026-08-12' },
+    { id: 'b3', amount: 2000, type: 'expense', date: '2026-08-25' }
+  ];
+  const evalRes = evaluateHistoricalForecast(backtestTxs, {
+    year: 2026,
+    month: 8,
+    cutoffDay: 15
+  });
+  const expectedDiff = roundMetric(Math.abs(evalRes.projectedExpense - evalRes.actualExpense));
+  assert(evalRes.absoluteError === expectedDiff, 'TC-166 absoluteError Math.abs(projected - actual) ile birebir tutarlı');
+}
+
+// TC-167: Backtest Percentage Error Doğru
+{
+  const backtestTxs = [
+    { id: 'b1', amount: 1500, type: 'expense', date: '2026-08-05' },
+    { id: 'b2', amount: 1500, type: 'expense', date: '2026-08-12' },
+    { id: 'b3', amount: 2000, type: 'expense', date: '2026-08-25' }
+  ];
+  const evalRes = evaluateHistoricalForecast(backtestTxs, {
+    year: 2026,
+    month: 8,
+    cutoffDay: 15
+  });
+  const expectedPct = roundMetric((evalRes.absoluteError / evalRes.actualExpense) * 100);
+  assert(evalRes.percentageError === expectedPct, 'TC-167 percentageError (absoluteError / actualExpense * 100) formülüne uygun');
+}
+
+// TC-168: Input Mutation Yok (Object.freeze)
+{
+  const frozenTx = Object.freeze({
+    id: 'tx-freeze',
+    amount: 300,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-10'
+  });
+  const frozenList = Object.freeze([frozenTx]);
+
+  let err = false;
+  try {
+    const res = forecastMonth(frozenList, { year: 2026, month: 9, now: sept18Now });
+    assert(res.actual.expenseToDate === 300, 'TC-168 Donmuş diziyle hesaplama başarılı');
+  } catch (e) {
+    err = true;
+  }
+  assert(!err, 'TC-168 forecastMonth donmuş veri setini kesinlikle mutate etmedi');
+}
+
+// TC-169: Supabase/Network/DOM/LocalStorage Bağımlılığı Yok
+{
+  const pureRes = forecastMonth([{ amount: 100, type: 'expense', date: '2026-09-01' }], {
+    year: 2026,
+    month: 9,
+    now: sept18Now
+  });
+  assert(typeof pureRes === 'object' && pureRes !== null, 'TC-169 Forecast motoru harici API/DOM bağımlılığı olmadan saf JS olarak çalıştı');
+}
+
+// TC-170: Aynı Input Aynı Output (Determinizm)
+{
+  const txs = [
+    { id: '1', amount: 350, type: 'expense', categoryId: 'exp_food', date: '2026-09-05' },
+    { id: '2', amount: 2000, type: 'income', categoryId: 'inc_family', date: '2026-09-08' }
+  ];
+  const opts = { year: 2026, month: 9, now: sept18Now, currentAvailableBalance: 5000 };
+
+  const out1 = forecastMonth(txs, opts);
+  const out2 = forecastMonth(txs, opts);
+
+  assert(JSON.stringify(out1) === JSON.stringify(out2), 'TC-170 İki ardışık forecastMonth çalıştırması birebir aynı sonucu üretti (Deterministik)');
 }
 
 console.log('\n====================================================');
