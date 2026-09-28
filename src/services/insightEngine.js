@@ -60,10 +60,12 @@ export function generateInsights({ analytics, forecast, transactions, options = 
 
   // -------------------------------------------------------------------------
   // KURAL 1: NO_EXPENSE_ACTIVITY
+  // PRECEDENCE: NO_EXPENSE_ACTIVITY > INSUFFICIENT_DATA > Speculative trend/category rules
   // -------------------------------------------------------------------------
   evaluatedRuleCount++;
   if (isNoExpense) {
     candidateInsights.push({
+      ruleId: 'NO_EXPENSE_ACTIVITY',
       id: 'NO_EXPENSE_ACTIVITY',
       type: 'spending_activity',
       severity: 'info',
@@ -79,14 +81,20 @@ export function generateInsights({ analytics, forecast, transactions, options = 
         comparison: '==='
       }
     });
+
+    // NO_EXPENSE_ACTIVITY durumunda INSUFFICIENT_DATA, LOW_FORECAST_CONFIDENCE ve tüm trend/kategori kuralları baskılanır.
+    // Gereksiz redundant düşük veri mesajları engellenir.
+    suppressedRuleCount += 10;
   }
 
   // -------------------------------------------------------------------------
   // KURAL 2: INSUFFICIENT_DATA (Düşük veri güveni -> Spekülatif kuralları baskılar)
+  // Sadece harcama varken (totalExpense > 0) değerlendirilir
   // -------------------------------------------------------------------------
   evaluatedRuleCount++;
   if (!isNoExpense && isLowConfidence) {
     candidateInsights.push({
+      ruleId: 'INSUFFICIENT_DATA',
       id: 'INSUFFICIENT_DATA',
       type: 'data_quality',
       severity: 'info',
@@ -111,6 +119,7 @@ export function generateInsights({ analytics, forecast, transactions, options = 
   evaluatedRuleCount++;
   if (!isNoExpense && forecastConfidence.level === 'low') {
     candidateInsights.push({
+      ruleId: 'LOW_FORECAST_CONFIDENCE',
       id: 'LOW_FORECAST_CONFIDENCE',
       type: 'forecast',
       severity: 'info',
@@ -143,6 +152,7 @@ export function generateInsights({ analytics, forecast, transactions, options = 
     forecastData.projectedEndBalanceAssumingNoNewIncome < 0
   ) {
     candidateInsights.push({
+      ruleId: 'PROJECTED_BALANCE_NEGATIVE_WITHOUT_NEW_INCOME',
       id: 'PROJECTED_BALANCE_NEGATIVE_WITHOUT_NEW_INCOME',
       type: 'forecast_pressure',
       severity: 'warning',
@@ -174,6 +184,7 @@ export function generateInsights({ analytics, forecast, transactions, options = 
     } else if (typeof spendingVelocity.velocityChangePercent === 'number') {
       if (spendingVelocity.velocityChangePercent >= RULE_THRESHOLDS.VELOCITY_CHANGE_PERCENT) {
         candidateInsights.push({
+          ruleId: 'SPENDING_ACCELERATING',
           id: 'SPENDING_ACCELERATING',
           type: 'spending_velocity',
           severity: 'watch',
@@ -196,6 +207,7 @@ export function generateInsights({ analytics, forecast, transactions, options = 
         });
       } else if (spendingVelocity.velocityChangePercent <= -RULE_THRESHOLDS.VELOCITY_CHANGE_PERCENT) {
         candidateInsights.push({
+          ruleId: 'SPENDING_SLOWING',
           id: 'SPENDING_SLOWING',
           type: 'spending_velocity',
           severity: 'positive',
@@ -227,6 +239,7 @@ export function generateInsights({ analytics, forecast, transactions, options = 
     } else if (typeof comparison.percentageChange === 'number') {
       if (comparison.percentageChange >= RULE_THRESHOLDS.PERIOD_CHANGE_PERCENT) {
         candidateInsights.push({
+          ruleId: 'MONTH_SPEND_UP',
           id: 'MONTH_SPEND_UP',
           type: 'period_comparison',
           severity: 'watch',
@@ -247,6 +260,7 @@ export function generateInsights({ analytics, forecast, transactions, options = 
         });
       } else if (comparison.percentageChange <= -RULE_THRESHOLDS.PERIOD_CHANGE_PERCENT) {
         candidateInsights.push({
+          ruleId: 'MONTH_SPEND_DOWN',
           id: 'MONTH_SPEND_DOWN',
           type: 'period_comparison',
           severity: 'positive',
@@ -279,7 +293,8 @@ export function generateInsights({ analytics, forecast, transactions, options = 
       if (cat.shareOfTotalExpense >= RULE_THRESHOLDS.HIGH_CATEGORY_SHARE_PERCENT) {
         highShareCategoryIds.add(cat.categoryId);
         candidateInsights.push({
-          id: `HIGH_CATEGORY_SHARE_${cat.categoryId}`,
+          ruleId: 'HIGH_CATEGORY_SHARE',
+          id: `HIGH_CATEGORY_SHARE:${cat.categoryId}`,
           type: 'category_share',
           severity: 'info',
           priority: 50,
@@ -332,7 +347,8 @@ export function generateInsights({ analytics, forecast, transactions, options = 
       for (let i = 0; i < cappedSurges.length; i++) {
         const cat = cappedSurges[i];
         candidateInsights.push({
-          id: `CATEGORY_SPEND_UP_${cat.categoryId}`,
+          ruleId: 'CATEGORY_SPEND_UP',
+          id: `CATEGORY_SPEND_UP:${cat.categoryId}`,
           type: 'category_surge',
           severity: 'watch',
           priority: 60,
@@ -362,6 +378,8 @@ export function generateInsights({ analytics, forecast, transactions, options = 
 
   // -------------------------------------------------------------------------
   // KURAL 11: CATEGORY_SPEND_DOWN (Kategori Düşüşü: <= -%25 ve önceki pay >= %10)
+  // Previous-period category share derives safely: previousAmount / previousExpense * 100
+  // Safe null when previousExpense === 0
   // -------------------------------------------------------------------------
   evaluatedRuleCount++;
   if (!isNoExpense) {
@@ -373,14 +391,15 @@ export function generateInsights({ analytics, forecast, transactions, options = 
 
       for (let i = 0; i < categories.length; i++) {
         const cat = categories[i];
-        const prevShare = previousTotal > 0 ? (cat.previousAmount / previousTotal) * 100 : 0;
+        const previousShare = previousTotal > 0 ? round((cat.previousAmount / previousTotal) * 100) : null;
 
         if (
           typeof cat.percentageChange === 'number' &&
           cat.percentageChange <= -RULE_THRESHOLDS.CATEGORY_CHANGE_PERCENT &&
-          prevShare >= RULE_THRESHOLDS.CATEGORY_MIN_SHARE_PERCENT
+          typeof previousShare === 'number' &&
+          previousShare >= RULE_THRESHOLDS.CATEGORY_MIN_SHARE_PERCENT
         ) {
-          categoryDrops.push(cat);
+          categoryDrops.push({ ...cat, previousShare });
         }
       }
 
@@ -391,7 +410,8 @@ export function generateInsights({ analytics, forecast, transactions, options = 
       for (let i = 0; i < cappedDrops.length; i++) {
         const cat = cappedDrops[i];
         candidateInsights.push({
-          id: `CATEGORY_SPEND_DOWN_${cat.categoryId}`,
+          ruleId: 'CATEGORY_SPEND_DOWN',
+          id: `CATEGORY_SPEND_DOWN:${cat.categoryId}`,
           type: 'category_drop',
           severity: 'positive',
           priority: 55,
@@ -401,13 +421,15 @@ export function generateInsights({ analytics, forecast, transactions, options = 
             currentAmount: cat.currentAmount,
             previousAmount: cat.previousAmount,
             percentageChange: Math.abs(cat.percentageChange),
+            previousShare: cat.previousShare,
             shareOfTotalExpense: cat.shareOfTotalExpense
           },
           evidence: {
             metric: 'category.percentageChange',
             value: cat.percentageChange,
             threshold: -RULE_THRESHOLDS.CATEGORY_CHANGE_PERCENT,
-            comparison: '<='
+            comparison: '<=',
+            previousShare: cat.previousShare
           },
           action: {
             type: 'OPEN_CATEGORY',
@@ -430,6 +452,7 @@ export function generateInsights({ analytics, forecast, transactions, options = 
       suppressedRuleCount++;
     } else {
       candidateInsights.push({
+        ruleId: 'TOP_SPENDING_CATEGORY',
         id: 'TOP_SPENDING_CATEGORY',
         type: 'top_category',
         severity: 'info',
@@ -457,49 +480,50 @@ export function generateInsights({ analytics, forecast, transactions, options = 
 
   // -------------------------------------------------------------------------
   // KURAL 13: FORECAST_MODEL_DISAGREEMENT (Model Belirsizliği >= %15)
+  // Safely handles projectedExpense === 0 (no NaN/Infinity escapes)
   // -------------------------------------------------------------------------
   evaluatedRuleCount++;
+  const projectedExpense = typeof forecastData.projectedExpense === 'number' ? forecastData.projectedExpense : 0;
   if (
     forecastMeta.isForecastApplicable === true &&
-    typeof forecastData.projectedExpense === 'number' &&
-    forecastData.projectedExpense > 0 &&
     typeof forecastData.upperProjection === 'number' &&
     typeof forecastData.lowerProjection === 'number'
   ) {
-    const spread = round(forecastData.upperProjection - forecastData.lowerProjection);
-    const spreadPercent = round((spread / forecastData.projectedExpense) * 100);
+    if (projectedExpense > 0) {
+      const spread = round(forecastData.upperProjection - forecastData.lowerProjection);
+      const spreadPercent = round((spread / projectedExpense) * 100);
 
-    if (spreadPercent >= RULE_THRESHOLDS.FORECAST_SPREAD_PERCENT) {
-      candidateInsights.push({
-        id: 'FORECAST_MODEL_DISAGREEMENT',
-        type: 'forecast_uncertainty',
-        severity: 'info',
-        priority: 45,
-        messageKey: 'insights.forecastModelDisagreement',
-        params: {
-          spreadPercent,
-          lowerProjection: forecastData.lowerProjection,
-          upperProjection: forecastData.upperProjection,
-          projectedExpense: forecastData.projectedExpense
-        },
-        evidence: {
-          metric: 'forecastSpreadPercent',
-          value: spreadPercent,
-          threshold: RULE_THRESHOLDS.FORECAST_SPREAD_PERCENT,
-          comparison: '>='
-        },
-        action: {
-          type: 'OPEN_FORECAST_DETAILS'
-        }
-      });
+      if (!isNaN(spreadPercent) && isFinite(spreadPercent) && spreadPercent >= RULE_THRESHOLDS.FORECAST_SPREAD_PERCENT) {
+        candidateInsights.push({
+          ruleId: 'FORECAST_MODEL_DISAGREEMENT',
+          id: 'FORECAST_MODEL_DISAGREEMENT',
+          type: 'forecast_uncertainty',
+          severity: 'info',
+          priority: 45,
+          messageKey: 'insights.forecastModelDisagreement',
+          params: {
+            spreadPercent,
+            lowerProjection: forecastData.lowerProjection,
+            upperProjection: forecastData.upperProjection,
+            projectedExpense: projectedExpense
+          },
+          evidence: {
+            metric: 'forecastSpreadPercent',
+            value: spreadPercent,
+            threshold: RULE_THRESHOLDS.FORECAST_SPREAD_PERCENT,
+            comparison: '>='
+          },
+          action: {
+            type: 'OPEN_FORECAST_DETAILS'
+          }
+        });
+      }
     }
   }
 
   // -------------------------------------------------------------------------
   // SIRALAMA, DEDUP VE CAPPING
   // -------------------------------------------------------------------------
-  const triggeredRuleCount = candidateInsights.length;
-
   // Önceliğe göre sırala (priority DESC)
   candidateInsights.sort((a, b) => b.priority - a.priority);
 
@@ -514,9 +538,15 @@ export function generateInsights({ analytics, forecast, transactions, options = 
     }
   }
 
+  // triggeredRuleCount: all triggered insight instances before maxInsights truncation
+  const triggeredRuleCount = dedupedInsights.length;
+
   // maxInsights ile sınırla (Varsayılan: 5)
   const maxLimit = typeof options.maxInsights === 'number' && options.maxInsights > 0 ? options.maxInsights : 5;
   const finalInsights = dedupedInsights.slice(0, maxLimit);
+
+  // returnedInsightCount: final insights.length
+  const returnedInsightCount = finalInsights.length;
 
   // Severity sayaçları
   const counts = {
@@ -540,7 +570,8 @@ export function generateInsights({ analytics, forecast, transactions, options = 
     metadata: {
       evaluatedRuleCount,
       triggeredRuleCount,
-      suppressedRuleCount
+      suppressedRuleCount,
+      returnedInsightCount
     }
   };
 }
