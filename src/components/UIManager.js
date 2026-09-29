@@ -742,7 +742,7 @@ export class UIManager {
     }
   }
 
-  renderFinancialOutlook(currency, lang) {
+  renderFinancialOutlook(currency, lang, now = new Date()) {
     if (typeof document === 'undefined') return;
     if (!this.financialOutlookSection) return;
 
@@ -751,7 +751,7 @@ export class UIManager {
       outlook = getFinancialOutlookViewModel({
         store: this.store,
         selectedMonth: this.selectedMonth,
-        now: new Date()
+        now
       });
     } catch (err) {
       console.warn('[UIManager] Failed to compute financial outlook:', err);
@@ -967,7 +967,7 @@ export class UIManager {
           }
 
           const itemEl = document.createElement('div');
-          itemEl.className = `p-2.5 rounded-lg border text-xs flex items-start space-x-2.5 ${bgBadge}`;
+          itemEl.className = `p-2 rounded-lg border text-xs flex items-start space-x-2 ${bgBadge}`;
           itemEl.innerHTML = `
             <i data-lucide="sparkles" class="w-3.5 h-3.5 mt-0.5 shrink-0 ${iconColor}"></i>
             <div class="flex-1 leading-snug font-medium">${escapeHtml(msg)}</div>
@@ -982,7 +982,7 @@ export class UIManager {
       this.outlookTimelineContainer.innerHTML = '';
       if (!outlook.timeline || outlook.timeline.length === 0) {
         this.outlookTimelineContainer.innerHTML = `
-          <div class="text-xs text-slate-400 dark:text-slate-500 py-3 text-center italic">
+          <div class="text-xs text-slate-400 dark:text-slate-500 py-2.5 text-center italic">
             ${escapeHtml(t('financialOutlook.noTimeline'))}
           </div>
         `;
@@ -1000,7 +1000,7 @@ export class UIManager {
           }
 
           const row = document.createElement('div');
-          row.className = 'py-2 first:pt-0 last:pb-0 flex items-center justify-between gap-2';
+          row.className = 'py-1.5 first:pt-0 last:pb-0 flex items-center justify-between gap-2';
           row.innerHTML = `
             <div class="min-w-0 flex-1">
               <div class="flex items-center space-x-1.5">

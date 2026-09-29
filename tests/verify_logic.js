@@ -8986,7 +8986,7 @@ console.log('\n--- 28. FAZ 5.5C — STUDENT FINANCIAL COMMAND CENTER UI (TC-366 
   store.addPlannedCashflow({ name: 'Aile Desteği', type: 'income', amount: 3000, recurrence: 'monthly', dayOfMonth: 5 });
 
   const ui = new UIManager(store, { modalManager: { openCashflowManagerModal() {}, openCashflowModal() {} } });
-  ui.renderFinancialOutlook('TRY', 'tr');
+  ui.renderFinancialOutlook('TRY', 'tr', new Date('2026-09-28T10:00:00Z'));
 
   assert(elements['metric-next-income-name'].textContent === 'Aile Desteği', 'TC-382 DOM: Next income name rendered');
   assert(elements['metric-safe-daily-spend'].textContent.includes('428,57'), 'TC-382 DOM: Safe daily spend rendered with 428,57');
@@ -9265,13 +9265,13 @@ console.log('\n--- 28. FAZ 5.5C — STUDENT FINANCIAL COMMAND CENTER UI (TC-366 
   ui.financialOutlookSection = mockSection;
   ui.outlookHistoricalBadge = mockBadge;
   ui.selectedMonth = '2026-08';
-  ui.renderFinancialOutlook('TRY', 'tr');
+  ui.renderFinancialOutlook('TRY', 'tr', refDate);
   assert(!mockBadge.classList.contains('hidden'), 'TC-386-E explanatory badge is visible when browsing historical month');
   assert(mockBadge.textContent === 'Bugünkü finansal durum — Seçili ay görünümünden bağımsızdır.', 'TC-386-E badge text shows live independent notice');
 
   // When browsing current month, badge is hidden
   ui.selectedMonth = '2026-09';
-  ui.renderFinancialOutlook('TRY', 'tr');
+  ui.renderFinancialOutlook('TRY', 'tr', refDate);
   assert(mockBadge.classList.contains('hidden'), 'TC-386-E explanatory badge is hidden when browsing current month');
 
   // F) Future selectedMonth (2026-10) does not move live Financial Outlook into the future
@@ -9284,7 +9284,7 @@ console.log('\n--- 28. FAZ 5.5C — STUDENT FINANCIAL COMMAND CENTER UI (TC-366 
 
   // When browsing future month, badge is visible
   ui.selectedMonth = '2026-10';
-  ui.renderFinancialOutlook('TRY', 'tr');
+  ui.renderFinancialOutlook('TRY', 'tr', refDate);
   assert(!mockBadge.classList.contains('hidden'), 'TC-386-F explanatory badge is visible when browsing future month');
 
   globalThis.document = originalDoc;
@@ -9317,6 +9317,101 @@ console.log('\n--- 28. FAZ 5.5C — STUDENT FINANCIAL COMMAND CENTER UI (TC-366 
   assert(indexHtml.includes('data-i18n="financialOutlook.monthEndForecastTitle">Ay sonu gider tahmini</span>'), 'TC-387 index.html Metric D label matches Ay sonu gider tahmini');
   assert(!indexHtml.includes('Ay Sonu Harcama Tahmini'), 'TC-387 index.html does not use old title');
   assert(!indexHtml.includes('Ay sonu bakiye'), 'TC-387 index.html does not call forecast bakiye');
+}
+
+// TC-388: Final UI Polish & Dashboard Financial Hierarchy Verification
+{
+  const indexHtml = fs.readFileSync(path.join(process.cwd(), 'index.html'), 'utf-8');
+
+  // 1. Old hero safe-limit card no longer exists in index.html
+  assert(!indexHtml.includes('id="star-card-container"'), 'TC-388 Old star-card-container no longer exists in DOM');
+  assert(!indexHtml.includes('id="metric-daily-limit"'), 'TC-388 Old metric-daily-limit no longer exists in DOM');
+  assert(!indexHtml.includes('id="badge-days-left"'), 'TC-388 Old badge-days-left no longer exists in DOM');
+  assert(!indexHtml.includes('id="metric-daily-tip"'), 'TC-388 Old metric-daily-tip no longer exists in DOM');
+
+  // 2. New Financial Outlook safe limit still exists
+  assert(indexHtml.includes('id="metric-safe-daily-spend"'), 'TC-388 Canonical metric-safe-daily-spend exists in Financial Outlook');
+  assert(indexHtml.includes('data-i18n="financialOutlook.safeDailySpendTitle"'), 'TC-388 safeDailySpendTitle data-i18n tag exists');
+  assert(indexHtml.includes('data-i18n="financialOutlook.safeDailySpendSub"'), 'TC-388 safeDailySpendSub data-i18n tag exists');
+
+  // 3. Remaining 3 hero cards balanced in 3-column responsive grid
+  assert(indexHtml.includes('grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4'), 'TC-388 Hero summary grid uses 3 balanced columns (sm:grid-cols-3)');
+  assert(indexHtml.includes('id="metric-net-balance"'), 'TC-388 Hero card 1 (Net Balance) exists');
+  assert(indexHtml.includes('id="metric-total-income"'), 'TC-388 Hero card 2 (Total Income) exists');
+  assert(indexHtml.includes('id="metric-total-expense"'), 'TC-388 Hero card 3 (Total Expense) exists');
+
+  // 4. Financial Outlook compactness
+  assert(indexHtml.includes('id="financial-outlook-section" class="bg-white dark:bg-slate-900 p-3.5 sm:p-4'), 'TC-388 Financial Outlook has compact padding (p-3.5 sm:p-4)');
+  assert(!indexHtml.includes('data-i18n="financialOutlook.monthEndForecastSub">Deterministik projeksiyon</div>'), 'TC-388 Duplicate Deterministik projeksiyon subtitle removed from Metric D body');
+  assert(indexHtml.includes('id="bar-utilization" class="bg-indigo-600 h-1.5 rounded-full'), 'TC-388 bar-utilization uses sleek compact height (h-1.5)');
+
+  // 5. Dashboard hierarchy: Summary -> Financial Outlook -> Charts -> Transactions
+  const summaryIdx = indexHtml.indexOf('data-i18n="cards.netBalance"');
+  const outlookIdx = indexHtml.indexOf('id="financial-outlook-section"');
+  const chartsIdx = indexHtml.indexOf('id="categoryExpenseChart"');
+  const txIdx = indexHtml.indexOf('id="transactions-container"');
+  assert(summaryIdx < outlookIdx, 'TC-388 Hierarchy: Summary is above Financial Outlook');
+  assert(outlookIdx < chartsIdx, 'TC-388 Hierarchy: Financial Outlook is above Charts');
+  assert(chartsIdx < txIdx, 'TC-388 Hierarchy: Charts are above Transactions');
+
+  // 6. Translations validity for canonical limit
+  assert(Boolean(tr.financialOutlook.safeDailySpendTitle), 'TC-388 TR safeDailySpendTitle exists');
+  assert(tr.financialOutlook.safeDailySpendSub === 'Bir sonraki gelire kadar', 'TC-388 TR safeDailySpendSub matches Bir sonraki gelire kadar');
+  assert(Boolean(en.financialOutlook.safeDailySpendTitle), 'TC-388 EN safeDailySpendTitle exists');
+  assert(en.financialOutlook.safeDailySpendSub === 'Until next income', 'TC-388 EN safeDailySpendSub matches Until next income');
+
+  // 7. Coverage status & utilization elements remain visible and accessible
+  assert(indexHtml.includes('id="chip-coverage-status"'), 'TC-388 chip-coverage-status exists');
+  assert(indexHtml.includes('id="text-utilization-ratio"'), 'TC-388 text-utilization-ratio exists');
+  assert(indexHtml.includes('id="text-utilization-label"'), 'TC-388 text-utilization-label exists');
+  assert(indexHtml.includes('id="text-coverage-context"'), 'TC-388 text-coverage-context exists');
+
+  // 8. Runtime safety of UIManager without old hero elements
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+  const originalDoc = globalThis.document;
+  const mockElements = {
+    'metric-net-balance': { textContent: '' },
+    'badge-health-status': { textContent: '', className: '' },
+    'badge-carried-balance': { textContent: '' },
+    'metric-spent-percent': { textContent: '' },
+    'metric-total-income': { textContent: '' },
+    'metric-income-count': { textContent: '' },
+    'metric-total-expense': { textContent: '' },
+    'metric-expense-count': { textContent: '' }
+    // Note: metric-daily-limit, badge-days-left, metric-daily-tip are intentionally omitted (null)
+  };
+  globalThis.document = {
+    getElementById: (id) => mockElements[id] || null,
+    querySelectorAll: () => [],
+    createElement: () => ({ classList: { add() {}, remove() {}, contains() { return false; } } }),
+    documentElement: { classList: { add() {}, remove() {}, contains() { return false; } } },
+    body: { classList: { add() {}, remove() {}, contains() { return false; } } },
+    addEventListener: () => {},
+    removeEventListener: () => {}
+  };
+  const store = new BudgetStore();
+  store.addTransaction({ title: 'Gelir', amount: 5000, type: 'income', categoryId: 'inc_salary', date: '2026-09-01' });
+  store.addTransaction({ title: 'Gider', amount: 2000, type: 'expense', categoryId: 'cat_market', date: '2026-09-02' });
+
+  const ui = new UIManager(store);
+  assert(ui.metricDailyLimit === null, 'TC-388 UIManager.metricDailyLimit safely evaluates to null');
+  assert(ui.badgeDaysLeft === null, 'TC-388 UIManager.badgeDaysLeft safely evaluates to null');
+  assert(ui.metricDailyTip === null, 'TC-388 UIManager.metricDailyTip safely evaluates to null');
+
+  const summary = calculateSummary(store.getTransactions(), new Date('2026-09-28T12:00:00Z'), '2026-09');
+  let renderThrew = false;
+  try {
+    ui.renderDashboardCards(summary, 'TRY', 'tr');
+  } catch (err) {
+    renderThrew = true;
+  }
+  assert(!renderThrew, 'TC-388 renderDashboardCards runs with ZERO errors when hero safe-limit elements are absent');
+  assert(mockElements['metric-net-balance'].textContent.includes('3.000,00'), 'TC-388 Net balance card rendered correctly in 3-card layout');
+  assert(mockElements['metric-total-income'].textContent.includes('5.000,00'), 'TC-388 Total income card rendered correctly in 3-card layout');
+  assert(mockElements['metric-total-expense'].textContent.includes('2.000,00'), 'TC-388 Total expense card rendered correctly in 3-card layout');
+
+  globalThis.document = originalDoc;
 }
 
 console.log('\n====================================================');
