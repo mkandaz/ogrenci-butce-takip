@@ -45,6 +45,7 @@ import {
 } from '../src/services/cashflowPlannerEngine.js';
 import { getFinancialOutlookViewModel } from '../src/services/financialOutlookService.js';
 import { getWhatIfDecisionSupport, DECISION_IMPACT_CODES } from '../src/services/whatIfDecisionSupportService.js';
+import { isNativePlatform, shouldRegisterPWA } from '../src/utils/platform.js';
 
 console.log('====================================================');
 console.log('🚀 ÖĞRENCİ BÜTÇE TAKİP - ENTEGRE TEST PAKETİ (FAZ 2 & 3)');
@@ -10330,6 +10331,102 @@ console.log('\n--- 30. FAZ 5.6 PATCH — CASHFLOW-AWARE WHAT-IF DECISION SUPPORT
   assert(elements['whatif-decision-sim-safe-daily'].textContent.includes('€'), 'TC-390-14 EUR formatting renders € on sim safe daily');
 
   globalThis.document = originalDoc;
+}
+
+// ====================================================
+// FAZ 6.0: CAPACITOR MOBILE FOUNDATION TESTS (TC-400)
+// ====================================================
+
+// TC-400-1: Capacitor Config Validation
+{
+  const configPath = path.resolve('capacitor.config.json');
+  assert(fs.existsSync(configPath), 'TC-400-1 capacitor.config.json exists');
+  const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  assert(config.appId === 'com.mkandaz.ogrencibutce.dev', 'TC-400-1 appId is com.mkandaz.ogrencibutce.dev');
+  assert(config.appName === 'Öğrenci Bütçe', 'TC-400-1 appName is Öğrenci Bütçe');
+  assert(config.webDir === 'dist', 'TC-400-1 webDir points to dist');
+}
+
+// TC-400-2: Web PWA Service Worker remains enabled in browser environment
+{
+  assert(isNativePlatform() === false, 'TC-400-2 isNativePlatform() returns false in node/browser environment');
+  assert(shouldRegisterPWA() === true, 'TC-400-2 shouldRegisterPWA() returns true in browser mode');
+}
+
+// TC-400-3: PWA Service Worker registration is skipped in native Capacitor runtime
+{
+  const mockCapacitorNative = { isNativePlatform: () => true };
+  assert(isNativePlatform(mockCapacitorNative) === true, 'TC-400-3 isNativePlatform(mockNative) returns true');
+  assert(shouldRegisterPWA(mockCapacitorNative) === false, 'TC-400-3 shouldRegisterPWA(mockNative) returns false');
+}
+
+// TC-400-4: src/main.js wraps registerSW in shouldRegisterPWA check
+{
+  const mainJsContent = fs.readFileSync(path.resolve('src/main.js'), 'utf8');
+  assert(mainJsContent.includes('shouldRegisterPWA'), 'TC-400-4 src/main.js imports shouldRegisterPWA');
+  assert(mainJsContent.includes('if (shouldRegisterPWA())'), 'TC-400-4 src/main.js gates registerSW with shouldRegisterPWA()');
+  assert(mainJsContent.includes('Service Worker kaydı atlandı'), 'TC-400-4 src/main.js contains native bypass branch log');
+}
+
+// TC-400-5: Shared Product Core Architecture (No Duplicate Engine Implementations)
+{
+  const engines = [
+    'analyticsEngine.js',
+    'forecastEngine.js',
+    'insightEngine.js',
+    'whatIfEngine.js',
+    'cashflowPlannerEngine.js',
+    'whatIfDecisionSupportService.js'
+  ];
+  for (const engine of engines) {
+    const mainPath = path.resolve('src/services', engine);
+    assert(fs.existsSync(mainPath), `TC-400-5 Single source engine exists in src/services/${engine}`);
+    const iosDuplicate = path.resolve('ios', engine);
+    assert(!fs.existsSync(iosDuplicate), `TC-400-5 No duplicate ${engine} exists in ios/`);
+  }
+}
+
+// TC-400-6: Security Audit (Zero service_role, Zero Google Client Secret in codebase)
+{
+  const checkFiles = [
+    'src/services/authService.js',
+    'src/services/supabaseClient.js',
+    'src/services/syncService.js',
+    'index.html',
+    'capacitor.config.json'
+  ];
+  for (const relPath of checkFiles) {
+    const fullPath = path.resolve(relPath);
+    if (fs.existsSync(fullPath)) {
+      const content = fs.readFileSync(fullPath, 'utf8');
+      assert(!content.includes('service_role'), `TC-400-6 No service_role in ${relPath}`);
+      assert(!content.includes('client_secret'), `TC-400-6 No client_secret in ${relPath}`);
+      assert(!content.includes('GOCSPX-'), `TC-400-6 No Google client secret in ${relPath}`);
+    }
+  }
+}
+
+// TC-400-7: Web Auth Redirect Semantics Unchanged
+{
+  const authContent = fs.readFileSync(path.resolve('src/services/authService.js'), 'utf8');
+  assert(authContent.includes('window.location.origin'), 'TC-400-7 authService uses dynamic window.location.origin');
+  assert(!authContent.includes('localhost:5173/'), 'TC-400-7 authService contains no hardcoded dev localhost redirect');
+}
+
+// TC-400-8: NPM Mobile Scripts
+{
+  const pkg = JSON.parse(fs.readFileSync(path.resolve('package.json'), 'utf8'));
+  assert(pkg.scripts['mobile:sync'] === 'vite build && cap sync ios', 'TC-400-8 mobile:sync script configured');
+  assert(pkg.scripts['mobile:open'] === 'cap open ios', 'TC-400-8 mobile:open script configured');
+}
+
+// TC-400-9: iOS Project Structure and Gitignore
+{
+  assert(fs.existsSync(path.resolve('ios/App/App.xcodeproj')), 'TC-400-9 ios/App/App.xcodeproj exists');
+  assert(fs.existsSync(path.resolve('ios/App/CapApp-SPM')), 'TC-400-9 Swift Package Manager CapApp-SPM directory exists');
+  const iosGitignore = fs.readFileSync(path.resolve('ios/.gitignore'), 'utf8');
+  assert(iosGitignore.includes('App/App/public'), 'TC-400-9 ios/.gitignore excludes App/App/public');
+  assert(iosGitignore.includes('DerivedData'), 'TC-400-9 ios/.gitignore excludes DerivedData');
 }
 
 console.log('\n====================================================');
