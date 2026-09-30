@@ -37,7 +37,13 @@ import {
   RefreshCw,
   LogOut,
   User,
-  Mail
+  Mail,
+  Compass,
+  CalendarClock,
+  ArrowDownCircle,
+  TrendingUp,
+  Calculator,
+  CalendarPlus
 } from 'lucide';
 
 const appIcons = {
@@ -78,7 +84,13 @@ const appIcons = {
   RefreshCw,
   LogOut,
   User,
-  Mail
+  Mail,
+  Compass,
+  CalendarClock,
+  ArrowDownCircle,
+  TrendingUp,
+  Calculator,
+  CalendarPlus
 };
 import { calculateSummary } from '../store/calculations.js';
 import { formatCurrency, formatNumber, formatDate, formatTime, formatMonthTitle, getCurrencySymbol } from '../utils/formatters.js';
@@ -92,6 +104,7 @@ import { SUPPORTED_CURRENCIES, THEME_KEY } from '../config/constants.js';
 import { SafeStorage } from '../utils/storage.js';
 import { authService } from '../services/authService.js';
 import { SyncService } from '../services/syncService.js';
+import { getFinancialOutlookViewModel } from '../services/financialOutlookService.js';
 
 export class UIManager {
   constructor(store, options = {}) {
@@ -272,6 +285,32 @@ export class UIManager {
     this.filterTypeExpense = document.getElementById('filter-type-expense');
     this.btnEmptyAddTx = document.getElementById('btn-empty-add-tx');
     this.btnEmptyResetSeed = document.getElementById('btn-empty-reset-seed');
+
+    // Financial Outlook (FAZ 5.5C)
+    this.financialOutlookSection = document.getElementById('financial-outlook-section');
+    this.outlookHistoricalBadge = document.getElementById('outlook-historical-badge');
+    this.btnManageCashflows = document.getElementById('btn-manage-cashflows');
+    this.metricNextIncomeDays = document.getElementById('metric-next-income-days');
+    this.metricNextIncomeName = document.getElementById('metric-next-income-name');
+    this.metricNextIncomeAmount = document.getElementById('metric-next-income-amount');
+    this.metricNextIncomeDate = document.getElementById('metric-next-income-date');
+    this.metricObligationsReserved = document.getElementById('metric-obligations-reserved');
+    this.metricSafeDailySpend = document.getElementById('metric-safe-daily-spend');
+    this.metricSafeDailyStatus = document.getElementById('metric-safe-daily-status');
+    this.metricCurrentDailyPace = document.getElementById('metric-current-daily-pace');
+    this.metricDailyPaceDiff = document.getElementById('metric-daily-pace-diff');
+    this.metricMonthEndForecast = document.getElementById('metric-month-end-forecast');
+    this.metricForecastConfidenceNote = document.getElementById('metric-forecast-confidence-note');
+    this.chipCoverageStatus = document.getElementById('chip-coverage-status');
+    this.textUtilizationRatio = document.getElementById('text-utilization-ratio');
+    this.textUtilizationLabel = document.getElementById('text-utilization-label');
+    this.barUtilization = document.getElementById('bar-utilization');
+    this.textCoverageContext = document.getElementById('text-coverage-context');
+    this.outlookEmptyState = document.getElementById('outlook-empty-state');
+    this.btnFirstCashflow = document.getElementById('btn-first-cashflow');
+    this.outlookDetailsGrid = document.getElementById('outlook-details-grid');
+    this.outlookInsightsContainer = document.getElementById('outlook-insights-container');
+    this.outlookTimelineContainer = document.getElementById('outlook-timeline-container');
   }
 
   initTheme() {
@@ -541,6 +580,18 @@ export class UIManager {
         showToast(newLang === 'tr' ? 'Dil Türkçe olarak ayarlandı.' : 'Language set to English.', 'info');
       });
     }
+
+    // Financial Outlook & Planned Cashflows (FAZ 5.5C)
+    if (this.btnManageCashflows) {
+      this.btnManageCashflows.addEventListener('click', () => {
+        this.modalManager?.openCashflowManagerModal?.();
+      });
+    }
+    if (this.btnFirstCashflow) {
+      this.btnFirstCashflow.addEventListener('click', () => {
+        this.modalManager?.openCashflowModal?.('add');
+      });
+    }
   }
 
   navigateMonth(offset) {
@@ -582,6 +633,7 @@ export class UIManager {
     this.renderHeaderDate(lang);
     this.renderDashboardCards(summary, currency, lang);
     this.renderAlertBanner(summary);
+    this.renderFinancialOutlook(currency, lang);
     this.renderQuickPresets(currency, lang);
     this.renderCategoryFilterDropdown(lang);
     this.renderTransactions(currency, lang);
@@ -687,6 +739,292 @@ export class UIManager {
       }
     } else {
       this.budgetAlertBanner.classList.add('hidden');
+    }
+  }
+
+  renderFinancialOutlook(currency, lang, now = new Date()) {
+    if (typeof document === 'undefined') return;
+    if (!this.financialOutlookSection) return;
+
+    let outlook;
+    try {
+      outlook = getFinancialOutlookViewModel({
+        store: this.store,
+        selectedMonth: this.selectedMonth,
+        now
+      });
+    } catch (err) {
+      console.warn('[UIManager] Failed to compute financial outlook:', err);
+      return;
+    }
+
+    // Historical / non-current month explanatory badge
+    if (this.outlookHistoricalBadge) {
+      if (!outlook.isCurrentMonth) {
+        this.outlookHistoricalBadge.textContent = t('financialOutlook.currentBadge');
+        this.outlookHistoricalBadge.classList.remove('hidden');
+      } else {
+        this.outlookHistoricalBadge.classList.add('hidden');
+      }
+    }
+
+    // Metric A: Next Income
+    if (this.metricNextIncomeDays && this.metricNextIncomeName && this.metricNextIncomeAmount) {
+      if (outlook.nextIncome && outlook.nextIncome.found) {
+        const ni = outlook.nextIncome;
+        if (ni.daysUntil === 0) {
+          this.metricNextIncomeDays.textContent = t('financialOutlook.daysRemainingToday');
+        } else {
+          this.metricNextIncomeDays.textContent = t('financialOutlook.daysCount', { days: ni.daysUntil });
+        }
+        this.metricNextIncomeName.textContent = ni.name;
+        this.metricNextIncomeAmount.textContent = formatCurrency(ni.amount, currency, lang);
+        if (this.metricNextIncomeDate) {
+          this.metricNextIncomeDate.textContent = ni.date ? formatDate(ni.date, lang) : '--';
+        }
+        if (this.metricObligationsReserved) {
+          this.metricObligationsReserved.textContent = t('financialOutlook.obligationsReserved', {
+            amount: formatCurrency(outlook.obligationsBeforeIncome || 0, currency, lang)
+          });
+        }
+      } else {
+        this.metricNextIncomeDays.textContent = '--';
+        this.metricNextIncomeName.textContent = t('financialOutlook.noNextIncome');
+        this.metricNextIncomeAmount.textContent = formatCurrency(0, currency, lang);
+        if (this.metricNextIncomeDate) this.metricNextIncomeDate.textContent = '--';
+        if (this.metricObligationsReserved) this.metricObligationsReserved.textContent = '--';
+      }
+    }
+
+    // Metric B: Safe Daily Spend
+    if (this.metricSafeDailySpend) {
+      if (typeof outlook.safeDailySpend === 'number') {
+        this.metricSafeDailySpend.textContent = formatCurrency(outlook.safeDailySpend, currency, lang);
+      } else {
+        this.metricSafeDailySpend.textContent = '--';
+      }
+    }
+    if (this.metricSafeDailyStatus) {
+      const cov = outlook.coverageStatus;
+      if (cov === 'DEFICIT_BEFORE_INCOME') {
+        this.metricSafeDailyStatus.textContent = t('coverage.DEFICIT_BEFORE_INCOME');
+        this.metricSafeDailyStatus.className = 'text-rose-600 dark:text-rose-400 font-bold';
+      } else if (cov === 'TIGHT') {
+        this.metricSafeDailyStatus.textContent = t('coverage.TIGHT');
+        this.metricSafeDailyStatus.className = 'text-amber-600 dark:text-amber-400 font-bold';
+      } else if (cov === 'COVERED') {
+        this.metricSafeDailyStatus.textContent = t('coverage.COVERED');
+        this.metricSafeDailyStatus.className = 'text-emerald-600 dark:text-emerald-400 font-bold';
+      } else {
+        this.metricSafeDailyStatus.textContent = t('coverage.NO_NEXT_INCOME');
+        this.metricSafeDailyStatus.className = 'text-slate-500 dark:text-slate-400 font-medium';
+      }
+    }
+
+    // Metric C: Current Daily Pace
+    if (this.metricCurrentDailyPace) {
+      this.metricCurrentDailyPace.textContent = formatCurrency(outlook.currentDailyPace || 0, currency, lang);
+    }
+    if (this.metricDailyPaceDiff) {
+      if (outlook.coverageStatus === 'NO_NEXT_INCOME' || outlook.safeDailySpend === null) {
+        this.metricDailyPaceDiff.textContent = '--';
+        this.metricDailyPaceDiff.className = 'font-bold text-slate-500 dark:text-slate-400';
+      } else if (outlook.dailyAdjustmentNeeded > 0) {
+        this.metricDailyPaceDiff.textContent = t('financialOutlook.paceDifference', {
+          amount: formatCurrency(outlook.dailyAdjustmentNeeded, currency, lang)
+        });
+        this.metricDailyPaceDiff.className = 'font-bold text-rose-600 dark:text-rose-400 truncate';
+      } else {
+        this.metricDailyPaceDiff.textContent = t('financialOutlook.paceBalanced');
+        this.metricDailyPaceDiff.className = 'font-bold text-emerald-600 dark:text-emerald-400 truncate';
+      }
+    }
+
+    // Metric D: Month-End Forecast
+    if (this.metricMonthEndForecast) {
+      this.metricMonthEndForecast.textContent = formatCurrency(
+        outlook.monthEndForecast?.projectedExpense || 0,
+        currency,
+        lang
+      );
+    }
+    if (this.metricForecastConfidenceNote) {
+      if (outlook.monthEndForecast?.isLowConfidence) {
+        this.metricForecastConfidenceNote.textContent = t('financialOutlook.limitedData');
+        this.metricForecastConfidenceNote.className = 'text-amber-600 dark:text-amber-400 truncate block text-[10px] font-semibold';
+      } else {
+        this.metricForecastConfidenceNote.textContent = t('financialOutlook.monthEndForecastSub');
+        this.metricForecastConfidenceNote.className = 'text-slate-500 dark:text-slate-400 truncate block text-[10px]';
+      }
+    }
+
+    // Coverage Status Chip
+    if (this.chipCoverageStatus) {
+      const cov = outlook.coverageStatus;
+      this.chipCoverageStatus.textContent = t(`coverage.${cov}`) || cov;
+      if (cov === 'COVERED') {
+        this.chipCoverageStatus.className = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300';
+      } else if (cov === 'TIGHT') {
+        this.chipCoverageStatus.className = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300';
+      } else if (cov === 'DEFICIT_BEFORE_INCOME') {
+        this.chipCoverageStatus.className = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 pulse-critical';
+      } else {
+        this.chipCoverageStatus.className = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-200';
+      }
+    }
+
+    // Utilization bar & ratio
+    const utilRatio = outlook.utilizationRatio;
+    if (this.textUtilizationRatio && this.barUtilization) {
+      if (utilRatio === null || utilRatio === undefined) {
+        this.textUtilizationRatio.textContent = '--';
+        if (this.textUtilizationLabel) this.textUtilizationLabel.textContent = '';
+        this.barUtilization.style.width = '0%';
+        this.barUtilization.className = 'bg-slate-300 dark:bg-slate-600 h-2 rounded-full transition-all duration-300';
+      } else {
+        const utilPct = Math.round(utilRatio * 100);
+        this.textUtilizationRatio.textContent = `%${utilPct}`;
+        const barWidth = Math.min(100, Math.max(0, utilPct));
+        this.barUtilization.style.width = `${barWidth}%`;
+
+        if (utilRatio >= 1.0 || outlook.coverageStatus === 'DEFICIT_BEFORE_INCOME') {
+          this.barUtilization.className = 'bg-rose-500 h-2 rounded-full transition-all duration-300';
+          if (this.textUtilizationLabel) {
+            this.textUtilizationLabel.textContent = `(${t('planner.utilizationPressure')})`;
+            this.textUtilizationLabel.className = 'text-[11px] font-semibold text-rose-600 dark:text-rose-400';
+          }
+        } else if (utilRatio >= 0.80) {
+          this.barUtilization.className = 'bg-amber-500 h-2 rounded-full transition-all duration-300';
+          if (this.textUtilizationLabel) {
+            this.textUtilizationLabel.textContent = `(${t('planner.utilizationTight')})`;
+            this.textUtilizationLabel.className = 'text-[11px] font-semibold text-amber-600 dark:text-amber-400';
+          }
+        } else {
+          this.barUtilization.className = 'bg-emerald-500 h-2 rounded-full transition-all duration-300';
+          if (this.textUtilizationLabel) {
+            this.textUtilizationLabel.textContent = `(${t('planner.utilizationNormal')})`;
+            this.textUtilizationLabel.className = 'text-[11px] font-semibold text-emerald-600 dark:text-emerald-400';
+          }
+        }
+      }
+    }
+
+    // Coverage context / Factual shortfall sentence
+    if (this.textCoverageContext) {
+      const cov = outlook.coverageStatus;
+      if (cov === 'DEFICIT_BEFORE_INCOME') {
+        const shortfall = Math.abs(outlook.projectedBalanceBeforeNextIncome || 0);
+        this.textCoverageContext.textContent = t('coverage.deficitContext', {
+          amount: formatCurrency(shortfall, currency, lang)
+        });
+      } else if (cov === 'TIGHT') {
+        const pct = utilRatio !== null ? Math.round(utilRatio * 100) : 80;
+        this.textCoverageContext.textContent = t('coverage.tightContext', { percent: pct });
+      } else if (cov === 'COVERED') {
+        this.textCoverageContext.textContent = t('coverage.coveredContext');
+      } else {
+        this.textCoverageContext.textContent = t('financialOutlook.noNextIncomeSub');
+      }
+    }
+
+    // Empty state vs active plans
+    if (this.outlookEmptyState) {
+      if (!outlook.hasPlannedCashflows) {
+        this.outlookEmptyState.classList.remove('hidden');
+      } else {
+        this.outlookEmptyState.classList.add('hidden');
+      }
+    }
+
+    // Top 3 Insights Panel
+    if (this.outlookInsightsContainer) {
+      this.outlookInsightsContainer.innerHTML = '';
+      if (!outlook.insights || outlook.insights.length === 0) {
+        this.outlookInsightsContainer.innerHTML = `
+          <div class="text-xs text-slate-400 dark:text-slate-500 py-3 text-center italic">
+            ${escapeHtml(t('financialOutlook.noInsights'))}
+          </div>
+        `;
+      } else {
+        outlook.insights.forEach((ins) => {
+          let iconColor = 'text-indigo-500';
+          let bgBadge = 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-100 dark:border-indigo-900/60';
+          if (ins.severity === 'critical') {
+            iconColor = 'text-rose-500';
+            bgBadge = 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-100 dark:border-rose-900/60';
+          } else if (ins.severity === 'warning') {
+            iconColor = 'text-amber-500';
+            bgBadge = 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-100 dark:border-amber-900/60';
+          } else if (ins.severity === 'positive') {
+            iconColor = 'text-emerald-500';
+            bgBadge = 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-100 dark:border-emerald-900/60';
+          }
+
+          let msg = ins.message || '';
+          if (ins.messageKey) {
+            const translated = t(ins.messageKey, ins.params || {});
+            if (translated && translated !== ins.messageKey) msg = translated;
+          }
+
+          const itemEl = document.createElement('div');
+          itemEl.className = `p-2 rounded-lg border text-xs flex items-start space-x-2 ${bgBadge}`;
+          itemEl.innerHTML = `
+            <i data-lucide="sparkles" class="w-3.5 h-3.5 mt-0.5 shrink-0 ${iconColor}"></i>
+            <div class="flex-1 leading-snug font-medium">${escapeHtml(msg)}</div>
+          `;
+          this.outlookInsightsContainer.appendChild(itemEl);
+        });
+      }
+    }
+
+    // Upcoming Timeline (Next 5 occurrences)
+    if (this.outlookTimelineContainer) {
+      this.outlookTimelineContainer.innerHTML = '';
+      if (!outlook.timeline || outlook.timeline.length === 0) {
+        this.outlookTimelineContainer.innerHTML = `
+          <div class="text-xs text-slate-400 dark:text-slate-500 py-2.5 text-center italic">
+            ${escapeHtml(t('financialOutlook.noTimeline'))}
+          </div>
+        `;
+      } else {
+        outlook.timeline.forEach((occ) => {
+          const isInc = occ.type === 'income';
+          const amountColor = isInc ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-800 dark:text-slate-200';
+          const sign = isInc ? '+' : '-';
+          const dateFormatted = occ.date ? formatDate(occ.date, lang) : '--';
+          let daysLabel = '';
+          if (occ.daysUntil === 0) {
+            daysLabel = t('financialOutlook.daysRemainingToday');
+          } else if (occ.daysUntil !== null && occ.daysUntil !== undefined) {
+            daysLabel = t('financialOutlook.daysRemaining', { days: occ.daysUntil });
+          }
+
+          const row = document.createElement('div');
+          row.className = 'py-1.5 first:pt-0 last:pb-0 flex items-center justify-between gap-2';
+          row.innerHTML = `
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center space-x-1.5">
+                <span class="text-xs font-bold text-slate-900 dark:text-white truncate">${escapeHtml(occ.name)}</span>
+                <span class="text-[10px] px-1.5 py-0.2 rounded font-semibold ${
+                  isInc
+                    ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                }">
+                  ${escapeHtml(t(`cashflow.${occ.type}`))}
+                </span>
+              </div>
+              <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 flex items-center space-x-2">
+                <span>${escapeHtml(dateFormatted)}</span>
+                ${daysLabel ? `<span>•</span><span class="font-medium text-indigo-600 dark:text-indigo-400">${escapeHtml(daysLabel)}</span>` : ''}
+              </div>
+            </div>
+            <div class="text-right shrink-0">
+              <span class="text-xs font-bold ${amountColor}">${sign}${formatCurrency(occ.amount, currency, lang)}</span>
+            </div>
+          `;
+          this.outlookTimelineContainer.appendChild(row);
+        });
+      }
     }
   }
 

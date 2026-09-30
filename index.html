@@ -182,8 +182,8 @@
       </button>
     </section>
 
-    <!-- HERO DASHBOARD: 4 SUMMARY METRIC CARDS -->
-    <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+    <!-- HERO DASHBOARD: 3 SUMMARY METRIC CARDS -->
+    <section class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
       
       <!-- 1. Kalan Bütçe (Net Balance) -->
       <div class="transition-card bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between overflow-hidden">
@@ -212,37 +212,7 @@
         </div>
       </div>
 
-      <!-- 2. GÜNLÜK GÜVENLİ HARCAMA LİMİTİ (STAR CARD) -->
-      <div id="star-card-container" class="transition-card bg-gradient-to-br from-indigo-600 via-indigo-700 to-violet-800 text-white p-4 sm:p-5 rounded-2xl shadow-lg shadow-indigo-500/20 flex flex-col justify-between relative overflow-hidden">
-        <div class="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-white/10 pointer-events-none blur-xl"></div>
-
-        <div>
-          <div class="flex items-center justify-between">
-            <span class="text-xs font-semibold uppercase tracking-wider text-indigo-100 flex items-center space-x-1.5">
-              <i data-lucide="shield-check" class="w-4 h-4 text-emerald-300"></i>
-              <span data-i18n="cards.dailyLimit">Günlük Güvenli Limit</span>
-            </span>
-            <span id="badge-days-left" class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-white/20 text-white backdrop-blur">
-              18 Gün Kaldı
-            </span>
-          </div>
-          <div class="mt-3">
-            <div class="flex items-baseline space-x-1">
-              <span id="metric-daily-limit" class="text-3xl sm:text-4xl font-extrabold tracking-tight truncate block">
-                0,00 ₺
-              </span>
-              <span class="text-xs font-medium text-indigo-200" data-i18n="cards.perDay">/ gün</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="mt-4 pt-3 border-t border-white/20 flex items-center justify-between text-xs text-indigo-100">
-          <span id="metric-daily-tip" class="truncate" data-i18n="cards.dailyTipNormal">Bugün için önerilen harcama limiti</span>
-          <i data-lucide="sparkles" class="w-4 h-4 text-amber-300 shrink-0 ml-1"></i>
-        </div>
-      </div>
-
-      <!-- 3. Bu Ay Gelir -->
+      <!-- 2. Bu Ay Gelir -->
       <div class="transition-card bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between overflow-hidden">
         <div>
           <div class="flex items-center justify-between">
@@ -263,7 +233,7 @@
         </div>
       </div>
 
-      <!-- 4. Bu Ay Gider -->
+      <!-- 3. Bu Ay Gider -->
       <div class="transition-card bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between overflow-hidden">
         <div>
           <div class="flex items-center justify-between">
@@ -282,6 +252,190 @@
           <span data-i18n="cards.expenseCount">Gider Adedi:</span>
           <span id="metric-expense-count" class="font-bold text-slate-700 dark:text-slate-200">0 adet</span>
         </div>
+      </div>
+
+    </section>
+
+    <!-- ================= FINANCIAL OUTLOOK SECTION (FAZ 5.5C) ================= -->
+    <section id="financial-outlook-section" class="bg-white dark:bg-slate-900 p-3.5 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3" aria-label="Finansal Görünüm">
+      
+      <!-- Section Header -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-slate-100 dark:border-slate-800 pb-2.5">
+        <div class="flex items-center space-x-2.5">
+          <div class="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+            <i data-lucide="compass" class="w-4 h-4"></i>
+          </div>
+          <div>
+            <div class="flex items-center space-x-2 flex-wrap gap-y-1">
+              <h2 class="text-sm sm:text-base font-bold text-slate-900 dark:text-white" data-i18n="financialOutlook.title">Finansal Görünüm</h2>
+              <span id="outlook-historical-badge" class="hidden px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300" data-i18n="financialOutlook.currentBadge">Bugünkü finansal durum — Seçili ay görünümünden bağımsızdır.</span>
+            </div>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5" data-i18n="financialOutlook.subtitle">Deterministik nakit akışı ve harcama projeksiyonu</p>
+          </div>
+        </div>
+
+        <!-- Management CTA Button -->
+        <button id="btn-manage-cashflows" type="button" class="min-h-[36px] px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-600 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80 text-xs font-bold transition flex items-center justify-center space-x-1.5 shrink-0 active:scale-95">
+          <i data-lucide="calendar-clock" class="w-4 h-4"></i>
+          <span data-i18n="financialOutlook.manageCashflows">Planlı Gelir / Giderleri Yönet</span>
+        </button>
+      </div>
+
+      <!-- 4 Compact Primary Metrics Grid -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
+        
+        <!-- Metric A: Next Income -->
+        <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between overflow-hidden">
+          <div class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-semibold">
+            <span class="flex items-center space-x-1.5">
+              <i data-lucide="arrow-down-circle" class="w-3.5 h-3.5 text-emerald-500 shrink-0"></i>
+              <span data-i18n="financialOutlook.nextIncomeTitle">Bir Sonraki Gelir</span>
+            </span>
+            <span id="metric-next-income-days" class="text-[11px] font-bold text-slate-700 dark:text-slate-300">--</span>
+          </div>
+          <div class="mt-1.5">
+            <div id="metric-next-income-name" class="text-xs font-bold text-slate-900 dark:text-white truncate">Planlı gelir yok</div>
+            <div id="metric-next-income-amount" class="text-lg sm:text-xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-0.5 truncate">0,00 ₺</div>
+          </div>
+          <div class="mt-1.5 pt-1.5 border-t border-slate-200/60 dark:border-slate-700/60 text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
+            <span id="metric-next-income-date">--</span>
+            <span id="metric-obligations-reserved" class="truncate text-slate-600 dark:text-slate-300 font-medium">--</span>
+          </div>
+        </div>
+
+        <!-- Metric B: Safe Daily Spend -->
+        <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between overflow-hidden">
+          <div class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-semibold">
+            <span class="flex items-center space-x-1.5">
+              <i data-lucide="shield" class="w-3.5 h-3.5 text-indigo-500 shrink-0"></i>
+              <span data-i18n="financialOutlook.safeDailySpendTitle">Güvenli Günlük Limit</span>
+            </span>
+          </div>
+          <div class="mt-1.5">
+            <div class="flex items-baseline space-x-1">
+              <span id="metric-safe-daily-spend" class="text-lg sm:text-xl font-extrabold text-slate-900 dark:text-white truncate">0,00 ₺</span>
+              <span class="text-xs text-slate-500 dark:text-slate-400" data-i18n="cards.perDay">/ gün</span>
+            </div>
+            <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate" data-i18n="financialOutlook.safeDailySpendSub">Bir sonraki gelire kadar</div>
+          </div>
+          <div class="mt-1.5 pt-1.5 border-t border-slate-200/60 dark:border-slate-700/60 text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
+            <span id="metric-safe-daily-status">--</span>
+          </div>
+        </div>
+
+        <!-- Metric C: Current Daily Pace -->
+        <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between overflow-hidden">
+          <div class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-semibold">
+            <span class="flex items-center space-x-1.5">
+              <i data-lucide="trending-up" class="w-3.5 h-3.5 text-amber-500 shrink-0"></i>
+              <span data-i18n="financialOutlook.currentPaceTitle">Mevcut Harcama Hızı</span>
+            </span>
+          </div>
+          <div class="mt-1.5">
+            <div class="flex items-baseline space-x-1">
+              <span id="metric-current-daily-pace" class="text-lg sm:text-xl font-extrabold text-slate-900 dark:text-white truncate">0,00 ₺</span>
+              <span class="text-xs text-slate-500 dark:text-slate-400" data-i18n="cards.perDay">/ gün</span>
+            </div>
+            <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate" data-i18n="financialOutlook.currentPaceSub">Son harcama trendine göre</div>
+          </div>
+          <div class="mt-1.5 pt-1.5 border-t border-slate-200/60 dark:border-slate-700/60 text-[11px] flex items-center justify-between">
+            <span id="metric-daily-pace-diff" class="font-bold text-slate-600 dark:text-slate-300">--</span>
+          </div>
+        </div>
+
+        <!-- Metric D: Month-End Forecast -->
+        <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between overflow-hidden">
+          <div class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-semibold">
+            <span class="flex items-center space-x-1.5">
+              <i data-lucide="calculator" class="w-3.5 h-3.5 text-violet-500 shrink-0"></i>
+              <span data-i18n="financialOutlook.monthEndForecastTitle">Ay sonu gider tahmini</span>
+            </span>
+          </div>
+          <div class="mt-1.5">
+            <span id="metric-month-end-forecast" class="text-lg sm:text-xl font-extrabold text-slate-900 dark:text-white truncate block">0,00 ₺</span>
+          </div>
+          <div class="mt-1.5 pt-1.5 border-t border-slate-200/60 dark:border-slate-700/60 text-[11px]">
+            <span id="metric-forecast-confidence-note" class="text-slate-500 dark:text-slate-400 truncate block">--</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Coverage Status, Utilization Bar & Factual Warning Row -->
+      <div id="outlook-coverage-card" class="p-3 sm:p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-2">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+          <div class="flex items-center space-x-2">
+            <span class="text-xs font-semibold text-slate-600 dark:text-slate-300">Nakit Kaplama Durumu:</span>
+            <span id="chip-coverage-status" class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-200">
+              --
+            </span>
+          </div>
+          <div class="flex items-center space-x-2 text-xs">
+            <span class="font-semibold text-slate-500 dark:text-slate-400" data-i18n="planner.utilization">Kullanım:</span>
+            <span id="text-utilization-ratio" class="font-bold text-slate-800 dark:text-slate-200">%0</span>
+            <span id="text-utilization-label" class="text-[11px] font-semibold text-slate-500 dark:text-slate-400">(Normal)</span>
+          </div>
+        </div>
+
+        <!-- Progress bar for utilization -->
+        <div class="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
+          <div id="bar-utilization" class="bg-indigo-600 h-1.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+        </div>
+
+        <!-- Factual Context Text -->
+        <p id="text-coverage-context" class="text-xs leading-normal text-slate-600 dark:text-slate-300">
+          --
+        </p>
+      </div>
+
+      <!-- Empty State for Planned Cashflows (Hidden when planned cashflows exist) -->
+      <div id="outlook-empty-state" class="hidden p-4 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-center space-y-2.5 bg-slate-50/50 dark:bg-slate-800/20">
+        <div class="w-9 h-9 mx-auto rounded-full bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+          <i data-lucide="calendar-plus" class="w-4 h-4"></i>
+        </div>
+        <div class="max-w-md mx-auto">
+          <h3 class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white" data-i18n="financialOutlook.emptyTitle">Nakit Akışınızı Planlayın</h3>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed" data-i18n="financialOutlook.emptyDesc">
+            Bir sonraki burs, kira veya düzenli ödemenizi ekleyerek gelir gününe kadar ne kadar harcama alanınız olduğunu görebilirsiniz.
+          </p>
+        </div>
+        <button id="btn-first-cashflow" type="button" class="min-h-[36px] px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition inline-flex items-center space-x-1.5 active:scale-95">
+          <i data-lucide="plus" class="w-4 h-4"></i>
+          <span data-i18n="financialOutlook.addFirstPlan">İlk planımı ekle</span>
+        </button>
+      </div>
+
+      <!-- Top Insights Panel & Upcoming Timeline Grid -->
+      <div id="outlook-details-grid" class="grid grid-cols-1 lg:grid-cols-2 gap-3 pt-0.5">
+        
+        <!-- Top 3 Insights Panel -->
+        <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between space-y-2">
+          <div class="flex items-center justify-between border-b border-slate-200/60 dark:border-slate-700/60 pb-1.5">
+            <h3 class="text-xs font-bold text-slate-900 dark:text-white flex items-center space-x-1.5">
+              <i data-lucide="sparkles" class="w-4 h-4 text-amber-500 shrink-0"></i>
+              <span data-i18n="financialOutlook.topInsightsTitle">Finansal İçgörüler</span>
+            </h3>
+            <span class="text-[11px] font-semibold text-slate-400">Max 3</span>
+          </div>
+          <div id="outlook-insights-container" class="space-y-1.5">
+            <!-- Dynamic insights rendered here -->
+          </div>
+        </div>
+
+        <!-- Upcoming Cashflow Timeline (Next 5) -->
+        <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between space-y-2">
+          <div class="flex items-center justify-between border-b border-slate-200/60 dark:border-slate-700/60 pb-1.5">
+            <h3 class="text-xs font-bold text-slate-900 dark:text-white flex items-center space-x-1.5">
+              <i data-lucide="calendar" class="w-4 h-4 text-indigo-500 shrink-0"></i>
+              <span data-i18n="financialOutlook.upcomingTimelineTitle">Yaklaşan Planlı Akışlar</span>
+            </h3>
+            <span class="text-[11px] font-semibold text-slate-400">İlk 5</span>
+          </div>
+          <div id="outlook-timeline-container" class="divide-y divide-slate-200/60 dark:divide-slate-700/60">
+            <!-- Dynamic timeline occurrences rendered here -->
+          </div>
+        </div>
+
       </div>
 
     </section>
@@ -946,6 +1100,210 @@
         </div>
 
       </div>
+
+    </div>
+  </div>
+
+  <!-- ================= PLANNED CASHFLOW MANAGER MODAL (FAZ 5.5C) ================= -->
+  <div id="cashflow-manager-modal" role="dialog" aria-modal="true" aria-labelledby="cashflow-manager-title" class="hidden fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-slate-900/60 backdrop-blur-xs transition-opacity duration-200">
+    <div class="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-2xl max-w-xl w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[100dvh] sm:max-h-[90vh] h-[92dvh] sm:h-auto">
+      
+      <!-- Sticky Modal Header -->
+      <div class="sticky top-0 z-10 bg-white dark:bg-slate-900 p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+        <div class="flex items-center space-x-2.5">
+          <div class="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+            <i data-lucide="calendar-clock" class="w-4 h-4"></i>
+          </div>
+          <div>
+            <h3 id="cashflow-manager-title" class="text-sm font-bold text-slate-900 dark:text-white" data-i18n="cashflow.managerTitle">Planlı Gelir ve Giderler</h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400" data-i18n="cashflow.managerDesc">Düzenli burs, kira ve fatura akışlarını yönetin.</p>
+          </div>
+        </div>
+        <div class="flex items-center space-x-2">
+          <button id="btn-manager-add-new" type="button" class="min-h-[36px] px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold text-xs transition flex items-center space-x-1 shadow-xs">
+            <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+            <span data-i18n="cashflow.addNew">+ Yeni Plan Ekle</span>
+          </button>
+          <button id="cashflow-manager-close" type="button" aria-label="Pencereyi Kapat" class="min-w-[40px] min-h-[40px] p-2 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Scrollable Templates List Container -->
+      <div id="cashflow-list-container" class="p-4 sm:p-5 space-y-2.5 overflow-y-auto flex-1 min-h-0 overscroll-contain divide-y divide-slate-100 dark:divide-slate-800/80">
+        <!-- Rendered dynamically -->
+      </div>
+
+      <!-- Empty State inside Manager -->
+      <div id="cashflow-manager-empty" class="hidden py-12 px-4 text-center space-y-2">
+        <i data-lucide="inbox" class="w-8 h-8 mx-auto text-slate-400 dark:text-slate-600"></i>
+        <p class="text-xs font-semibold text-slate-700 dark:text-slate-300" data-i18n="cashflow.emptyManager">Henüz kayıtlı bir planlı nakit akışınız yok.</p>
+        <p class="text-[11px] text-slate-500 dark:text-slate-400" data-i18n="cashflow.emptyManagerDesc">Burs, kira veya fatura planı ekleyerek nakit planınızı başlatın.</p>
+      </div>
+
+      <!-- Sticky Footer -->
+      <div class="sticky bottom-0 z-10 bg-white dark:bg-slate-900 px-4 py-3 sm:p-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pb-4">
+        <button id="cashflow-manager-btn-done" type="button" class="min-h-[40px] px-5 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition">
+          Tamam
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ================= ADD / EDIT CASHFLOW MODAL (FAZ 5.5C) ================= -->
+  <div id="cashflow-modal" role="dialog" aria-modal="true" aria-labelledby="cashflow-modal-title" class="hidden fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-slate-900/60 backdrop-blur-xs transition-opacity duration-200">
+    <div class="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-2xl max-w-md w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[100dvh] sm:max-h-[90vh] h-[92dvh] sm:h-auto">
+      
+      <!-- Sticky Modal Header -->
+      <div class="sticky top-0 z-10 bg-white dark:bg-slate-900 p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+        <div class="flex items-center space-x-2.5">
+          <div id="cashflow-header-icon" class="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+            <i data-lucide="plus" class="w-4 h-4"></i>
+          </div>
+          <h3 id="cashflow-modal-title" class="text-sm font-bold text-slate-900 dark:text-white" data-i18n="cashflow.addTitle">Yeni Planlı Akış Ekle</h3>
+        </div>
+        <button id="cashflow-modal-close" type="button" aria-label="Pencereyi Kapat" class="min-w-[44px] min-h-[44px] p-2.5 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <!-- Modal Body Form -->
+      <form id="cashflow-form" novalidate class="flex flex-col flex-1 overflow-hidden min-h-0">
+        <input type="hidden" id="cashflow-field-id" value="" />
+
+        <!-- Scrollable Form Fields -->
+        <div class="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 min-h-0 overscroll-contain">
+          
+          <!-- Flow Type Switcher (Income / Expense) -->
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5" data-i18n="cashflow.type">Akış Türü</label>
+            <div class="grid grid-cols-2 gap-2 p-1 rounded-xl bg-slate-100 dark:bg-slate-800">
+              <button type="button" id="cf-type-income-btn" class="min-h-[40px] py-2 text-xs font-bold rounded-lg bg-emerald-600 text-white shadow-xs transition flex items-center justify-center space-x-1.5">
+                <i data-lucide="arrow-down-left" class="w-3.5 h-3.5"></i>
+                <span data-i18n="cashflow.income">Gelir (+)</span>
+              </button>
+              <button type="button" id="cf-type-expense-btn" class="min-h-[40px] py-2 text-xs font-bold rounded-lg text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition flex items-center justify-center space-x-1.5">
+                <i data-lucide="arrow-up-right" class="w-3.5 h-3.5"></i>
+                <span data-i18n="cashflow.expense">Gider (-)</span>
+              </button>
+            </div>
+            <input type="hidden" id="cashflow-field-type" value="income" />
+          </div>
+
+          <!-- Name -->
+          <div>
+            <label for="cashflow-field-name" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              <span data-i18n="cashflow.name">Plan Adı</span> <span class="text-rose-500">*</span>
+            </label>
+            <input type="text" id="cashflow-field-name" maxlength="80" placeholder="Örn: KYK Bursu, Ev Kirası, İnternet" class="w-full px-3 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition" />
+            <p id="cf-err-name" class="text-[11px] text-rose-500 font-medium mt-1 hidden flex items-center gap-1">
+              <i data-lucide="alert-circle" class="w-3 h-3 shrink-0"></i>
+              <span class="err-text"></span>
+            </p>
+          </div>
+
+          <!-- Amount -->
+          <div>
+            <label for="cashflow-field-amount" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              <span data-i18n="cashflow.amount">Tutar</span> <span class="text-rose-500">*</span>
+            </label>
+            <input type="number" id="cashflow-field-amount" step="0.01" min="0.01" max="10000000" placeholder="0,00" class="w-full px-3 py-2.5 text-xs font-bold rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition" />
+            <p id="cf-err-amount" class="text-[11px] text-rose-500 font-medium mt-1 hidden flex items-center gap-1">
+              <i data-lucide="alert-circle" class="w-3 h-3 shrink-0"></i>
+              <span class="err-text"></span>
+            </p>
+          </div>
+
+          <!-- Recurrence (Monthly / Once) -->
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5" data-i18n="cashflow.recurrence">Tekrar Sıklığı</label>
+            <div class="grid grid-cols-2 gap-2 p-1 rounded-xl bg-slate-100 dark:bg-slate-800">
+              <button type="button" id="cf-recurrence-monthly-btn" class="min-h-[38px] py-1.5 text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-xs transition flex items-center justify-center space-x-1.5">
+                <i data-lucide="repeat" class="w-3.5 h-3.5"></i>
+                <span data-i18n="cashflow.monthly">Her Ay</span>
+              </button>
+              <button type="button" id="cf-recurrence-once-btn" class="min-h-[38px] py-1.5 text-xs font-bold rounded-lg text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition flex items-center justify-center space-x-1.5">
+                <i data-lucide="calendar-check" class="w-3.5 h-3.5"></i>
+                <span data-i18n="cashflow.once">Tek Seferlik</span>
+              </button>
+            </div>
+            <input type="hidden" id="cashflow-field-recurrence" value="monthly" />
+          </div>
+
+          <!-- Conditional Day of Month (for monthly) -->
+          <div id="cf-group-monthly">
+            <label for="cashflow-field-day" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              <span data-i18n="cashflow.dayOfMonth">Ayın Hangi Günü? (1-31)</span> <span class="text-rose-500">*</span>
+            </label>
+            <input type="number" id="cashflow-field-day" min="1" max="31" placeholder="Örn: 8 (KYK için) veya 3 (Kira)" class="w-full px-3 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition" />
+            <p id="cf-err-day" class="text-[11px] text-rose-500 font-medium mt-1 hidden flex items-center gap-1">
+              <i data-lucide="alert-circle" class="w-3 h-3 shrink-0"></i>
+              <span class="err-text"></span>
+            </p>
+          </div>
+
+          <!-- Conditional Date (for once) -->
+          <div id="cf-group-once" class="hidden">
+            <label for="cashflow-field-date" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              <span data-i18n="cashflow.date">Tarih</span> <span class="text-rose-500">*</span>
+            </label>
+            <input type="date" id="cashflow-field-date" class="w-full px-3 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition" />
+            <p id="cf-err-date" class="text-[11px] text-rose-500 font-medium mt-1 hidden flex items-center gap-1">
+              <i data-lucide="alert-circle" class="w-3 h-3 shrink-0"></i>
+              <span class="err-text"></span>
+            </p>
+          </div>
+
+          <!-- Category Selector (only relevant for expense) -->
+          <div id="cf-group-category" class="hidden">
+            <label for="cashflow-field-category" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1" data-i18n="cashflow.category">Kategori (Gider için)</label>
+            <select id="cashflow-field-category" class="w-full px-3 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition">
+              <option value="" data-i18n="cashflow.optionalCategory">Kategori Seçin (İsteğe Bağlı)</option>
+            </select>
+          </div>
+
+          <!-- Advanced start / end dates -->
+          <div class="pt-2 border-t border-slate-100 dark:border-slate-800">
+            <span class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2" data-i18n="cashflow.advancedOptions">Gelişmiş Tarih Kısıtları (İsteğe Bağlı)</span>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label for="cashflow-field-start-date" class="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1" data-i18n="cashflow.startDate">Başlangıç Tarihi</label>
+                <input type="date" id="cashflow-field-start-date" class="w-full px-2.5 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition" />
+              </div>
+              <div>
+                <label for="cashflow-field-end-date" class="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1" data-i18n="cashflow.endDate">Bitiş Tarihi</label>
+                <input type="date" id="cashflow-field-end-date" class="w-full px-2.5 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Active Toggle -->
+          <div class="pt-2 flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-700/60">
+            <div>
+              <span class="text-xs font-bold text-slate-800 dark:text-slate-200 block" data-i18n="cashflow.active">Plan Aktif</span>
+              <span class="text-[11px] text-slate-500 dark:text-slate-400" data-i18n="cashflow.activeDesc">Pasif planlar hesaplamaya dahil edilmez ancak silinmez.</span>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="cashflow-field-active" checked class="sr-only peer">
+              <div class="w-9 h-5 bg-slate-300 peer-focus:outline-hidden rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+            </label>
+          </div>
+
+        </div>
+
+        <!-- Sticky Footer -->
+        <div class="sticky bottom-0 z-10 bg-white dark:bg-slate-900 px-4 py-3 sm:p-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end space-x-2 shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pb-4">
+          <button type="button" id="cashflow-btn-cancel" class="min-h-[44px] px-4 py-2.5 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition" data-i18n="cashflow.cancel">
+            Vazgeç
+          </button>
+          <button type="submit" id="cashflow-btn-submit" class="min-h-[44px] px-5 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white shadow-sm shadow-indigo-500/30 transition" data-i18n="cashflow.save">
+            Kaydet
+          </button>
+        </div>
+
+      </form>
 
     </div>
   </div>

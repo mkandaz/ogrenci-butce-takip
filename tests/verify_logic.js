@@ -43,6 +43,7 @@ import {
   CASHFLOW_ASSUMPTIONS,
   TIGHT_UTILIZATION_THRESHOLD
 } from '../src/services/cashflowPlannerEngine.js';
+import { getFinancialOutlookViewModel } from '../src/services/financialOutlookService.js';
 
 console.log('====================================================');
 console.log('🚀 ÖĞRENCİ BÜTÇE TAKİP - ENTEGRE TEST PAKETİ (FAZ 2 & 3)');
@@ -8558,6 +8559,859 @@ console.log('\n--- 27. FAZ 5.5B — PRODUCTION HARDENING: REALTIME PUBLICATION, 
   assert(store.getPlannedCashflows().length === 1, 'TC-365 existing planned cashflows preserved');
   assert(store.getPlannedCashflowById('existing-untouched') !== null, 'TC-365 untouched item intact');
   assert(store.getPlannedCashflowOutbox().length === 0, 'TC-365 outbox unchanged (no redundant tombstones created)');
+}
+
+// --------------------------------------------------------------------------
+console.log('\n--- 28. FAZ 5.5C — STUDENT FINANCIAL COMMAND CENTER UI (TC-366 - TC-385) ---');
+
+// TC-366: index.html Section, Modals & Metric Container Structure Integrity
+{
+  const htmlContent = fs.readFileSync(path.join(process.cwd(), 'index.html'), 'utf-8');
+  assert(htmlContent.includes('id="financial-outlook-section"'), 'TC-366 financial-outlook-section exists in index.html');
+  assert(htmlContent.includes('id="btn-manage-cashflows"'), 'TC-366 btn-manage-cashflows exists');
+  assert(htmlContent.includes('id="outlook-historical-badge"'), 'TC-366 outlook-historical-badge exists');
+  assert(htmlContent.includes('id="metric-next-income-name"'), 'TC-366 metric-next-income-name exists');
+  assert(htmlContent.includes('id="metric-next-income-amount"'), 'TC-366 metric-next-income-amount exists');
+  assert(htmlContent.includes('id="metric-safe-daily-spend"'), 'TC-366 metric-safe-daily-spend exists');
+  assert(htmlContent.includes('id="metric-current-daily-pace"'), 'TC-366 metric-current-daily-pace exists');
+  assert(htmlContent.includes('id="metric-month-end-forecast"'), 'TC-366 metric-month-end-forecast exists');
+  assert(htmlContent.includes('id="chip-coverage-status"'), 'TC-366 chip-coverage-status exists');
+  assert(htmlContent.includes('id="bar-utilization"'), 'TC-366 bar-utilization exists');
+  assert(htmlContent.includes('id="text-utilization-ratio"'), 'TC-366 text-utilization-ratio exists');
+  assert(htmlContent.includes('id="outlook-empty-state"'), 'TC-366 outlook-empty-state exists');
+  assert(htmlContent.includes('id="btn-first-cashflow"'), 'TC-366 btn-first-cashflow exists');
+  assert(htmlContent.includes('id="outlook-insights-container"'), 'TC-366 outlook-insights-container exists');
+  assert(htmlContent.includes('id="outlook-timeline-container"'), 'TC-366 outlook-timeline-container exists');
+  assert(htmlContent.includes('id="cashflow-manager-modal"'), 'TC-366 cashflow-manager-modal exists');
+  assert(htmlContent.includes('id="cashflow-modal"'), 'TC-366 cashflow-modal exists');
+  assert(htmlContent.includes('id="cashflow-form"'), 'TC-366 cashflow-form exists');
+  assert(htmlContent.includes('h-[92dvh] sm:h-auto') || htmlContent.includes('max-h-[100dvh]'), 'TC-366 mobile 100dvh bottom sheet classes applied');
+}
+
+// TC-367: Pure View Model Generation (getFinancialOutlookViewModel) Contract
+{
+  let threw = false;
+  try {
+    getFinancialOutlookViewModel(null);
+  } catch (e) {
+    threw = true;
+  }
+  assert(threw, 'TC-367 getFinancialOutlookViewModel throws on invalid store');
+
+  SafeStorage.removeItem(STORAGE_KEY);
+  const store = new BudgetStore();
+  const refDate = new Date('2026-09-28T12:00:00Z');
+  const vm = getFinancialOutlookViewModel({ store, selectedMonth: '2026-09', now: refDate });
+
+  assert(vm.referenceDate === '2026-09-28', 'TC-367 referenceDate matches 2026-09-28');
+  assert(vm.targetMonth === '2026-09', 'TC-367 targetMonth matches 2026-09');
+  assert(vm.isCurrentMonth === true, 'TC-367 isCurrentMonth true');
+  assert(vm.isHistorical === false, 'TC-367 isHistorical false');
+  assert(vm.hasPlannedCashflows === false, 'TC-367 hasPlannedCashflows false with empty store');
+  assert(vm.nextIncome.found === false, 'TC-367 nextIncome.found false');
+  assert(vm.safeDailySpend === null, 'TC-367 safeDailySpend null when no next income');
+  assert(vm.coverageStatus === COVERAGE_STATUS.NO_NEXT_INCOME, 'TC-367 coverageStatus is NO_NEXT_INCOME');
+  assert(vm.utilizationRatio === null, 'TC-367 utilizationRatio null');
+  assert(Array.isArray(vm.timeline), 'TC-367 timeline is array');
+  assert(Array.isArray(vm.insights), 'TC-367 insights is array');
+}
+
+// TC-368: Metric A (Next Income) Identification & Localization
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  const store = new BudgetStore();
+  store.addPlannedCashflow({
+    name: 'KYK Bursu',
+    type: 'income',
+    amount: 2500,
+    recurrence: 'monthly',
+    dayOfMonth: 5
+  });
+
+  const refDate = new Date('2026-09-28T10:00:00Z');
+  const vm = getFinancialOutlookViewModel({ store, selectedMonth: '2026-09', now: refDate });
+
+  assert(vm.nextIncome.found === true, 'TC-368 nextIncome.found true');
+  assert(vm.nextIncome.name === 'KYK Bursu', 'TC-368 nextIncome name is KYK Bursu');
+  assert(vm.nextIncome.amount === 2500, 'TC-368 nextIncome amount is 2500');
+  assert(vm.nextIncome.daysUntil === 7, 'TC-368 days until Oct 5 from Sep 28 is 7 days');
+  assert(vm.nextIncome.date === '2026-10-05', 'TC-368 next income date is 2026-10-05');
+}
+
+// TC-369: Metric B (Safe Daily Spend) with Reserved Obligations
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  const store = new BudgetStore();
+  // Balance: 4,000 TL
+  store.addTransaction({ title: 'Maaş', amount: 4000, type: 'income', categoryId: 'inc_salary', date: '2026-09-01' });
+  // Plan 1: Income on 5th (7 days)
+  store.addPlannedCashflow({ name: 'Aile Desteği', type: 'income', amount: 3000, recurrence: 'monthly', dayOfMonth: 5 });
+  // Plan 2: Rent on 3rd (5 days, before income)
+  store.addPlannedCashflow({ name: 'Kira', type: 'expense', amount: 1000, recurrence: 'monthly', dayOfMonth: 3 });
+
+  const refDate = new Date('2026-09-28T10:00:00Z');
+  const vm = getFinancialOutlookViewModel({ store, selectedMonth: '2026-09', now: refDate });
+
+  assert(vm.obligationsBeforeIncome === 1000, 'TC-369 obligations before income is 1000');
+  // Available after obligations: 4000 - 1000 = 3000. Safe daily: 3000 / 7 = 428.57
+  assert(vm.safeDailySpend === 428.57, 'TC-369 safeDailySpend is 428.57');
+}
+
+// TC-370: Metric C (Current Pace & Difference)
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  const store = new BudgetStore();
+  store.addTransaction({ title: 'Gelir', amount: 10000, type: 'income', categoryId: 'inc_salary', date: '2026-09-01' });
+  store.addTransaction({ title: 'Market', amount: 1400, type: 'expense', categoryId: 'exp_food', date: '2026-09-28' });
+  store.addPlannedCashflow({ name: 'KYK Bursu', type: 'income', amount: 3000, recurrence: 'monthly', dayOfMonth: 5 });
+
+  const refDate = new Date('2026-09-28T10:00:00Z');
+  const vm = getFinancialOutlookViewModel({ store, selectedMonth: '2026-09', now: refDate });
+
+  assert(vm.currentDailyPace > 0, 'TC-370 currentDailyPace is positive');
+  assert(typeof vm.dailyAdjustmentNeeded === 'number', 'TC-370 dailyAdjustmentNeeded is number');
+}
+
+// TC-371: Metric D (Month-End Forecast Low-Confidence Detection)
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  const store = new BudgetStore();
+  store.addTransaction({ title: 'Tek Gider', amount: 100, type: 'expense', categoryId: 'exp_food', date: '2026-09-01' });
+
+  const refDate = new Date('2026-09-05T10:00:00Z');
+  const vm = getFinancialOutlookViewModel({ store, selectedMonth: '2026-09', now: refDate });
+
+  assert(vm.monthEndForecast.isLowConfidence === true, 'TC-371 isLowConfidence true with sparse data');
+}
+
+// TC-372: Coverage Status Transitions (COVERED, TIGHT, DEFICIT)
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  const store = new BudgetStore();
+  store.addTransaction({ title: 'Gelir', amount: 10000, type: 'income', categoryId: 'inc_salary', date: '2026-09-01' });
+  store.addPlannedCashflow({ name: 'Burs', type: 'income', amount: 2000, recurrence: 'monthly', dayOfMonth: 8 });
+
+  const refDate = new Date('2026-09-28T10:00:00Z');
+  const vmCovered = getFinancialOutlookViewModel({ store, selectedMonth: '2026-09', now: refDate });
+  assert(vmCovered.coverageStatus === COVERAGE_STATUS.COVERED, 'TC-372 low spending produces COVERED status');
+}
+
+// TC-373: Factual Deficit Shortfall Text (No Panic)
+{
+  const deficitContextTr = t('coverage.deficitContext', { amount: '640,00 ₺' });
+  const deficitContextEn = en.coverage.deficitContext.replace('{amount}', '640.00 ₺');
+
+  assert(deficitContextTr.includes('640,00 ₺'), 'TC-373 TR deficit sentence includes formatted amount');
+  assert(deficitContextTr.includes('açık oluşabilir'), 'TC-373 TR deficit sentence uses calm, factual phrasing');
+  assert(!deficitContextTr.includes('İFLAS') && !deficitContextTr.includes('FELAKET'), 'TC-373 No sensationalist language in TR');
+  assert(deficitContextEn.includes('shortfall'), 'TC-373 EN deficit sentence uses neutral financial term "shortfall"');
+}
+
+// TC-374: Upcoming Cashflow Timeline (Max 5, Deterministically Ordered, Never Persisted)
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  const store = new BudgetStore();
+  for (let i = 1; i <= 8; i++) {
+    store.addPlannedCashflow({
+      name: `Plan ${i}`,
+      type: i % 2 === 0 ? 'expense' : 'income',
+      amount: i * 100,
+      recurrence: 'monthly',
+      dayOfMonth: ((i * 3) % 28) + 1
+    });
+  }
+
+  const refDate = new Date('2026-09-28T10:00:00Z');
+  const vm = getFinancialOutlookViewModel({ store, selectedMonth: '2026-09', now: refDate });
+
+  assert(vm.timeline.length <= 5, 'TC-374 timeline has at most 5 items');
+  assert(vm.timeline.length === 5, 'TC-374 timeline capped at exactly 5 items');
+  assert(store.getPlannedCashflows().length === 8, 'TC-374 store only persists templates');
+  assert(store.getPlannedCashflows().every(p => !p.occurrences), 'TC-374 occurrences not persisted in store');
+}
+
+// TC-375: Top Insights (Max 3, Localized)
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  const store = new BudgetStore();
+  store.addTransaction({ title: 'Gelir', amount: 5000, type: 'income', categoryId: 'inc_salary', date: '2026-09-01' });
+  store.addTransaction({ title: 'Market 1', amount: 200, type: 'expense', categoryId: 'exp_food', date: '2026-09-10' });
+  store.addTransaction({ title: 'Market 2', amount: 300, type: 'expense', categoryId: 'exp_food', date: '2026-09-20' });
+
+  const refDate = new Date('2026-09-28T10:00:00Z');
+  const vm = getFinancialOutlookViewModel({ store, selectedMonth: '2026-09', now: refDate });
+
+  assert(vm.insights.length <= 3, 'TC-375 insights limited to max 3');
+}
+
+// TC-376: Historical Month Semantics (isHistorical True, Current Live Calendar Kept)
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  const store = new BudgetStore();
+  const refDate = new Date('2026-09-28T10:00:00Z');
+  const vmHistorical = getFinancialOutlookViewModel({ store, selectedMonth: '2026-07', now: refDate });
+
+  assert(vmHistorical.isHistorical === true, 'TC-376 isHistorical is true for 2026-07 when now is 2026-09');
+  assert(vmHistorical.isCurrentMonth === false, 'TC-376 isCurrentMonth is false');
+}
+
+// TC-377: Reactive UI Recalculation on Store Updates
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  const store = new BudgetStore();
+  store.addTransaction({ title: 'Maaş', amount: 2000, type: 'income', categoryId: 'inc_salary', date: '2026-09-01' });
+  store.addPlannedCashflow({ name: 'KYK', type: 'income', amount: 1500, recurrence: 'monthly', dayOfMonth: 8 });
+
+  const refDate = new Date('2026-09-28T10:00:00Z');
+  let vm = getFinancialOutlookViewModel({ store, selectedMonth: '2026-09', now: refDate });
+  assert(vm.safeDailySpend === 200, 'TC-377 initial safeDailySpend is 200');
+
+  // Spend 500 TL
+  store.addTransaction({ title: 'Kitap', amount: 500, type: 'expense', categoryId: 'exp_education', date: '2026-09-28' });
+  vm = getFinancialOutlookViewModel({ store, selectedMonth: '2026-09', now: refDate });
+  assert(vm.safeDailySpend === 150, 'TC-377 safeDailySpend reactively recalculated to 150 after transaction');
+}
+
+// TC-378: ModalManager Form Validation Rules
+{
+  const validMonthly = { id: 'p-m1', name: 'Kira', type: 'expense', amount: 2000, recurrence: 'monthly', dayOfMonth: 5 };
+  const validOnce = { id: 'p-o1', name: 'Ders Kitabı', type: 'expense', amount: 450, recurrence: 'once', date: '2026-10-15' };
+  const invalidName = { id: 'p-e1', name: '   ', type: 'expense', amount: 2000, recurrence: 'monthly', dayOfMonth: 5 };
+  const invalidAmount = { id: 'p-e2', name: 'Kira', type: 'expense', amount: -50, recurrence: 'monthly', dayOfMonth: 5 };
+  const invalidDay = { id: 'p-e3', name: 'Kira', type: 'expense', amount: 2000, recurrence: 'monthly', dayOfMonth: 32 };
+  const invalidDate = { id: 'p-e4', name: 'Kitap', type: 'expense', amount: 200, recurrence: 'once', date: '' };
+
+  assert(validatePlannedCashflow(validMonthly).isValid === true, 'TC-378 validMonthly passes validation');
+  assert(validatePlannedCashflow(validOnce).isValid === true, 'TC-378 validOnce passes validation');
+  assert(validatePlannedCashflow(invalidName).isValid === false, 'TC-378 empty name fails validation');
+  assert(validatePlannedCashflow(invalidAmount).isValid === false, 'TC-378 negative amount fails validation');
+  assert(validatePlannedCashflow(invalidDay).isValid === false, 'TC-378 day 32 fails validation');
+  assert(validatePlannedCashflow(invalidDate).isValid === false, 'TC-378 empty once date fails validation');
+}
+
+// TC-379: ModalManager Add/Edit/Toggle/Delete Workflow
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem(PLANNED_CASHFLOW_OUTBOX_KEY);
+  const store = new BudgetStore();
+
+  const plan = store.addPlannedCashflow({ name: 'Fatura', type: 'expense', amount: 250, recurrence: 'monthly', dayOfMonth: 20 });
+  assert(store.getPlannedCashflows().length === 1, 'TC-379 plan added');
+  assert(plan.isActive === true, 'TC-379 default isActive is true');
+
+  // Toggle active
+  store.togglePlannedCashflowActive(plan.id);
+  assert(store.getPlannedCashflowById(plan.id).isActive === false, 'TC-379 plan toggled to inactive');
+  store.togglePlannedCashflowActive(plan.id);
+  assert(store.getPlannedCashflowById(plan.id).isActive === true, 'TC-379 plan toggled back to active');
+
+  // Edit
+  store.updatePlannedCashflow(plan.id, { amount: 300 });
+  assert(store.getPlannedCashflowById(plan.id).amount === 300, 'TC-379 plan amount updated');
+
+  // Delete
+  store.deletePlannedCashflow(plan.id);
+  assert(store.getPlannedCashflows().length === 0, 'TC-379 plan deleted from store');
+  assert(store.getPlannedCashflowOutbox().some(op => op.operation === 'delete' && op.id === plan.id), 'TC-379 delete tombstone created in outbox');
+}
+
+// TC-380: Guest & Offline Mode Cashflow Management
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  const store = new BudgetStore();
+  store.addPlannedCashflow({ name: 'KYK Bursu', type: 'income', amount: 2000, recurrence: 'monthly', dayOfMonth: 6 });
+  const refDate = new Date('2026-09-28T10:00:00Z');
+  const vm = getFinancialOutlookViewModel({ store, selectedMonth: '2026-09', now: refDate });
+
+  assert(vm.nextIncome.found === true, 'TC-380 guest computes next income offline');
+  assert(vm.nextIncome.name === 'KYK Bursu', 'TC-380 guest income name matches');
+}
+
+// TC-381: SECTION 31 FULL FINANCIAL COMMAND CENTER SCENARIO (END-TO-END)
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  const store = new BudgetStore();
+
+  // Balance: 5,000 TL with spending pace 520 TL/day
+  store.addTransaction({ title: 'Gelir', amount: 19560, type: 'income', categoryId: 'inc_salary', date: '2026-09-01' });
+  for (let d = 1; d <= 28; d++) {
+    store.addTransaction({
+      title: `Günlük Harcama ${d}`,
+      amount: 520,
+      type: 'expense',
+      categoryId: 'exp_food',
+      date: `2026-09-${String(d).padStart(2, '0')}`
+    });
+  }
+
+  const summary = calculateSummary(store.getTransactions(), new Date('2026-09-28T12:00:00Z'), '2026-09');
+  assert(summary.balance === 5000, 'TC-381 available balance is exactly 5,000 TL');
+
+  // Plan 1: Kira, 2,000 TL expense, 3rd of month
+  store.addPlannedCashflow({
+    name: 'Kira',
+    type: 'expense',
+    amount: 2000,
+    recurrence: 'monthly',
+    dayOfMonth: 3
+  });
+
+  // Plan 2: Aile Desteği, 3,000 TL income, 5th of month (Oct 5 is 7 days from Sep 28)
+  store.addPlannedCashflow({
+    name: 'Aile Desteği',
+    type: 'income',
+    amount: 3000,
+    recurrence: 'monthly',
+    dayOfMonth: 5
+  });
+
+  const refDate = new Date('2026-09-28T12:00:00Z');
+  let vm = getFinancialOutlookViewModel({ store, selectedMonth: '2026-09', now: refDate });
+
+  // 1. Next Income
+  assert(vm.nextIncome.found === true, 'TC-381 Section 31: Next income found');
+  assert(vm.nextIncome.name === 'Aile Desteği', 'TC-381 Section 31: Next income is Aile Desteği');
+  assert(vm.nextIncome.daysUntil === 7, 'TC-381 Section 31: 7 days until next income');
+  assert(vm.nextIncome.amount === 3000, 'TC-381 Section 31: Next income amount is 3,000 TL');
+
+  // 2. Pre-income obligations
+  assert(vm.obligationsBeforeIncome === 2000, 'TC-381 Section 31: Pre-income obligations is 2,000 TL (Kira)');
+
+  // 3. Safe daily spend: (5,000 - 2,000) / 7 = 3,000 / 7 = 428.57 TL/day
+  assert(vm.safeDailySpend === 428.57, 'TC-381 Section 31: Safe daily spend is 428.57 TL/day');
+
+  // 4. Current daily pace: 520 TL/day
+  assert(Math.round(vm.currentDailyPace) === 520, 'TC-381 Section 31: Current daily pace is ~520 TL/day');
+
+  // 5. Projected balance before income: 3000 - (520 * 7) = 3000 - 3640 = -640 TL
+  assert(Math.round(vm.projectedBalanceBeforeNextIncome) === -640, 'TC-381 Section 31: Projected balance is -640 TL');
+
+  // 6. Status: DEFICIT_BEFORE_INCOME
+  assert(vm.coverageStatus === COVERAGE_STATUS.DEFICIT_BEFORE_INCOME, 'TC-381 Section 31: Status is DEFICIT_BEFORE_INCOME');
+
+  // 7. Utilization ratio > 1.0 (520 / 428.57 = 1.213)
+  assert(vm.utilizationRatio > 1.0, 'TC-381 Section 31: Utilization ratio exceeds 1.0');
+
+  // 8. Daily adjustment needed: ~91.43 TL/day
+  assert(Math.abs(vm.dailyAdjustmentNeeded - 91.43) < 0.1, 'TC-381 Section 31: Daily adjustment needed is ~91.43 TL/day');
+
+  // User edits Kira to 1,500 TL
+  const kiraPlan = store.getPlannedCashflows().find(p => p.name === 'Kira');
+  store.updatePlannedCashflow(kiraPlan.id, { amount: 1500 });
+
+  vm = getFinancialOutlookViewModel({ store, selectedMonth: '2026-09', now: refDate });
+  // Available after obligations: 5000 - 1500 = 3500. Safe daily: 3500 / 7 = 500 TL/day
+  assert(vm.obligationsBeforeIncome === 1500, 'TC-381 Section 31: Obligations reduced to 1,500 TL');
+  assert(vm.safeDailySpend === 500, 'TC-381 Section 31: Safe daily spend recalculates immediately to 500 TL/day');
+}
+
+// TC-382: DOM Simulation of UIManager.renderFinancialOutlook
+{
+  const originalDoc = globalThis.document;
+
+  const createMockElement = (id) => ({
+    id,
+    textContent: '',
+    className: '',
+    innerHTML: '',
+    dataset: {},
+    classList: {
+      classes: new Set(['hidden']),
+      add(c) { this.classes.add(c); },
+      remove(c) { this.classes.delete(c); },
+      contains(c) { return this.classes.has(c); }
+    },
+    style: {},
+    appendChild(child) { this.children.push(child); },
+    removeChild(child) {
+      const idx = this.children.indexOf(child);
+      if (idx !== -1) this.children.splice(idx, 1);
+    },
+    setAttribute() {},
+    getAttribute() { return null; },
+    querySelector() { return createMockElement('sub-el'); },
+    querySelectorAll() { return []; },
+    children: [],
+    addEventListener() {}
+  });
+
+  const elements = {};
+  const elementIds = [
+    'financial-outlook-section', 'outlook-historical-badge', 'btn-manage-cashflows',
+    'metric-next-income-days', 'metric-next-income-name', 'metric-next-income-amount',
+    'metric-next-income-date', 'metric-obligations-reserved', 'metric-safe-daily-spend',
+    'metric-safe-daily-status', 'metric-current-daily-pace', 'metric-daily-pace-diff',
+    'metric-month-end-forecast', 'metric-forecast-confidence-note', 'chip-coverage-status',
+    'text-utilization-ratio', 'text-utilization-label', 'bar-utilization', 'text-coverage-context',
+    'outlook-empty-state', 'btn-first-cashflow', 'outlook-details-grid',
+    'outlook-insights-container', 'outlook-timeline-container',
+    'header-date-text', 'header-month-picker', 'btn-prev-month', 'btn-next-month',
+    'btn-theme-toggle', 'theme-icon-moon', 'theme-icon-sun', 'btn-backup-menu',
+    'backup-dropdown', 'btn-export-json', 'btn-open-import', 'btn-load-seed',
+    'btn-edit-initial-budget', 'btn-reset-data', 'btn-open-add-modal',
+    'btn-open-auth', 'user-auth-badge', 'sync-status-indicator', 'icon-sync-cloud',
+    'sync-status-text', 'user-email-text', 'user-avatar-img', 'btn-sign-out', 'btn-manual-sync',
+    'currency-select', 'lang-select', 'metric-net-balance', 'badge-health-status',
+    'badge-carried-balance', 'metric-spent-percent', 'metric-daily-limit', 'badge-days-left',
+    'metric-daily-tip', 'metric-total-income', 'metric-income-count', 'metric-total-expense',
+    'metric-expense-count', 'budget-alert-banner', 'alert-banner-icon-box', 'alert-banner-title',
+    'alert-banner-desc', 'alert-banner-close', 'quick-presets-container', 'btn-edit-presets',
+    'categoryExpenseChart', 'flowChart', 'chart-empty-state', 'flow-chart-empty-state',
+    'transactions-container', 'transactions-empty-state', 'tx-count-badge', 'tx-scope-badge',
+    'tx-search-input', 'tx-search-clear', 'filter-category-select', 'sort-select',
+    'filter-type-all', 'filter-type-income', 'filter-type-expense', 'btn-empty-add-tx', 'btn-empty-reset-seed'
+  ];
+
+  elementIds.forEach(id => {
+    elements[id] = createMockElement(id);
+  });
+
+  globalThis.document = {
+    documentElement: { classList: { add() {}, remove() {}, contains() { return false; } } },
+    body: { classList: { add() {}, remove() {}, contains() { return false; } } },
+    getElementById: (id) => elements[id] || null,
+    createElement: (tag) => createMockElement(tag),
+    querySelectorAll: () => [],
+    addEventListener: () => {},
+    removeEventListener: () => {}
+  };
+
+  SafeStorage.removeItem(STORAGE_KEY);
+  const store = new BudgetStore();
+  store.addTransaction({ title: 'Gelir', amount: 19560, type: 'income', categoryId: 'inc_salary', date: '2026-09-01' });
+  for (let d = 1; d <= 28; d++) {
+    store.addTransaction({ title: `Harcama ${d}`, amount: 520, type: 'expense', categoryId: 'exp_food', date: `2026-09-${String(d).padStart(2, '0')}` });
+  }
+  store.addPlannedCashflow({ name: 'Kira', type: 'expense', amount: 2000, recurrence: 'monthly', dayOfMonth: 3 });
+  store.addPlannedCashflow({ name: 'Aile Desteği', type: 'income', amount: 3000, recurrence: 'monthly', dayOfMonth: 5 });
+
+  const ui = new UIManager(store, { modalManager: { openCashflowManagerModal() {}, openCashflowModal() {} } });
+  ui.renderFinancialOutlook('TRY', 'tr', new Date('2026-09-28T10:00:00Z'));
+
+  assert(elements['metric-next-income-name'].textContent === 'Aile Desteği', 'TC-382 DOM: Next income name rendered');
+  assert(elements['metric-safe-daily-spend'].textContent.includes('428,57'), 'TC-382 DOM: Safe daily spend rendered with 428,57');
+  assert(elements['metric-current-daily-pace'].textContent.includes('520,00'), 'TC-382 DOM: Current pace rendered with 520,00');
+  assert(elements['chip-coverage-status'].textContent === 'Gelir öncesi açık riski', 'TC-382 DOM: Coverage chip shows Turkish deficit label');
+  assert(elements['text-utilization-ratio'].textContent.includes('%121'), 'TC-382 DOM: Utilization ratio rendered as %121');
+  assert(elements['bar-utilization'].className.includes('bg-rose-500'), 'TC-382 DOM: Utilization bar has rose color');
+  assert(elements['outlook-empty-state'].classList.contains('hidden'), 'TC-382 DOM: Empty state hidden when planned cashflows exist');
+  assert(elements['outlook-timeline-container'].children.length > 0, 'TC-382 DOM: Timeline rendered occurrences');
+
+  globalThis.document = originalDoc;
+}
+
+// TC-383: DOM Simulation of Empty State & Open Cashflow Modal CTA
+{
+  const originalDoc = globalThis.document;
+
+  const createMockElement = (id) => ({
+    id,
+    textContent: '',
+    className: '',
+    innerHTML: '',
+    dataset: {},
+    classList: {
+      classes: new Set(['hidden']),
+      add(c) { this.classes.add(c); },
+      remove(c) { this.classes.delete(c); },
+      contains(c) { return this.classes.has(c); }
+    },
+    style: {},
+    appendChild(child) { this.children.push(child); },
+    removeChild(child) {
+      const idx = this.children.indexOf(child);
+      if (idx !== -1) this.children.splice(idx, 1);
+    },
+    setAttribute() {},
+    getAttribute() { return null; },
+    querySelector() { return createMockElement('sub-el'); },
+    querySelectorAll() { return []; },
+    children: [],
+    addEventListener() {}
+  });
+
+  const elements = {};
+  const elementIds = [
+    'financial-outlook-section', 'outlook-historical-badge', 'btn-manage-cashflows',
+    'metric-next-income-days', 'metric-next-income-name', 'metric-next-income-amount',
+    'metric-next-income-date', 'metric-obligations-reserved', 'metric-safe-daily-spend',
+    'metric-safe-daily-status', 'metric-current-daily-pace', 'metric-daily-pace-diff',
+    'metric-month-end-forecast', 'metric-forecast-confidence-note', 'chip-coverage-status',
+    'text-utilization-ratio', 'text-utilization-label', 'bar-utilization', 'text-coverage-context',
+    'outlook-empty-state', 'btn-first-cashflow', 'outlook-details-grid',
+    'outlook-insights-container', 'outlook-timeline-container',
+    'header-date-text', 'header-month-picker', 'btn-prev-month', 'btn-next-month',
+    'btn-theme-toggle', 'theme-icon-moon', 'theme-icon-sun', 'btn-backup-menu',
+    'backup-dropdown', 'btn-export-json', 'btn-open-import', 'btn-load-seed',
+    'btn-edit-initial-budget', 'btn-reset-data', 'btn-open-add-modal',
+    'btn-open-auth', 'user-auth-badge', 'sync-status-indicator', 'icon-sync-cloud',
+    'sync-status-text', 'user-email-text', 'user-avatar-img', 'btn-sign-out', 'btn-manual-sync',
+    'currency-select', 'lang-select', 'metric-net-balance', 'badge-health-status',
+    'badge-carried-balance', 'metric-spent-percent', 'metric-daily-limit', 'badge-days-left',
+    'metric-daily-tip', 'metric-total-income', 'metric-income-count', 'metric-total-expense',
+    'metric-expense-count', 'budget-alert-banner', 'alert-banner-icon-box', 'alert-banner-title',
+    'alert-banner-desc', 'alert-banner-close', 'quick-presets-container', 'btn-edit-presets',
+    'categoryExpenseChart', 'flowChart', 'chart-empty-state', 'flow-chart-empty-state',
+    'transactions-container', 'transactions-empty-state', 'tx-count-badge', 'tx-scope-badge',
+    'tx-search-input', 'tx-search-clear', 'filter-category-select', 'sort-select',
+    'filter-type-all', 'filter-type-income', 'filter-type-expense', 'btn-empty-add-tx', 'btn-empty-reset-seed'
+  ];
+
+  elementIds.forEach(id => {
+    elements[id] = createMockElement(id);
+  });
+
+  globalThis.document = {
+    documentElement: { classList: { add() {}, remove() {}, contains() { return false; } } },
+    body: { classList: { add() {}, remove() {}, contains() { return false; } } },
+    getElementById: (id) => elements[id] || null,
+    createElement: (tag) => createMockElement(tag),
+    querySelectorAll: () => [],
+    addEventListener: () => {},
+    removeEventListener: () => {}
+  };
+
+  SafeStorage.removeItem(STORAGE_KEY);
+  const store = new BudgetStore(); // 0 transactions, 0 planned cashflows
+  const ui = new UIManager(store, { modalManager: { openCashflowManagerModal() {}, openCashflowModal() {} } });
+  ui.renderFinancialOutlook('TRY', 'tr');
+
+  assert(elements['metric-next-income-name'].textContent === 'Planlı gelir yok', 'TC-383 DOM: Empty state shows "Planlı gelir yok"');
+  assert(elements['chip-coverage-status'].textContent === 'Planlı gelir yok', 'TC-383 DOM: Coverage chip shows "Planlı gelir yok"');
+  assert(!elements['outlook-empty-state'].classList.contains('hidden'), 'TC-383 DOM: Empty state banner is visible');
+
+  globalThis.document = originalDoc;
+}
+
+// TC-384: ModalManager Cashflow Modal DOM Interaction (Bottom Sheet & Zero Native Confirm)
+{
+  const originalDoc = globalThis.document;
+  const originalConfirm = globalThis.confirm;
+  let nativeConfirmCalled = false;
+  globalThis.confirm = () => { nativeConfirmCalled = true; return true; };
+
+  const createMockElement = (id) => ({
+    id,
+    value: '',
+    textContent: '',
+    className: '',
+    innerHTML: '',
+    classList: {
+      classes: new Set(['hidden']),
+      add(c) { this.classes.add(c); },
+      remove(c) { this.classes.delete(c); },
+      contains(c) { return this.classes.has(c); }
+    },
+    style: {},
+    appendChild(child) { this.children.push(child); },
+    children: [],
+    addEventListener() {},
+    setAttribute() {},
+    focus() {}
+  });
+
+  const modalIds = [
+    'cashflow-manager-modal', 'cashflow-manager-list', 'cashflow-manager-empty',
+    'cashflow-modal', 'cashflow-form', 'cashflow-modal-title', 'cashflow-field-id',
+    'cashflow-field-type', 'cashflow-field-recurrence', 'cashflow-field-name',
+    'cashflow-field-amount', 'cashflow-field-day', 'cashflow-field-date',
+    'cashflow-field-category', 'cashflow-field-start', 'cashflow-field-end',
+    'cashflow-field-active', 'cashflow-type-expense-btn', 'cashflow-type-income-btn',
+    'cashflow-rec-monthly-btn', 'cashflow-rec-once-btn', 'cashflow-day-container',
+    'cashflow-date-container', 'cashflow-category-container',
+    'cashflow-err-name', 'cashflow-err-amount', 'cashflow-err-day', 'cashflow-err-date',
+    'confirm-modal', 'confirm-modal-title', 'confirm-modal-desc', 'confirm-modal-action-btn'
+  ];
+
+  const elements = {};
+  modalIds.forEach(id => {
+    elements[id] = createMockElement(id);
+  });
+
+  globalThis.document = {
+    body: { classList: { add() {}, remove() {}, contains() { return false; } } },
+    getElementById: (id) => elements[id] || null,
+    createElement: (tag) => createMockElement(tag),
+    querySelectorAll: () => []
+  };
+
+  SafeStorage.removeItem(STORAGE_KEY);
+  const store = new BudgetStore();
+  const plan = store.addPlannedCashflow({ name: 'Silinecek Plan', type: 'expense', amount: 500, recurrence: 'monthly', dayOfMonth: 10 });
+
+  let confirmModalConfig = null;
+  const mockUI = { refreshIcons() {} };
+  const modalMgr = new ModalManager(store, mockUI);
+  modalMgr.openConfirmModal = (config) => {
+    confirmModalConfig = config;
+  };
+
+  // Test opening manager modal
+  modalMgr.openCashflowManagerModal();
+  assert(!elements['cashflow-manager-modal'].classList.contains('hidden'), 'TC-384 Cashflow manager modal opened');
+
+  // Test opening add modal
+  modalMgr.openCashflowModal('add');
+  assert(!elements['cashflow-modal'].classList.contains('hidden'), 'TC-384 Add cashflow modal opened');
+
+  // Test delete flow via modalManager
+  modalMgr.requestDeletePlannedCashflow(plan.id);
+  assert(confirmModalConfig !== null, 'TC-384 Confirm modal opened for delete');
+  assert(confirmModalConfig.title === t('cashflow.deleteConfirmTitle'), 'TC-384 Confirm modal title matches');
+  assert(nativeConfirmCalled === false, 'TC-384 ZERO native window.confirm calls made');
+
+  // Confirm delete execution
+  confirmModalConfig.onConfirm();
+  assert(store.getPlannedCashflows().length === 0, 'TC-384 Plan deleted upon confirmation');
+
+  globalThis.confirm = originalConfirm;
+  globalThis.document = originalDoc;
+}
+
+// TC-385: Verification of No Hardcoded Math in UIManager
+{
+  const uiManagerCode = fs.readFileSync(path.join(process.cwd(), 'src/components/UIManager.js'), 'utf-8');
+  assert(uiManagerCode.includes('getFinancialOutlookViewModel'), 'TC-385 UIManager consumes getFinancialOutlookViewModel');
+  assert(!uiManagerCode.includes('baselineDailyRate / safeDailySpendUntilNextIncome'), 'TC-385 No duplicate utilization formula in UIManager');
+  assert(!uiManagerCode.includes('availableAfterPlannedObligations / daysUntilNextIncome'), 'TC-385 No duplicate safe daily spend formula in UIManager');
+}
+
+// TC-386: Historical & Future Month Time-Axis Separation (Requirements A-F)
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  const store = new BudgetStore();
+  const refDate = new Date('2026-09-28T10:00:00Z');
+
+  // Setup:
+  // Historical transactions in August:
+  // Income: 5,000, Expense: 2,000 -> August end balance = 3,000
+  store.addTransaction({ title: 'Ağustos Gelir', amount: 5000, type: 'income', categoryId: 'inc_salary', date: '2026-08-01' });
+  store.addTransaction({ title: 'Ağustos Gider', amount: 2000, type: 'expense', categoryId: 'cat_market', date: '2026-08-15' });
+
+  // Current transactions in September (up to Sep 28):
+  // Income: 7,000, Expense: 5,000 -> Cumulative balance on Sep 28 = 3,000 + 7,000 - 5,000 = 5,000
+  store.addTransaction({ title: 'Eylül Maaş', amount: 7000, type: 'income', categoryId: 'inc_salary', date: '2026-09-01' });
+  store.addTransaction({ title: 'Eylül Harcama 1', amount: 3000, type: 'expense', categoryId: 'cat_market', date: '2026-09-10' });
+  store.addTransaction({ title: 'Eylül Harcama 2', amount: 2000, type: 'expense', categoryId: 'cat_market', date: '2026-09-20' });
+
+  // Planned cashflows:
+  // Kira 2,000 on 3rd of month, Aile 3,000 on 5th of month
+  store.addPlannedCashflow({ name: 'Kira', type: 'expense', amount: 2000, recurrence: 'monthly', dayOfMonth: 3, categoryId: 'cat_rent' });
+  store.addPlannedCashflow({ name: 'Aile Desteği', type: 'income', amount: 3000, recurrence: 'monthly', dayOfMonth: 5 });
+
+  // A) Current month selected -> same behavior as before
+  const vmCurrent = getFinancialOutlookViewModel({ store, selectedMonth: '2026-09', now: refDate });
+  assert(vmCurrent.isCurrentMonth === true, 'TC-386-A isCurrentMonth true for 2026-09');
+  assert(vmCurrent.isHistorical === false, 'TC-386-A isHistorical false for 2026-09');
+  assert(vmCurrent.isFuture === false, 'TC-386-A isFuture false for 2026-09');
+  assert(vmCurrent.currentAvailableBalance === 5000, 'TC-386-A currentAvailableBalance is 5000 in current month');
+  assert(vmCurrent.nextIncome.name === 'Aile Desteği', 'TC-386-A nextIncome is Aile Desteği');
+  assert(vmCurrent.nextIncome.daysUntil === 7, 'TC-386-A 7 days until next income');
+  assert(Math.abs(vmCurrent.safeDailySpend - 428.57) < 0.1, 'TC-386-A safeDailySpend is ~428.57');
+
+  // Verify historical summary balance for August vs Live balance
+  const augSummary = calculateSummary(store.getTransactions(), refDate, '2026-08');
+  assert(augSummary.balance === 3000, 'TC-386 Historical August summary balance is 3000');
+
+  // B) Historical selectedMonth (2026-08):
+  // Financial Outlook currentAvailableBalance is identical to current-month live balance (5000, NOT 3000)
+  const vmHistorical = getFinancialOutlookViewModel({ store, selectedMonth: '2026-08', now: refDate });
+  assert(vmHistorical.currentAvailableBalance === vmCurrent.currentAvailableBalance, 'TC-386-B Historical selectedMonth has identical live balance to current month');
+  assert(vmHistorical.currentAvailableBalance === 5000, 'TC-386-B Historical selectedMonth uses live 5000 balance, not historical 3000');
+
+  // C) Historical selectedMonth:
+  // next income and safe daily spend are identical to current live outlook
+  assert(vmHistorical.nextIncome.found === vmCurrent.nextIncome.found, 'TC-386-C nextIncome found matches current');
+  assert(vmHistorical.nextIncome.date === vmCurrent.nextIncome.date, 'TC-386-C nextIncome date matches current');
+  assert(vmHistorical.nextIncome.daysUntil === vmCurrent.nextIncome.daysUntil, 'TC-386-C nextIncome daysUntil matches current');
+  assert(vmHistorical.safeDailySpend === vmCurrent.safeDailySpend, 'TC-386-C safeDailySpend matches current');
+
+  // D) Historical selectedMonth:
+  // currentDailyPace comes from current month forecast, not historical forecast
+  assert(vmHistorical.currentDailyPace === vmCurrent.currentDailyPace, 'TC-386-D currentDailyPace comes from current month forecast');
+
+  // E) Historical selectedMonth:
+  // dashboard period flag remains historical and explanatory badge is visible
+  assert(vmHistorical.isHistorical === true, 'TC-386-E isHistorical is true for 2026-08');
+  assert(vmHistorical.isCurrentMonth === false, 'TC-386-E isCurrentMonth is false for 2026-08');
+  assert(vmHistorical.targetMonth === '2026-08', 'TC-386-E targetMonth preserved as 2026-08');
+
+  // Verify badge visibility in DOM when historical month selected
+  const originalDoc = globalThis.document;
+  const mockBadge = {
+    classList: {
+      classes: new Set(['hidden']),
+      add(c) { this.classes.add(c); },
+      remove(c) { this.classes.delete(c); },
+      contains(c) { return this.classes.has(c); }
+    },
+    textContent: ''
+  };
+  const mockSection = { querySelector: () => null };
+  globalThis.document = {
+    getElementById: (id) => {
+      if (id === 'outlook-historical-badge') return mockBadge;
+      if (id === 'financial-outlook-section') return mockSection;
+      return null;
+    },
+    querySelectorAll: () => [],
+    createElement: () => ({ classList: { add() {}, remove() {}, contains() { return false; } } }),
+    documentElement: { classList: { add() {}, remove() {}, contains() { return false; } } },
+    body: { classList: { add() {}, remove() {}, contains() { return false; } } },
+    addEventListener: () => {},
+    removeEventListener: () => {}
+  };
+  const ui = new UIManager(store);
+  ui.financialOutlookSection = mockSection;
+  ui.outlookHistoricalBadge = mockBadge;
+  ui.selectedMonth = '2026-08';
+  ui.renderFinancialOutlook('TRY', 'tr', refDate);
+  assert(!mockBadge.classList.contains('hidden'), 'TC-386-E explanatory badge is visible when browsing historical month');
+  assert(mockBadge.textContent === 'Bugünkü finansal durum — Seçili ay görünümünden bağımsızdır.', 'TC-386-E badge text shows live independent notice');
+
+  // When browsing current month, badge is hidden
+  ui.selectedMonth = '2026-09';
+  ui.renderFinancialOutlook('TRY', 'tr', refDate);
+  assert(mockBadge.classList.contains('hidden'), 'TC-386-E explanatory badge is hidden when browsing current month');
+
+  // F) Future selectedMonth (2026-10) does not move live Financial Outlook into the future
+  const vmFuture = getFinancialOutlookViewModel({ store, selectedMonth: '2026-10', now: refDate });
+  assert(vmFuture.isFuture === true, 'TC-386-F isFuture is true for 2026-10');
+  assert(vmFuture.isCurrentMonth === false, 'TC-386-F isCurrentMonth is false for 2026-10');
+  assert(vmFuture.currentAvailableBalance === vmCurrent.currentAvailableBalance, 'TC-386-F Future month uses today live balance');
+  assert(vmFuture.nextIncome.date === vmCurrent.nextIncome.date, 'TC-386-F Future month nextIncome date is still based on today');
+  assert(vmFuture.safeDailySpend === vmCurrent.safeDailySpend, 'TC-386-F Future month safeDailySpend matches today');
+
+  // When browsing future month, badge is visible
+  ui.selectedMonth = '2026-10';
+  ui.renderFinancialOutlook('TRY', 'tr', refDate);
+  assert(!mockBadge.classList.contains('hidden'), 'TC-386-F explanatory badge is visible when browsing future month');
+
+  globalThis.document = originalDoc;
+}
+
+// TC-387: Clarify Month-End Forecast Expense vs Balance Semantics Contract
+{
+  SafeStorage.removeItem(STORAGE_KEY);
+  const store = new BudgetStore();
+  const refDate = new Date('2026-09-28T10:00:00Z');
+  store.addTransaction({ title: 'Gelir', amount: 5000, type: 'income', categoryId: 'inc_salary', date: '2026-09-01' });
+  store.addTransaction({ title: 'Harcama', amount: 1500, type: 'expense', categoryId: 'cat_market', date: '2026-09-15' });
+
+  const vm = getFinancialOutlookViewModel({ store, selectedMonth: '2026-09', now: refDate });
+
+  // 1. Metric is projectedExpense, NOT projectedBalance or netBalance
+  assert(typeof vm.monthEndForecast.projectedExpense === 'number', 'TC-387 monthEndForecast exposes projectedExpense as number');
+  assert(vm.monthEndForecast.projectedExpense > 0, 'TC-387 projectedExpense is positive expense forecast');
+  assert(vm.monthEndForecast.projectedBalance === undefined, 'TC-387 monthEndForecast does NOT expose projectedBalance');
+  assert(vm.monthEndForecast.netBalance === undefined, 'TC-387 monthEndForecast does NOT expose netBalance');
+
+  // 2. Translations are consistent with "Ay sonu gider tahmini" / "Projected month-end spending"
+  assert(tr.financialOutlook.monthEndForecastTitle === 'Ay sonu gider tahmini', 'TC-387 TR title is Ay sonu gider tahmini');
+  assert(!tr.financialOutlook.monthEndForecastTitle.toLowerCase().includes('bakiye'), 'TC-387 TR title does not contain bakiye');
+  assert(en.financialOutlook.monthEndForecastTitle === 'Projected month-end spending', 'TC-387 EN title is Projected month-end spending');
+  assert(!en.financialOutlook.monthEndForecastTitle.toLowerCase().includes('balance'), 'TC-387 EN title does not contain balance');
+
+  // 3. index.html does not misrepresent Metric D as balance
+  const indexHtml = fs.readFileSync(path.join(process.cwd(), 'index.html'), 'utf-8');
+  assert(indexHtml.includes('data-i18n="financialOutlook.monthEndForecastTitle">Ay sonu gider tahmini</span>'), 'TC-387 index.html Metric D label matches Ay sonu gider tahmini');
+  assert(!indexHtml.includes('Ay Sonu Harcama Tahmini'), 'TC-387 index.html does not use old title');
+  assert(!indexHtml.includes('Ay sonu bakiye'), 'TC-387 index.html does not call forecast bakiye');
+}
+
+// TC-388: Final UI Polish & Dashboard Financial Hierarchy Verification
+{
+  const indexHtml = fs.readFileSync(path.join(process.cwd(), 'index.html'), 'utf-8');
+
+  // 1. Old hero safe-limit card no longer exists in index.html
+  assert(!indexHtml.includes('id="star-card-container"'), 'TC-388 Old star-card-container no longer exists in DOM');
+  assert(!indexHtml.includes('id="metric-daily-limit"'), 'TC-388 Old metric-daily-limit no longer exists in DOM');
+  assert(!indexHtml.includes('id="badge-days-left"'), 'TC-388 Old badge-days-left no longer exists in DOM');
+  assert(!indexHtml.includes('id="metric-daily-tip"'), 'TC-388 Old metric-daily-tip no longer exists in DOM');
+
+  // 2. New Financial Outlook safe limit still exists
+  assert(indexHtml.includes('id="metric-safe-daily-spend"'), 'TC-388 Canonical metric-safe-daily-spend exists in Financial Outlook');
+  assert(indexHtml.includes('data-i18n="financialOutlook.safeDailySpendTitle"'), 'TC-388 safeDailySpendTitle data-i18n tag exists');
+  assert(indexHtml.includes('data-i18n="financialOutlook.safeDailySpendSub"'), 'TC-388 safeDailySpendSub data-i18n tag exists');
+
+  // 3. Remaining 3 hero cards balanced in 3-column responsive grid
+  assert(indexHtml.includes('grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4'), 'TC-388 Hero summary grid uses 3 balanced columns (sm:grid-cols-3)');
+  assert(indexHtml.includes('id="metric-net-balance"'), 'TC-388 Hero card 1 (Net Balance) exists');
+  assert(indexHtml.includes('id="metric-total-income"'), 'TC-388 Hero card 2 (Total Income) exists');
+  assert(indexHtml.includes('id="metric-total-expense"'), 'TC-388 Hero card 3 (Total Expense) exists');
+
+  // 4. Financial Outlook compactness
+  assert(indexHtml.includes('id="financial-outlook-section" class="bg-white dark:bg-slate-900 p-3.5 sm:p-4'), 'TC-388 Financial Outlook has compact padding (p-3.5 sm:p-4)');
+  assert(!indexHtml.includes('data-i18n="financialOutlook.monthEndForecastSub">Deterministik projeksiyon</div>'), 'TC-388 Duplicate Deterministik projeksiyon subtitle removed from Metric D body');
+  assert(indexHtml.includes('id="bar-utilization" class="bg-indigo-600 h-1.5 rounded-full'), 'TC-388 bar-utilization uses sleek compact height (h-1.5)');
+
+  // 5. Dashboard hierarchy: Summary -> Financial Outlook -> Charts -> Transactions
+  const summaryIdx = indexHtml.indexOf('data-i18n="cards.netBalance"');
+  const outlookIdx = indexHtml.indexOf('id="financial-outlook-section"');
+  const chartsIdx = indexHtml.indexOf('id="categoryExpenseChart"');
+  const txIdx = indexHtml.indexOf('id="transactions-container"');
+  assert(summaryIdx < outlookIdx, 'TC-388 Hierarchy: Summary is above Financial Outlook');
+  assert(outlookIdx < chartsIdx, 'TC-388 Hierarchy: Financial Outlook is above Charts');
+  assert(chartsIdx < txIdx, 'TC-388 Hierarchy: Charts are above Transactions');
+
+  // 6. Translations validity for canonical limit
+  assert(Boolean(tr.financialOutlook.safeDailySpendTitle), 'TC-388 TR safeDailySpendTitle exists');
+  assert(tr.financialOutlook.safeDailySpendSub === 'Bir sonraki gelire kadar', 'TC-388 TR safeDailySpendSub matches Bir sonraki gelire kadar');
+  assert(Boolean(en.financialOutlook.safeDailySpendTitle), 'TC-388 EN safeDailySpendTitle exists');
+  assert(en.financialOutlook.safeDailySpendSub === 'Until next income', 'TC-388 EN safeDailySpendSub matches Until next income');
+
+  // 7. Coverage status & utilization elements remain visible and accessible
+  assert(indexHtml.includes('id="chip-coverage-status"'), 'TC-388 chip-coverage-status exists');
+  assert(indexHtml.includes('id="text-utilization-ratio"'), 'TC-388 text-utilization-ratio exists');
+  assert(indexHtml.includes('id="text-utilization-label"'), 'TC-388 text-utilization-label exists');
+  assert(indexHtml.includes('id="text-coverage-context"'), 'TC-388 text-coverage-context exists');
+
+  // 8. Runtime safety of UIManager without old hero elements
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem(STORAGE_KEY);
+  const originalDoc = globalThis.document;
+  const mockElements = {
+    'metric-net-balance': { textContent: '' },
+    'badge-health-status': { textContent: '', className: '' },
+    'badge-carried-balance': { textContent: '' },
+    'metric-spent-percent': { textContent: '' },
+    'metric-total-income': { textContent: '' },
+    'metric-income-count': { textContent: '' },
+    'metric-total-expense': { textContent: '' },
+    'metric-expense-count': { textContent: '' }
+    // Note: metric-daily-limit, badge-days-left, metric-daily-tip are intentionally omitted (null)
+  };
+  globalThis.document = {
+    getElementById: (id) => mockElements[id] || null,
+    querySelectorAll: () => [],
+    createElement: () => ({ classList: { add() {}, remove() {}, contains() { return false; } } }),
+    documentElement: { classList: { add() {}, remove() {}, contains() { return false; } } },
+    body: { classList: { add() {}, remove() {}, contains() { return false; } } },
+    addEventListener: () => {},
+    removeEventListener: () => {}
+  };
+  const store = new BudgetStore();
+  store.addTransaction({ title: 'Gelir', amount: 5000, type: 'income', categoryId: 'inc_salary', date: '2026-09-01' });
+  store.addTransaction({ title: 'Gider', amount: 2000, type: 'expense', categoryId: 'cat_market', date: '2026-09-02' });
+
+  const ui = new UIManager(store);
+  assert(ui.metricDailyLimit === null, 'TC-388 UIManager.metricDailyLimit safely evaluates to null');
+  assert(ui.badgeDaysLeft === null, 'TC-388 UIManager.badgeDaysLeft safely evaluates to null');
+  assert(ui.metricDailyTip === null, 'TC-388 UIManager.metricDailyTip safely evaluates to null');
+
+  const summary = calculateSummary(store.getTransactions(), new Date('2026-09-28T12:00:00Z'), '2026-09');
+  let renderThrew = false;
+  try {
+    ui.renderDashboardCards(summary, 'TRY', 'tr');
+  } catch (err) {
+    renderThrew = true;
+  }
+  assert(!renderThrew, 'TC-388 renderDashboardCards runs with ZERO errors when hero safe-limit elements are absent');
+  assert(mockElements['metric-net-balance'].textContent.includes('3.000,00'), 'TC-388 Net balance card rendered correctly in 3-card layout');
+  assert(mockElements['metric-total-income'].textContent.includes('5.000,00'), 'TC-388 Total income card rendered correctly in 3-card layout');
+  assert(mockElements['metric-total-expense'].textContent.includes('2.000,00'), 'TC-388 Total expense card rendered correctly in 3-card layout');
+
+  globalThis.document = originalDoc;
 }
 
 console.log('\n====================================================');
