@@ -261,7 +261,7 @@ export default {
     noInsights: 'No notable insights yet.',
     daysCount: '{days} days left',
     obligationsReserved: 'Reserved obligations: {amount}',
-    upcomingTimelineTitle: 'Upcoming Cashflow Timeline',
+    upcomingTimelineTitle: 'Upcoming Cash Flows',
     noTimeline: 'No upcoming cashflows.',
     emptyTitle: 'Plan Your Cashflow',
     emptyDesc: 'Add your upcoming scholarship, rent, or recurring payment to see your safe daily spend until income day.',

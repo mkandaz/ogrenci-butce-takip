@@ -10713,6 +10713,138 @@ console.log('\n--- 33. FAZ 5.7.2 — SEO & WEB LAUNCH POLISH (TC-394) ---');
   assert(indexHtml.includes('data-i18n="seo.features.whatifTitle"'), 'TC-394-6 What-If feature card present');
 }
 
+// TC-395: FAZ 5.7.3 — TIME MODEL, MONTH ROLLOVER, PLANNED CASHFLOW SEMANTIC QA
+console.log('\n--- 34. FAZ 5.7.3 — TIME MODEL, MONTH ROLLOVER & CASHFLOW QA (TC-395) ---');
+{
+  // A. Month Rollover & Local Timezone Boundaries
+  SafeStorage.removeItem(STORAGE_KEY);
+  const storeWithOldSep = new BudgetStore();
+  storeWithOldSep.state.settings.targetMonth = '2026-09';
+
+  // Fresh init on 2026-10-01 must open in October 2026, NOT locked to past targetMonth '2026-09'
+  const octDate = new Date('2026-10-01T10:00:00');
+  const uiOct = new UIManager(storeWithOldSep, { now: octDate });
+  assert(uiOct.selectedMonth === '2026-10', 'TC-395-A Fresh init on 2026-10-01 defaults to October 2026 even when past targetMonth was 2026-09');
+  assert(formatMonthTitle(uiOct.selectedMonth, 'tr') === 'Ekim 2026', 'TC-395-A Turkish title is Ekim 2026');
+  assert(formatMonthTitle(uiOct.selectedMonth, 'en') === 'October 2026', 'TC-395-A English title is October 2026');
+
+  // Fresh init on 2026-09-30 must open in September 2026
+  const sepDate = new Date('2026-09-30T15:00:00');
+  const uiSep = new UIManager(new BudgetStore(), { now: sepDate });
+  assert(uiSep.selectedMonth === '2026-09', 'TC-395-A Fresh init on 2026-09-30 defaults to September 2026');
+
+  // Verify initBootstrap does not overwrite selectedMonth with store targetMonth
+  if (typeof uiOct.initBootstrap === 'function') {
+    uiOct.initBootstrap();
+    assert(uiOct.selectedMonth === '2026-10', 'TC-395-A initBootstrap does not revert selectedMonth to past targetMonth');
+  }
+
+  // Local Timezone Month Boundary test
+  const earlyOctLocal = new Date(2026, 9, 1, 0, 15, 0); // Oct 1, 00:15
+  assert(getCurrentYearMonth(earlyOctLocal) === '2026-10', 'TC-395-A Local time 00:15 on Oct 1 resolves to 2026-10');
+  const lateSepLocal = new Date(2026, 8, 30, 23, 45, 0); // Sep 30, 23:45
+  assert(getCurrentYearMonth(lateSepLocal) === '2026-09', 'TC-395-A Local time 23:45 on Sep 30 resolves to 2026-09');
+
+  // B. Carry-Over Calculations
+  const carryStore = new BudgetStore();
+  carryStore.addTransaction({
+    title: 'Eylül Maaş / Burs',
+    amount: 12000,
+    type: 'income',
+    categoryId: 'inc_other',
+    date: '2026-09-01'
+  });
+  carryStore.addTransaction({
+    title: 'Eylül Harcamalar',
+    amount: 2629,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-15'
+  });
+  // September closing balance = 12000 - 2629 = 9371
+
+  const octSummary = calculateSummary(carryStore.getTransactions(), new Date('2026-10-01T12:00:00'), '2026-10');
+  assert(octSummary.carriedOverBalance === 9371, `TC-395-B Carried over balance into October is 9371 (got ${octSummary.carriedOverBalance})`);
+  assert(octSummary.totalIncome === 0, 'TC-395-B October fresh month total income is 0');
+  assert(octSummary.totalExpense === 0, 'TC-395-B October fresh month total expense is 0');
+  assert(octSummary.balance === 9371, 'TC-395-B Remaining budget in fresh October equals carried over 9371');
+
+  // C. Planned Cashflow Persistence Semantics
+  const flowStore = new BudgetStore();
+  const kykFlow = flowStore.addPlannedCashflow({
+    name: 'KYK Bursu',
+    type: 'income',
+    amount: 2000,
+    recurrence: 'monthly',
+    dayOfMonth: 6
+  });
+  const oneTimeFlow = flowStore.addPlannedCashflow({
+    name: 'Özel Proje Avansı',
+    type: 'income',
+    amount: 500,
+    recurrence: 'once',
+    date: '2026-10-04'
+  });
+
+  assert(flowStore.getPlannedCashflows().length === 2, 'TC-395-C Initial planned cashflows count is 2');
+
+  // Switching selected month must NEVER mutate, delete, or reset planned cashflows
+  const flowUi = new UIManager(flowStore, { now: octDate });
+  flowUi.setMonth('2026-09');
+  assert(flowStore.getPlannedCashflows().length === 2, 'TC-395-C planned_cashflows record count unchanged after switching to September');
+  flowUi.setMonth('2026-10');
+  assert(flowStore.getPlannedCashflows().length === 2, 'TC-395-C planned_cashflows record count unchanged after switching to October');
+  flowUi.setMonth('2026-11');
+  assert(flowStore.getPlannedCashflows().length === 2, 'TC-395-C planned_cashflows record count unchanged after switching to November');
+
+  // Occurrence timeline generation on 2026-10-01
+  const occOct1 = generateCashflowOccurrences(flowStore.getPlannedCashflows(), { now: new Date('2026-10-01T12:00:00'), horizonDays: 60 });
+  const oct1Dates = occOct1.map(o => `${o.name}:${o.date}`);
+  assert(oct1Dates.includes('Özel Proje Avansı:2026-10-04'), 'TC-395-C One-time October 4 flow is upcoming on October 1');
+  assert(oct1Dates.includes('KYK Bursu:2026-10-06'), 'TC-395-C Recurring KYK bursu next occurrence is October 6');
+
+  // Occurrence timeline generation on 2026-10-07 (after October 6)
+  const occOct7 = generateCashflowOccurrences(flowStore.getPlannedCashflows(), { now: new Date('2026-10-07T12:00:00'), horizonDays: 60 });
+  const oct7Dates = occOct7.map(o => `${o.name}:${o.date}`);
+  assert(!oct7Dates.includes('Özel Proje Avansı:2026-10-04'), 'TC-395-C Past one-time October 4 flow excluded from upcoming on October 7');
+  assert(oct7Dates.includes('KYK Bursu:2026-11-06'), 'TC-395-C Recurring KYK bursu next occurrence moves to November 6');
+
+  // D. Historical Month Navigation & Live Financial Outlook Isolation
+  flowUi.setMonth('2026-09');
+  assert(flowUi.selectedMonth === '2026-09', 'TC-395-D Historical September selected in UI');
+
+  const historicalOutlook = getFinancialOutlookViewModel({
+    store: flowStore,
+    selectedMonth: '2026-09',
+    now: new Date('2026-10-01T12:00:00')
+  });
+
+  assert(historicalOutlook.isHistorical === true, 'TC-395-D isHistorical is true for September view');
+  assert(historicalOutlook.isCurrentMonth === false, 'TC-395-D isCurrentMonth is false for September view');
+  assert(historicalOutlook.referenceDate === '2026-10-01', 'TC-395-D Financial Outlook is anchored to live current date 2026-10-01');
+  assert(historicalOutlook.nextIncome.found === true && historicalOutlook.nextIncome.date === '2026-10-04', 'TC-395-D Financial Outlook reflects live upcoming income even while user views September');
+
+  // E. Safe Daily Spending Terminology & Math Contract Verification
+  assert(tr.financialOutlook.safeDailySpendTitle === 'Güvenli Günlük Harcama', 'TC-395-E TR title is Güvenli Günlük Harcama');
+  assert(tr.financialOutlook.safeDailySpendSub === 'Bir sonraki gelire kadar', 'TC-395-E TR sub is Bir sonraki gelire kadar');
+  assert(en.financialOutlook.safeDailySpendTitle === 'Safe Daily Spending', 'TC-395-E EN title is Safe Daily Spending');
+  assert(en.financialOutlook.safeDailySpendSub === 'Until next income', 'TC-395-E EN sub is Until next income');
+  assert(tr.financialOutlook.manageCashflows === 'Planları Yönet', 'TC-395-E TR CTA is Planları Yönet');
+  assert(tr.financialOutlook.upcomingTimelineTitle === 'Yaklaşan Akışlar', 'TC-395-E TR Section is Yaklaşan Akışlar');
+  assert(en.financialOutlook.upcomingTimelineTitle === 'Upcoming Cash Flows', 'TC-395-E EN Section is Upcoming Cash Flows');
+
+  // Math contract unchanged: safeDailySpend = availableAfterPlannedObligations / daysUntilNextIncome
+  const testPlan = planCashflow({
+    plannedCashflows: [kykFlow],
+    options: {
+      now: new Date('2026-10-01T12:00:00'),
+      currentAvailableBalance: 1000
+    }
+  });
+  // Next income: Oct 6, daysUntil = 5. Available = 1000, obligations = 0 => 1000 / 5 = 200/day
+  assert(testPlan.spending.safeDailySpendUntilNextIncome === 200, 'TC-395-E Planner math contract unchanged (1000 / 5 days = 200 TL/day)');
+}
+
 console.log('\n====================================================');
 console.log(`🏁 ENTEGRE TEST SONUCU: ${passed} PASSED, ${failed} FAILED`);
 console.log('====================================================');

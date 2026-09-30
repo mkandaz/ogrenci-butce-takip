@@ -118,7 +118,8 @@ export class UIManager {
     this.authService = options.authService || authService;
     this.syncService = options.syncService || new SyncService(this.store);
     const initialNow = options.now instanceof Date ? options.now : (options.now ? new Date(options.now) : null);
-    this.selectedMonth = options.selectedMonth || (initialNow ? getCurrentYearMonth(initialNow) : (this.store.state.settings?.targetMonth || getCurrentYearMonth()));
+    const currentLocalMonth = getCurrentYearMonth(initialNow || new Date());
+    this.selectedMonth = options.selectedMonth || currentLocalMonth;
     this.activeFilter = 'all'; // 'all' | 'income' | 'expense'
     this.searchQuery = '';
     this.categoryFilter = '';
@@ -194,9 +195,6 @@ export class UIManager {
           this.renderAuthBadge(user);
           this.renderSyncStatus('syncing', 'Bulut verileri eşitleniyor...');
           await this.syncService.sync(user);
-          if (this.store.state.settings?.targetMonth) {
-            this.selectedMonth = this.store.state.settings.targetMonth;
-          }
         }
       } catch (err) {
         console.warn('[UIManager] Başlangıç auth/sync uyarısı:', err);
