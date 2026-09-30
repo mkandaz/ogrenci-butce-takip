@@ -5,6 +5,10 @@ import { t } from '../i18n/index.js';
 import { showToast } from './toastManager.js';
 import { DEFAULT_PRESETS } from '../config/defaultData.js';
 import { authService } from '../services/authService.js';
+import { SCENARIO_TYPES, simulateWhatIf } from '../services/whatIfEngine.js';
+import { calculateSummary } from '../store/calculations.js';
+import { getWhatIfDecisionSupport, DECISION_IMPACT_CODES } from '../services/whatIfDecisionSupportService.js';
+import { COVERAGE_STATUS } from '../services/cashflowPlannerEngine.js';
 
 export class ModalManager {
   constructor(store, uiManager) {
@@ -12,6 +16,11 @@ export class ModalManager {
     this.ui = uiManager;
     this.lastFocusedElement = null;
     this.confirmCallback = null;
+
+    // What-If Simulator state (FAZ 5.6)
+    this.currentWhatIfType = SCENARIO_TYPES.ONE_TIME_EXPENSE;
+    this.whatifPercentDirection = 'down';
+    this.whatifDailyDirection = 'down';
 
     if (typeof document !== 'undefined') {
       this.cacheElements();
@@ -135,6 +144,78 @@ export class ModalManager {
     this.cashflowFieldActive = document.getElementById('cashflow-field-active');
     this.cashflowBtnCancel = document.getElementById('cashflow-btn-cancel');
     this.cashflowBtnSubmit = document.getElementById('cashflow-btn-submit');
+
+    // What-If Scenario Simulator Modal (FAZ 5.6)
+    this.whatifModal = document.getElementById('whatif-modal');
+    this.whatifModalClose = document.getElementById('whatif-modal-close');
+    this.whatifBtnDone = document.getElementById('whatif-btn-done');
+    this.whatifBtnReset = document.getElementById('whatif-btn-reset');
+
+    // What-If Tabs
+    this.whatifTabExpense = document.getElementById('whatif-tab-expense');
+    this.whatifTabIncome = document.getElementById('whatif-tab-income');
+    this.whatifTabPercent = document.getElementById('whatif-tab-percent');
+    this.whatifTabDaily = document.getElementById('whatif-tab-daily');
+    this.whatifTabs = [this.whatifTabExpense, this.whatifTabIncome, this.whatifTabPercent, this.whatifTabDaily].filter(Boolean);
+
+    // What-If Sections
+    this.whatifSectionExpense = document.getElementById('whatif-section-expense');
+    this.whatifSectionIncome = document.getElementById('whatif-section-income');
+    this.whatifSectionPercent = document.getElementById('whatif-section-percent');
+    this.whatifSectionDaily = document.getElementById('whatif-section-daily');
+
+    // What-If Inputs
+    this.whatifInputExpense = document.getElementById('whatif-input-expense');
+    this.whatifInputIncome = document.getElementById('whatif-input-income');
+    this.whatifInputPercent = document.getElementById('whatif-input-percent');
+    this.whatifPercentDirDown = document.getElementById('whatif-percent-dir-down');
+    this.whatifPercentDirUp = document.getElementById('whatif-percent-dir-up');
+    this.whatifPercentInterpretation = document.getElementById('whatif-percent-interpretation');
+    this.whatifInputDaily = document.getElementById('whatif-input-daily');
+    this.whatifDailyDirDown = document.getElementById('whatif-daily-dir-down');
+    this.whatifDailyDirUp = document.getElementById('whatif-daily-dir-up');
+    this.whatifDailyInterpretation = document.getElementById('whatif-daily-interpretation');
+
+    // What-If Results
+    this.whatifImpactCard = document.getElementById('whatif-impact-card');
+    this.whatifImpactIconBox = document.getElementById('whatif-impact-icon-box');
+    this.whatifImpactIcon = document.getElementById('whatif-impact-icon');
+    this.whatifImpactText = document.getElementById('whatif-impact-text');
+    this.whatifImpactBadge = document.getElementById('whatif-impact-badge');
+
+    // What-If Decision Support Elements (FAZ 5.6 Cashflow-Aware)
+    this.whatifNextIncomeContext = document.getElementById('whatif-next-income-context');
+    this.whatifDecisionBaseSafeDaily = document.getElementById('whatif-decision-base-safe-daily');
+    this.whatifDecisionSimSafeDaily = document.getElementById('whatif-decision-sim-safe-daily');
+    this.whatifDecisionDeltaSafeDaily = document.getElementById('whatif-decision-delta-safe-daily');
+    this.whatifDecisionBaseSafeDailySub = document.getElementById('whatif-decision-base-safe-daily-sub');
+
+    this.whatifDecisionBaseStatusChip = document.getElementById('whatif-decision-base-status-chip');
+    this.whatifDecisionStatusChip = document.getElementById('whatif-decision-status-chip');
+    this.whatifDecisionStatusTransitionSub = document.getElementById('whatif-decision-status-transition-sub');
+
+    this.whatifDecisionBasePreBalance = document.getElementById('whatif-decision-base-pre-balance');
+    this.whatifDecisionSimPreBalance = document.getElementById('whatif-decision-sim-pre-balance');
+    this.whatifDecisionDeltaPreBalance = document.getElementById('whatif-decision-delta-pre-balance');
+    this.whatifDecisionBasePreBalanceSub = document.getElementById('whatif-decision-base-pre-balance-sub');
+    this.whatifAdjustmentCallout = document.getElementById('whatif-adjustment-callout');
+    this.whatifAdjustmentText = document.getElementById('whatif-adjustment-text');
+    this.whatifObligationsContextText = document.getElementById('whatif-obligations-context-text');
+
+    // Month-End Comparison Table Elements
+    this.whatifBaseExpense = document.getElementById('whatif-base-expense');
+    this.whatifSimExpense = document.getElementById('whatif-sim-expense');
+    this.whatifDeltaExpense = document.getElementById('whatif-delta-expense');
+    this.whatifBaseRemaining = document.getElementById('whatif-base-remaining');
+    this.whatifSimRemaining = document.getElementById('whatif-sim-remaining');
+    this.whatifDeltaRemaining = document.getElementById('whatif-delta-remaining');
+    this.whatifBaseBalance = document.getElementById('whatif-base-balance');
+    this.whatifSimBalance = document.getElementById('whatif-sim-balance');
+    this.whatifDeltaBalance = document.getElementById('whatif-delta-balance');
+    this.whatifBaseRate = document.getElementById('whatif-base-rate');
+    this.whatifSimRate = document.getElementById('whatif-sim-rate');
+    this.whatifDeltaRate = document.getElementById('whatif-delta-rate');
+    this.whatifAssumptionsList = document.getElementById('whatif-assumptions-list');
   }
 
   bindEvents() {
@@ -246,11 +327,64 @@ export class ModalManager {
       });
     }
 
+    // What-If Scenario Simulator Modal Events (FAZ 5.6)
+    if (this.whatifModalClose) this.whatifModalClose.addEventListener('click', () => this.closeWhatIfModal());
+    if (this.whatifBtnDone) this.whatifBtnDone.addEventListener('click', () => this.closeWhatIfModal());
+    if (this.whatifBtnReset) this.whatifBtnReset.addEventListener('click', () => this.resetWhatIfSimulation());
+
+    // What-If Tab Switching
+    this.whatifTabs.forEach(tab => {
+      if (tab) {
+        tab.addEventListener('click', () => {
+          const type = tab.getAttribute('data-type');
+          if (type) this.setWhatIfScenarioType(type);
+        });
+      }
+    });
+
+    // What-If Reactive Input Listeners
+    [this.whatifInputExpense, this.whatifInputIncome, this.whatifInputPercent, this.whatifInputDaily].forEach(input => {
+      if (input) {
+        input.addEventListener('input', () => this.runWhatIfSimulation());
+      }
+    });
+
+    // What-If Direction Buttons
+    if (this.whatifPercentDirDown) {
+      this.whatifPercentDirDown.addEventListener('click', () => this.setWhatIfPercentDirection('down'));
+    }
+    if (this.whatifPercentDirUp) {
+      this.whatifPercentDirUp.addEventListener('click', () => this.setWhatIfPercentDirection('up'));
+    }
+    if (this.whatifDailyDirDown) {
+      this.whatifDailyDirDown.addEventListener('click', () => this.setWhatIfDailyDirection('down'));
+    }
+    if (this.whatifDailyDirUp) {
+      this.whatifDailyDirUp.addEventListener('click', () => this.setWhatIfDailyDirection('up'));
+    }
+
+    // What-If Chip Presets
+    if (this.whatifModal && typeof this.whatifModal.querySelectorAll === 'function') {
+      this.whatifModal.querySelectorAll('.whatif-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+          const targetId = chip.getAttribute('data-target');
+          const value = chip.getAttribute('data-value');
+          const targetInput = targetId && typeof document !== 'undefined' ? document.getElementById(targetId) : null;
+          if (targetInput && value) {
+            targetInput.value = value;
+            this.runWhatIfSimulation();
+          }
+        });
+      });
+    }
+
     // Modal dışına tıklayınca kapatma & ESC tuşu
     if (typeof window !== 'undefined') {
       window.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
-          if (this.cashflowModal && !this.cashflowModal.classList.contains('hidden')) {
+          if (this.whatifModal && !this.whatifModal.classList.contains('hidden')) {
+            this.closeWhatIfModal();
+          } else if (this.cashflowModal && !this.cashflowModal.classList.contains('hidden')) {
             this.closeCashflowModal();
           } else if (this.cashflowManagerModal && !this.cashflowManagerModal.classList.contains('hidden')) {
             this.closeCashflowManagerModal();
@@ -271,11 +405,12 @@ export class ModalManager {
       });
     }
 
-    [this.txModal, this.importModal, this.confirmModal, this.presetModal, this.initialBudgetModal, this.authModal, this.cashflowManagerModal, this.cashflowModal].forEach(modal => {
+    [this.txModal, this.importModal, this.confirmModal, this.presetModal, this.initialBudgetModal, this.authModal, this.cashflowManagerModal, this.cashflowModal, this.whatifModal].forEach(modal => {
       if (modal && typeof modal.addEventListener === 'function') {
         modal.addEventListener('click', (e) => {
           if (e.target === modal) {
-            if (modal === this.cashflowModal) this.closeCashflowModal();
+            if (modal === this.whatifModal) this.closeWhatIfModal();
+            else if (modal === this.cashflowModal) this.closeCashflowModal();
             else if (modal === this.cashflowManagerModal) this.closeCashflowManagerModal();
             else if (modal === this.txModal) this.closeTransactionModal();
             else if (modal === this.importModal) this.closeImportModal();
@@ -1134,6 +1269,641 @@ export class ModalManager {
       showToast(t('cashflow.savedSuccess') || 'Planlı nakit akışı başarıyla kaydedildi.', 'success');
     } catch (err) {
       showToast(err.message || 'Hata oluştu', 'error');
+    }
+  }
+
+  // --- What-If Scenario Simulator Modal Methods (FAZ 5.6) ---
+  openWhatIfModal() {
+    this.lastFocusedElement = typeof document !== 'undefined' ? document.activeElement : null;
+    if (this.whatifModal) this.whatifModal.classList.remove('hidden');
+    this.updateBodyScrollLock();
+    if (!this.currentWhatIfType) {
+      this.currentWhatIfType = SCENARIO_TYPES.ONE_TIME_EXPENSE;
+    }
+    this.setWhatIfScenarioType(this.currentWhatIfType);
+  }
+
+  closeWhatIfModal() {
+    if (this.whatifModal) this.whatifModal.classList.add('hidden');
+    this.updateBodyScrollLock();
+    if (this.lastFocusedElement && typeof this.lastFocusedElement.focus === 'function') {
+      this.lastFocusedElement.focus();
+    }
+  }
+
+  setWhatIfScenarioType(type) {
+    this.currentWhatIfType = type;
+    const activeClass = 'whatif-tab px-2.5 py-1.5 rounded-lg text-center transition bg-white dark:bg-slate-700 text-purple-600 dark:text-purple-300 font-bold shadow-xs';
+    const inactiveClass = 'whatif-tab px-2.5 py-1.5 rounded-lg text-center transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white';
+
+    const tabMap = {
+      [SCENARIO_TYPES.ONE_TIME_EXPENSE]: this.whatifTabExpense,
+      [SCENARIO_TYPES.ONE_TIME_INCOME]: this.whatifTabIncome,
+      [SCENARIO_TYPES.FUTURE_SPEND_PERCENT_CHANGE]: this.whatifTabPercent,
+      [SCENARIO_TYPES.FUTURE_DAILY_SPEND_CHANGE]: this.whatifTabDaily
+    };
+
+    Object.entries(tabMap).forEach(([tType, el]) => {
+      if (!el) return;
+      el.className = (tType === type) ? activeClass : inactiveClass;
+    });
+
+    const sectionMap = {
+      [SCENARIO_TYPES.ONE_TIME_EXPENSE]: this.whatifSectionExpense,
+      [SCENARIO_TYPES.ONE_TIME_INCOME]: this.whatifSectionIncome,
+      [SCENARIO_TYPES.FUTURE_SPEND_PERCENT_CHANGE]: this.whatifSectionPercent,
+      [SCENARIO_TYPES.FUTURE_DAILY_SPEND_CHANGE]: this.whatifSectionDaily
+    };
+
+    Object.entries(sectionMap).forEach(([sType, el]) => {
+      if (!el) return;
+      if (sType === type) {
+        el.classList.remove('hidden');
+      } else {
+        el.classList.add('hidden');
+      }
+    });
+
+    this.runWhatIfSimulation();
+  }
+
+  setWhatIfPercentDirection(dir) {
+    this.whatifPercentDirection = dir;
+    if (this.whatifPercentDirDown && this.whatifPercentDirUp) {
+      if (dir === 'down') {
+        this.whatifPercentDirDown.className = 'flex-1 py-1.5 rounded-lg text-center font-bold bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-xs transition';
+        this.whatifPercentDirUp.className = 'flex-1 py-1.5 rounded-lg text-center font-medium text-slate-600 dark:text-slate-400 transition';
+      } else {
+        this.whatifPercentDirDown.className = 'flex-1 py-1.5 rounded-lg text-center font-medium text-slate-600 dark:text-slate-400 transition';
+        this.whatifPercentDirUp.className = 'flex-1 py-1.5 rounded-lg text-center font-bold bg-white dark:bg-slate-700 text-rose-600 dark:text-rose-400 shadow-xs transition';
+      }
+    }
+    this.runWhatIfSimulation();
+  }
+
+  setWhatIfDailyDirection(dir) {
+    this.whatifDailyDirection = dir;
+    if (this.whatifDailyDirDown && this.whatifDailyDirUp) {
+      if (dir === 'down') {
+        this.whatifDailyDirDown.className = 'flex-1 py-1.5 rounded-lg text-center font-bold bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-xs transition';
+        this.whatifDailyDirUp.className = 'flex-1 py-1.5 rounded-lg text-center font-medium text-slate-600 dark:text-slate-400 transition';
+      } else {
+        this.whatifDailyDirDown.className = 'flex-1 py-1.5 rounded-lg text-center font-medium text-slate-600 dark:text-slate-400 transition';
+        this.whatifDailyDirUp.className = 'flex-1 py-1.5 rounded-lg text-center font-bold bg-white dark:bg-slate-700 text-rose-600 dark:text-rose-400 shadow-xs transition';
+      }
+    }
+    this.runWhatIfSimulation();
+  }
+
+  resetWhatIfSimulation() {
+    this.setWhatIfScenarioType(SCENARIO_TYPES.ONE_TIME_EXPENSE);
+    if (this.whatifInputExpense) this.whatifInputExpense.value = '';
+    if (this.whatifInputIncome) this.whatifInputIncome.value = '';
+    if (this.whatifInputPercent) this.whatifInputPercent.value = '';
+    if (this.whatifInputDaily) this.whatifInputDaily.value = '';
+    this.setWhatIfPercentDirection('down');
+    this.setWhatIfDailyDirection('down');
+    this.runWhatIfSimulation();
+  }
+
+  updateWhatIfInterpretations(currency, lang) {
+    if (this.whatifPercentInterpretation) {
+      const rawVal = parseFloat(this.whatifInputPercent?.value);
+      const val = !isNaN(rawVal) && rawVal > 0 ? rawVal : 20;
+      const isDown = this.whatifPercentDirection === 'down';
+      this.whatifPercentInterpretation.textContent = isDown
+        ? (t('whatif.interpretations.percentDecrease', { percent: val }) || `Kalan günlerde harcama %${val} azalır`)
+        : (t('whatif.interpretations.percentIncrease', { percent: val }) || `Kalan günlerde harcama %${val} artar`);
+    }
+
+    if (this.whatifDailyInterpretation) {
+      const rawVal = parseFloat(this.whatifInputDaily?.value);
+      const val = !isNaN(rawVal) && rawVal > 0 ? rawVal : 100;
+      const isLess = this.whatifDailyDirection === 'down';
+      const formatted = formatCurrency(val, currency, lang);
+      this.whatifDailyInterpretation.textContent = isLess
+        ? (t('whatif.interpretations.dailyLess', { amount: formatted }) || `Her gün ${formatted} daha az harcarsam`)
+        : (t('whatif.interpretations.dailyMore', { amount: formatted }) || `Her gün ${formatted} daha fazla harcarsam`);
+    }
+  }
+
+  runWhatIfSimulation() {
+    const transactions = this.store.getTransactions ? this.store.getTransactions() : [];
+    const plannedCashflows = this.store.getPlannedCashflows ? this.store.getPlannedCashflows() : [];
+    const settings = this.store.getSettings ? this.store.getSettings() : {};
+    const currency = settings.currency || 'TRY';
+    const lang = settings.language || 'tr';
+
+    // Live reference date (safeNow) & current calendar month
+    const validNow = this.ui?.now instanceof Date ? this.ui.now : new Date();
+    const safeNow = isNaN(validNow.getTime()) ? new Date() : validNow;
+    const currentYearMonth = getCurrentYearMonth(safeNow);
+
+    // Live balance from current month summary
+    const summary = calculateSummary(transactions, safeNow, currentYearMonth);
+    const currentAvailableBalance = summary.balance;
+
+    let scenario = null;
+    let hasValidInput = false;
+
+    if (this.currentWhatIfType === SCENARIO_TYPES.ONE_TIME_EXPENSE) {
+      const val = parseFloat(this.whatifInputExpense?.value);
+      if (!isNaN(val) && val > 0) {
+        scenario = { type: SCENARIO_TYPES.ONE_TIME_EXPENSE, amount: val };
+        hasValidInput = true;
+      }
+    } else if (this.currentWhatIfType === SCENARIO_TYPES.ONE_TIME_INCOME) {
+      const val = parseFloat(this.whatifInputIncome?.value);
+      if (!isNaN(val) && val > 0) {
+        scenario = { type: SCENARIO_TYPES.ONE_TIME_INCOME, amount: val };
+        hasValidInput = true;
+      }
+    } else if (this.currentWhatIfType === SCENARIO_TYPES.FUTURE_SPEND_PERCENT_CHANGE) {
+      const val = parseFloat(this.whatifInputPercent?.value);
+      if (!isNaN(val) && val > 0) {
+        const signedPercent = this.whatifPercentDirection === 'down' ? -val : val;
+        scenario = { type: SCENARIO_TYPES.FUTURE_SPEND_PERCENT_CHANGE, percent: signedPercent };
+        hasValidInput = true;
+      }
+    } else if (this.currentWhatIfType === SCENARIO_TYPES.FUTURE_DAILY_SPEND_CHANGE) {
+      const val = parseFloat(this.whatifInputDaily?.value);
+      if (!isNaN(val) && val > 0) {
+        const signedDaily = this.whatifDailyDirection === 'down' ? -val : val;
+        scenario = { type: SCENARIO_TYPES.FUTURE_DAILY_SPEND_CHANGE, amountPerDay: signedDaily };
+        hasValidInput = true;
+      }
+    }
+
+    this.updateWhatIfInterpretations(currency, lang);
+
+    const supportResult = getWhatIfDecisionSupport({
+      store: this.store,
+      transactions,
+      plannedCashflows,
+      currentAvailableBalance,
+      scenario: scenario || { type: this.currentWhatIfType || SCENARIO_TYPES.ONE_TIME_EXPENSE, amount: 0 },
+      now: safeNow
+    });
+
+    this.renderWhatIfResults(supportResult, currency, lang, hasValidInput);
+  }
+
+  renderWhatIfResults(result, currency, lang, hasValidInput) {
+    if (!result) return;
+
+    const notAvail = t('whatif.results.notAvailable') || '—';
+    const monthEnd = result.monthEnd || result;
+    const untilNext = result.untilNextIncome;
+    const hasNextIncome = Boolean(result.hasNextIncome);
+
+    // 1. PRIMARY: Decision Support Section (Until Next Income)
+    // A. Next Income Context Pill
+    if (this.whatifNextIncomeContext) {
+      if (hasNextIncome && result.nextIncome) {
+        const inc = result.nextIncome;
+        if (inc.daysUntil === 0) {
+          this.whatifNextIncomeContext.textContent = t('whatif.decision.nextIncomeContextToday', { name: inc.name }) || `Sonraki gelir: ${inc.name} — Bugün bekleniyor`;
+        } else {
+          this.whatifNextIncomeContext.textContent = t('whatif.decision.nextIncomeContext', {
+            name: inc.name,
+            date: inc.date,
+            days: inc.daysUntil
+          }) || `Sonraki gelir: ${inc.name} — ${inc.date} (${inc.daysUntil} gün sonra)`;
+        }
+      } else {
+        this.whatifNextIncomeContext.textContent = t('whatif.decision.noNextIncomeContext') || 'Planlı bir sonraki gelir bulunmuyor';
+      }
+    }
+
+    // B. Primary Decision Impact Callout Card
+    if (this.whatifImpactCard && this.whatifImpactText && this.whatifImpactBadge) {
+      const impact = result.decisionImpact || {};
+      const code = impact.code || DECISION_IMPACT_CODES.AWAITING_INPUT;
+      const severity = impact.severity || 'neutral';
+
+      if (!hasValidInput) {
+        this.whatifImpactText.textContent = t('whatif.decision.impacts.AWAITING_INPUT') || (lang === 'tr' ? 'Değer girerek bir sonraki gelire kadar olası etkiyi görün' : 'Enter a value to see potential impact until next income');
+        this.whatifImpactBadge.textContent = '—';
+        this.whatifImpactBadge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 shrink-0';
+        this.whatifImpactCard.className = 'p-3.5 rounded-xl bg-purple-50/70 dark:bg-purple-950/40 border border-purple-200/80 dark:border-purple-800/80 flex items-center justify-between gap-2.5';
+        if (this.whatifImpactIconBox) this.whatifImpactIconBox.className = 'w-8 h-8 rounded-lg bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 flex items-center justify-center shrink-0';
+        if (this.whatifImpactIcon) this.whatifImpactIcon.setAttribute('data-lucide', 'sparkles');
+      } else {
+        const formattedParams = { ...(impact.params || {}) };
+        if (formattedParams.amount !== undefined && typeof formattedParams.amount === 'number') {
+          formattedParams.amount = formatCurrency(formattedParams.amount, currency, lang);
+        }
+        if (formattedParams.from) {
+          formattedParams.from = t('coverage.' + formattedParams.from) || formattedParams.from;
+        }
+        if (formattedParams.to) {
+          formattedParams.to = t('coverage.' + formattedParams.to) || formattedParams.to;
+        }
+
+        let impactKey = `whatif.decision.impacts.${code}`;
+        if (code === DECISION_IMPACT_CODES.STATUS_SHIFT_DEFICIT && impact.params?.amount) {
+          impactKey = 'whatif.decision.impacts.STATUS_SHIFT_DEFICIT_AMOUNT';
+        }
+        this.whatifImpactText.textContent = t(impactKey, formattedParams) || code;
+
+        // Badge text
+        let badgeText = impact.badge || '—';
+        if (code === DECISION_IMPACT_CODES.STATUS_SHIFT_DEFICIT) {
+          badgeText = impact.params?.amount != null
+            ? `-${formatCurrency(impact.params.amount, currency, lang)}`
+            : (t('coverage.DEFICIT_BEFORE_INCOME') || 'Açık Riski');
+        } else if (code === DECISION_IMPACT_CODES.STATUS_SHIFT_TIGHT) {
+          badgeText = t('coverage.TIGHT') || 'Sınıra Yaklaşıyor';
+        } else if (code === DECISION_IMPACT_CODES.STATUS_SHIFT_COVERED || code === DECISION_IMPACT_CODES.PLAN_REMAINS_BALANCED) {
+          badgeText = t('coverage.COVERED') || 'Plan Dengeli';
+        } else if (code === DECISION_IMPACT_CODES.SAFE_SPEND_DECREASED && impact.params?.amount != null) {
+          badgeText = `-${formatCurrency(impact.params.amount, currency, lang)}/gün`;
+        } else if (code === DECISION_IMPACT_CODES.SAFE_SPEND_INCREASED && impact.params?.amount != null) {
+          badgeText = `+${formatCurrency(impact.params.amount, currency, lang)}/gün`;
+        } else if (code === DECISION_IMPACT_CODES.PRE_INCOME_BALANCE_DECREASED && impact.params?.amount != null) {
+          badgeText = `-${formatCurrency(impact.params.amount, currency, lang)}`;
+        } else if (code === DECISION_IMPACT_CODES.PRE_INCOME_BALANCE_INCREASED && impact.params?.amount != null) {
+          badgeText = `+${formatCurrency(impact.params.amount, currency, lang)}`;
+        } else if (code === DECISION_IMPACT_CODES.DEFICIT_DEEPENED && impact.params?.amount != null) {
+          badgeText = `-${formatCurrency(impact.params.amount, currency, lang)}`;
+        } else if (code === DECISION_IMPACT_CODES.DEFICIT_REDUCED && impact.params?.amount != null) {
+          badgeText = `+${formatCurrency(impact.params.amount, currency, lang)}`;
+        } else if (code === DECISION_IMPACT_CODES.DEFICIT_ADJUSTMENT_NEEDED && impact.params?.amount != null) {
+          badgeText = `-${formatCurrency(impact.params.amount, currency, lang)}/gün`;
+        } else if (code === DECISION_IMPACT_CODES.NO_NEXT_INCOME_MONTH_END_DECREASE && impact.params?.amount != null) {
+          badgeText = `-${formatCurrency(impact.params.amount, currency, lang)}`;
+        } else if (code === DECISION_IMPACT_CODES.NO_NEXT_INCOME_MONTH_END_INCREASE && impact.params?.amount != null) {
+          badgeText = `+${formatCurrency(impact.params.amount, currency, lang)}`;
+        } else if (code === DECISION_IMPACT_CODES.NO_NEXT_INCOME_MONTH_END_EXPENSE_INCREASE && impact.params?.amount != null) {
+          badgeText = `+${formatCurrency(impact.params.amount, currency, lang)}`;
+        } else if (code === DECISION_IMPACT_CODES.NO_NEXT_INCOME_MONTH_END_EXPENSE_DECREASE && impact.params?.amount != null) {
+          badgeText = `-${formatCurrency(impact.params.amount, currency, lang)}`;
+        }
+
+        this.whatifImpactBadge.textContent = badgeText;
+
+        if (severity === 'deficit') {
+          this.whatifImpactCard.className = 'p-3.5 rounded-xl bg-rose-50/70 dark:bg-rose-950/40 border border-rose-200/80 dark:border-rose-800/80 flex items-center justify-between gap-2.5';
+          if (this.whatifImpactIconBox) this.whatifImpactIconBox.className = 'w-8 h-8 rounded-lg bg-rose-100 dark:bg-rose-900 text-rose-700 dark:text-rose-300 flex items-center justify-center shrink-0';
+          this.whatifImpactBadge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 shrink-0';
+          if (this.whatifImpactIcon) this.whatifImpactIcon.setAttribute('data-lucide', 'alert-circle');
+        } else if (severity === 'warning') {
+          this.whatifImpactCard.className = 'p-3.5 rounded-xl bg-amber-50/70 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800/80 flex items-center justify-between gap-2.5';
+          if (this.whatifImpactIconBox) this.whatifImpactIconBox.className = 'w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0';
+          this.whatifImpactBadge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 shrink-0';
+          if (this.whatifImpactIcon) this.whatifImpactIcon.setAttribute('data-lucide', 'alert-triangle');
+        } else if (severity === 'positive') {
+          this.whatifImpactCard.className = 'p-3.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-800/80 flex items-center justify-between gap-2.5';
+          if (this.whatifImpactIconBox) this.whatifImpactIconBox.className = 'w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0';
+          this.whatifImpactBadge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 shrink-0';
+          if (this.whatifImpactIcon) this.whatifImpactIcon.setAttribute('data-lucide', 'trending-up');
+        } else {
+          this.whatifImpactCard.className = 'p-3.5 rounded-xl bg-purple-50/70 dark:bg-purple-950/40 border border-purple-200/80 dark:border-purple-800/80 flex items-center justify-between gap-2.5';
+          if (this.whatifImpactIconBox) this.whatifImpactIconBox.className = 'w-8 h-8 rounded-lg bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 flex items-center justify-center shrink-0';
+          this.whatifImpactBadge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 shrink-0';
+          if (this.whatifImpactIcon) this.whatifImpactIcon.setAttribute('data-lucide', 'sparkles');
+        }
+      }
+    }
+
+    // C. Decision Metrics 3 Cards
+    if (untilNext) {
+      // Metric 1: Safe Daily Spend
+      const baseSafeDaily = untilNext.baseline?.safeDailySpend ?? null;
+      const simSafeDaily = untilNext.simulated?.safeDailySpend ?? null;
+      const deltaSafeDaily = untilNext.delta?.safeDailySpend ?? null;
+
+      const formattedBaseSafeDaily = (baseSafeDaily !== null)
+        ? formatCurrency(baseSafeDaily, currency, lang)
+        : notAvail;
+
+      if (this.whatifDecisionBaseSafeDaily) {
+        this.whatifDecisionBaseSafeDaily.textContent = formattedBaseSafeDaily;
+      }
+      if (this.whatifDecisionBaseSafeDailySub) {
+        this.whatifDecisionBaseSafeDailySub.textContent = (baseSafeDaily !== null)
+          ? `${t('whatif.results.current') || 'Mevcut'}: ${formattedBaseSafeDaily}/gün`
+          : `${t('whatif.results.current') || 'Mevcut'}: —`;
+      }
+
+      if (this.whatifDecisionSimSafeDaily) {
+        this.whatifDecisionSimSafeDaily.textContent = (hasValidInput && simSafeDaily !== null)
+          ? `${formatCurrency(simSafeDaily, currency, lang)}/gün`
+          : notAvail;
+      }
+
+      if (this.whatifDecisionDeltaSafeDaily) {
+        if (!hasValidInput || deltaSafeDaily === null) {
+          this.whatifDecisionDeltaSafeDaily.textContent = '—';
+          this.whatifDecisionDeltaSafeDaily.className = 'inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400';
+        } else if (deltaSafeDaily === 0) {
+          this.whatifDecisionDeltaSafeDaily.textContent = t('whatif.decision.unchanged') || 'Değişmedi';
+          this.whatifDecisionDeltaSafeDaily.className = 'inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400';
+        } else if (deltaSafeDaily > 0) {
+          this.whatifDecisionDeltaSafeDaily.textContent = `+${formatCurrency(deltaSafeDaily, currency, lang)}/gün`;
+          this.whatifDecisionDeltaSafeDaily.className = 'inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60';
+        } else {
+          this.whatifDecisionDeltaSafeDaily.textContent = `-${formatCurrency(Math.abs(deltaSafeDaily), currency, lang)}/gün`;
+          this.whatifDecisionDeltaSafeDaily.className = 'inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-bold bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200/60 dark:border-rose-800/60';
+        }
+      }
+
+      // Metric 2: Coverage Status
+      const baseStatus = untilNext.baseline?.coverageStatus || COVERAGE_STATUS.NO_NEXT_INCOME;
+      const simStatus = untilNext.simulated?.coverageStatus || COVERAGE_STATUS.NO_NEXT_INCOME;
+      const baseStatusLabel = t('coverage.' + baseStatus) || baseStatus;
+      const simStatusLabel = t('coverage.' + simStatus) || simStatus;
+
+      const getStatusChipClass = (status, isScenario = false) => {
+        const weightClass = isScenario ? 'font-bold' : 'font-medium';
+        if (status === COVERAGE_STATUS.COVERED) {
+          return `inline-block px-2 py-0.5 rounded-md text-[11px] ${weightClass} bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300`;
+        } else if (status === COVERAGE_STATUS.TIGHT) {
+          return `inline-block px-2 py-0.5 rounded-md text-[11px] ${weightClass} bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300`;
+        } else if (status === COVERAGE_STATUS.DEFICIT_BEFORE_INCOME) {
+          return `inline-block px-2 py-0.5 rounded-md text-[11px] ${weightClass} bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300`;
+        }
+        return `inline-block px-2 py-0.5 rounded-md text-[11px] ${weightClass} bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300`;
+      };
+
+      if (this.whatifDecisionBaseStatusChip) {
+        this.whatifDecisionBaseStatusChip.textContent = baseStatusLabel;
+        this.whatifDecisionBaseStatusChip.className = getStatusChipClass(baseStatus, false);
+      }
+
+      if (this.whatifDecisionStatusChip) {
+        if (hasValidInput) {
+          this.whatifDecisionStatusChip.textContent = simStatusLabel;
+          this.whatifDecisionStatusChip.className = getStatusChipClass(simStatus, true);
+        } else {
+          this.whatifDecisionStatusChip.textContent = '—';
+          this.whatifDecisionStatusChip.className = 'inline-block px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400';
+        }
+      }
+
+      if (this.whatifDecisionStatusTransitionSub) {
+        if (!hasValidInput) {
+          this.whatifDecisionStatusTransitionSub.textContent = '—';
+          this.whatifDecisionStatusTransitionSub.className = 'inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400';
+        } else if (baseStatus === simStatus) {
+          this.whatifDecisionStatusTransitionSub.textContent = t('whatif.decision.statusUnchanged') || 'Durum değişmedi';
+          this.whatifDecisionStatusTransitionSub.className = 'inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400';
+        } else {
+          const transitionText = `${baseStatusLabel} ➔ ${simStatusLabel}`;
+          this.whatifDecisionStatusTransitionSub.textContent = transitionText;
+          if (simStatus === COVERAGE_STATUS.DEFICIT_BEFORE_INCOME) {
+            this.whatifDecisionStatusTransitionSub.className = 'inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200/60 dark:border-rose-800/60';
+          } else if (simStatus === COVERAGE_STATUS.TIGHT) {
+            this.whatifDecisionStatusTransitionSub.className = 'inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60';
+          } else {
+            this.whatifDecisionStatusTransitionSub.className = 'inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60';
+          }
+        }
+      }
+
+      // Metric 3: Pre-Income Projected Balance
+      const basePreBal = untilNext.baseline?.projectedBalanceBeforeNextIncome ?? null;
+      const simPreBal = untilNext.simulated?.projectedBalanceBeforeNextIncome ?? null;
+      const deltaPreBal = untilNext.delta?.projectedBalanceBeforeNextIncome ?? null;
+
+      const formattedBasePreBal = (basePreBal !== null)
+        ? formatCurrency(basePreBal, currency, lang)
+        : notAvail;
+
+      if (this.whatifDecisionBasePreBalance) {
+        this.whatifDecisionBasePreBalance.textContent = formattedBasePreBal;
+      }
+      if (this.whatifDecisionBasePreBalanceSub) {
+        this.whatifDecisionBasePreBalanceSub.textContent = (basePreBal !== null)
+          ? `${t('whatif.results.current') || 'Mevcut'}: ${formattedBasePreBal}`
+          : `${t('whatif.results.current') || 'Mevcut'}: —`;
+      }
+
+      if (this.whatifDecisionSimPreBalance) {
+        this.whatifDecisionSimPreBalance.textContent = (hasValidInput && simPreBal !== null)
+          ? formatCurrency(simPreBal, currency, lang)
+          : notAvail;
+      }
+
+      if (this.whatifDecisionDeltaPreBalance) {
+        if (!hasValidInput || deltaPreBal === null) {
+          this.whatifDecisionDeltaPreBalance.textContent = '—';
+          this.whatifDecisionDeltaPreBalance.className = 'inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400';
+        } else if (deltaPreBal === 0) {
+          this.whatifDecisionDeltaPreBalance.textContent = t('whatif.decision.unchanged') || 'Değişmedi';
+          this.whatifDecisionDeltaPreBalance.className = 'inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400';
+        } else if (deltaPreBal > 0) {
+          this.whatifDecisionDeltaPreBalance.textContent = `+${formatCurrency(deltaPreBal, currency, lang)}`;
+          this.whatifDecisionDeltaPreBalance.className = 'inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60';
+        } else {
+          this.whatifDecisionDeltaPreBalance.textContent = `-${formatCurrency(Math.abs(deltaPreBal), currency, lang)}`;
+          this.whatifDecisionDeltaPreBalance.className = 'inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-bold bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200/60 dark:border-rose-800/60';
+        }
+      }
+
+      // D. Adjustment Callout
+      const simAdjustment = untilNext.simulated?.dailyAdjustmentNeeded ?? 0;
+      if (this.whatifAdjustmentCallout && this.whatifAdjustmentText) {
+        if (hasValidInput && hasNextIncome && simAdjustment > 0) {
+          this.whatifAdjustmentCallout.classList.remove('hidden');
+          this.whatifAdjustmentText.textContent = t('whatif.decision.adjustmentNeeded', {
+            amount: formatCurrency(simAdjustment, currency, lang)
+          }) || `Bu senaryoda günlük harcamayı yaklaşık ${formatCurrency(simAdjustment, currency, lang)} azaltmak gerekiyor.`;
+        } else {
+          this.whatifAdjustmentCallout.classList.add('hidden');
+        }
+      }
+
+      // E. Obligations Context Line
+      if (this.whatifObligationsContextText) {
+        if (hasNextIncome && result.obligations) {
+          this.whatifObligationsContextText.textContent = t('whatif.decision.obligationsReserved', {
+            amount: formatCurrency(result.obligations.totalReserved, currency, lang)
+          }) || `Gelire kadar ayrılan yükümlülükler: ${formatCurrency(result.obligations.totalReserved, currency, lang)}`;
+        } else {
+          this.whatifObligationsContextText.textContent = t('whatif.decision.noNextIncomeContext') || 'Planlı bir sonraki gelir bulunmuyor';
+        }
+      }
+    }
+
+    // 2. SECONDARY: Month-End Comparison Table
+    if (monthEnd && monthEnd.baseline && monthEnd.simulated && monthEnd.delta) {
+      // Projected Expense
+      if (this.whatifBaseExpense) this.whatifBaseExpense.textContent = formatCurrency(monthEnd.baseline.projectedExpense, currency, lang);
+      if (this.whatifSimExpense) this.whatifSimExpense.textContent = hasValidInput ? formatCurrency(monthEnd.simulated.projectedExpense, currency, lang) : notAvail;
+      if (this.whatifDeltaExpense) {
+        if (!hasValidInput || monthEnd.delta.projectedExpense === 0) {
+          this.whatifDeltaExpense.textContent = formatCurrency(0, currency, lang);
+          this.whatifDeltaExpense.className = 'py-2 px-3 text-right font-bold text-slate-700 dark:text-slate-300';
+        } else if (monthEnd.delta.projectedExpense > 0) {
+          this.whatifDeltaExpense.textContent = `+${formatCurrency(monthEnd.delta.projectedExpense, currency, lang)}`;
+          this.whatifDeltaExpense.className = 'py-2 px-3 text-right font-bold text-rose-600 dark:text-rose-400';
+        } else {
+          this.whatifDeltaExpense.textContent = `-${formatCurrency(Math.abs(monthEnd.delta.projectedExpense), currency, lang)}`;
+          this.whatifDeltaExpense.className = 'py-2 px-3 text-right font-bold text-emerald-600 dark:text-emerald-400';
+        }
+      }
+
+      // Projected Remaining Expense
+      if (this.whatifBaseRemaining) this.whatifBaseRemaining.textContent = formatCurrency(monthEnd.baseline.projectedRemainingExpense, currency, lang);
+      if (this.whatifSimRemaining) this.whatifSimRemaining.textContent = hasValidInput ? formatCurrency(monthEnd.simulated.projectedRemainingExpense, currency, lang) : notAvail;
+      if (this.whatifDeltaRemaining) {
+        if (!hasValidInput || monthEnd.delta.projectedRemainingExpense === 0) {
+          this.whatifDeltaRemaining.textContent = formatCurrency(0, currency, lang);
+          this.whatifDeltaRemaining.className = 'py-2 px-3 text-right font-bold text-slate-700 dark:text-slate-300';
+        } else if (monthEnd.delta.projectedRemainingExpense > 0) {
+          this.whatifDeltaRemaining.textContent = `+${formatCurrency(monthEnd.delta.projectedRemainingExpense, currency, lang)}`;
+          this.whatifDeltaRemaining.className = 'py-2 px-3 text-right font-bold text-rose-600 dark:text-rose-400';
+        } else {
+          this.whatifDeltaRemaining.textContent = `-${formatCurrency(Math.abs(monthEnd.delta.projectedRemainingExpense), currency, lang)}`;
+          this.whatifDeltaRemaining.className = 'py-2 px-3 text-right font-bold text-emerald-600 dark:text-emerald-400';
+        }
+      }
+
+      // Projected Ending Balance
+      const baseBal = monthEnd.baseline.projectedEndBalance;
+      const simBal = monthEnd.simulated.projectedEndBalance;
+      const deltaBal = monthEnd.delta.projectedEndBalance;
+
+      if (this.whatifBaseBalance) {
+        this.whatifBaseBalance.textContent = (baseBal !== null && !isNaN(baseBal))
+          ? formatCurrency(baseBal, currency, lang)
+          : notAvail;
+      }
+      if (this.whatifSimBalance) {
+        this.whatifSimBalance.textContent = (hasValidInput && simBal !== null && !isNaN(simBal))
+          ? formatCurrency(simBal, currency, lang)
+          : notAvail;
+      }
+      if (this.whatifDeltaBalance) {
+        if (!hasValidInput || deltaBal === null || isNaN(deltaBal)) {
+          this.whatifDeltaBalance.textContent = notAvail;
+          this.whatifDeltaBalance.className = 'py-2 px-3 text-right font-bold text-slate-400 dark:text-slate-500';
+        } else if (deltaBal > 0) {
+          this.whatifDeltaBalance.textContent = `+${formatCurrency(deltaBal, currency, lang)}`;
+          this.whatifDeltaBalance.className = 'py-2 px-3 text-right font-bold text-emerald-600 dark:text-emerald-400';
+        } else if (deltaBal < 0) {
+          this.whatifDeltaBalance.textContent = `-${formatCurrency(Math.abs(deltaBal), currency, lang)}`;
+          this.whatifDeltaBalance.className = 'py-2 px-3 text-right font-bold text-rose-600 dark:text-rose-400';
+        } else {
+          this.whatifDeltaBalance.textContent = formatCurrency(0, currency, lang);
+          this.whatifDeltaBalance.className = 'py-2 px-3 text-right font-bold text-slate-700 dark:text-slate-300';
+        }
+      }
+
+      // Daily Rate
+      if (this.whatifBaseRate) this.whatifBaseRate.textContent = `${formatCurrency(monthEnd.baseline.dailyRate, currency, lang)}/gün`;
+      if (this.whatifSimRate) this.whatifSimRate.textContent = hasValidInput ? `${formatCurrency(monthEnd.simulated.dailyRate, currency, lang)}/gün` : notAvail;
+      if (this.whatifDeltaRate) {
+        if (!hasValidInput || monthEnd.delta.dailyRate === 0) {
+          this.whatifDeltaRate.textContent = `${formatCurrency(0, currency, lang)}/gün`;
+          this.whatifDeltaRate.className = 'py-2 px-3 text-right font-bold text-slate-700 dark:text-slate-300';
+        } else if (monthEnd.delta.dailyRate > 0) {
+          this.whatifDeltaRate.textContent = `+${formatCurrency(monthEnd.delta.dailyRate, currency, lang)}/gün`;
+          this.whatifDeltaRate.className = 'py-2 px-3 text-right font-bold text-rose-600 dark:text-rose-400';
+        } else {
+          this.whatifDeltaRate.textContent = `-${formatCurrency(Math.abs(monthEnd.delta.dailyRate), currency, lang)}/gün`;
+          this.whatifDeltaRate.className = 'py-2 px-3 text-right font-bold text-emerald-600 dark:text-emerald-400';
+        }
+      }
+    }
+
+    // 3. THIRD: Explainability Dual-Horizon List
+    if (this.whatifAssumptionsList) {
+      if (!hasValidInput) {
+        this.whatifAssumptionsList.innerHTML = `
+          <div class="py-1 text-slate-500 dark:text-slate-400">
+            ${lang === 'tr' ? 'Hesaplama varsayımlarını ve olası etkileri görmek için bir senaryo değeri belirleyin.' : 'Specify a scenario value to see calculation assumptions and potential impacts.'}
+          </div>
+        `;
+      } else {
+        const expl = result.explainability || {};
+        const untilNextNotes = expl.untilNextIncome || [];
+        const monthEndNotes = expl.monthEnd || [];
+        const assumptions = expl.assumptions || monthEnd?.metadata?.assumptions || [];
+        const daysRem = monthEnd?.metadata?.daysRemaining || 0;
+
+        const assumptionTexts = {
+          BASELINE_FORECAST_UNCHANGED: t('whatif.explainability.assumptions.BASELINE_FORECAST_UNCHANGED') || 'Mevcut harcama temposu ve davranışsal tahmin temel alındı.',
+          NO_ADDITIONAL_INCOME_ASSUMED: t('whatif.explainability.assumptions.NO_ADDITIONAL_INCOME_ASSUMED') || 'Senaryo süresince ek başka bir gelir varsayılmadı.',
+          ONE_TIME_EVENT: t('whatif.explainability.assumptions.ONE_TIME_EVENT') || 'Bu işlem tek seferlik kabul edildi, günlük harcama temposunu değiştirmedi.',
+          BASELINE_EXPENSE_FORECAST_UNCHANGED: t('whatif.explainability.assumptions.BASELINE_EXPENSE_FORECAST_UNCHANGED') || 'Tek seferlik gelir harcama projeksiyonunu doğrudan değiştirmedi.',
+          ONE_TIME_INCOME_EVENT: t('whatif.explainability.assumptions.ONE_TIME_INCOME_EVENT') || 'Bu gelir tek seferlik kabul edildi.',
+          CHANGE_APPLIES_TO_REMAINING_DAYS_ONLY: t('whatif.explainability.assumptions.CHANGE_APPLIES_TO_REMAINING_DAYS_ONLY', { days: daysRem }) || `Değişiklik yalnızca ayın kalan ${daysRem} günü için geçerlidir; geçmiş gerçekleşen harcamalar korunur.`,
+          PAST_ACTUALS_UNCHANGED: t('whatif.explainability.assumptions.PAST_ACTUALS_UNCHANGED') || 'Ayın başından bugüne yapılmış harcamalar sabit tutuldu.',
+          DAILY_RATE_NON_NEGATIVE: t('whatif.explainability.assumptions.DAILY_RATE_NON_NEGATIVE') || 'Günlük harcama temposu 0 TL altına düşemez.'
+        };
+
+        const renderNote = (note) => {
+          const formattedParams = { ...(note.params || {}) };
+          if (formattedParams.amount !== undefined && typeof formattedParams.amount === 'number') {
+            formattedParams.amount = formatCurrency(formattedParams.amount, currency, lang);
+          }
+          if (formattedParams.newRate !== undefined && typeof formattedParams.newRate === 'number') {
+            formattedParams.newRate = formatCurrency(formattedParams.newRate, currency, lang);
+          }
+          if (formattedParams.amountPerDay !== undefined && typeof formattedParams.amountPerDay === 'number') {
+            formattedParams.amountPerDay = formatCurrency(formattedParams.amountPerDay, currency, lang);
+          }
+          if (formattedParams.obligations !== undefined && typeof formattedParams.obligations === 'number') {
+            formattedParams.obligations = formatCurrency(formattedParams.obligations, currency, lang);
+          }
+          if (formattedParams.dailyRate !== undefined && typeof formattedParams.dailyRate === 'number') {
+            formattedParams.dailyRate = formatCurrency(formattedParams.dailyRate, currency, lang);
+          }
+
+          const txt = t('whatif.explainability.notes.' + note.key, formattedParams) || note.key;
+          return `
+            <div class="flex items-start space-x-2 py-0.5">
+              <span class="inline-block w-1.5 h-1.5 rounded-full bg-purple-500 dark:bg-purple-400 mt-1.5 shrink-0"></span>
+              <span class="text-xs leading-relaxed text-slate-700 dark:text-slate-300">${escapeHtml(txt)}</span>
+            </div>
+          `;
+        };
+
+        let html = '';
+
+        if (untilNextNotes.length > 0) {
+          html += `
+            <div class="mb-2.5">
+              <span class="text-[11px] font-bold text-slate-900 dark:text-white uppercase tracking-wider block mb-1">
+                ${t('whatif.explainability.horizonCashflowTitle') || '1. Bir Sonraki Gelire Kadar Ufku:'}
+              </span>
+              <div class="space-y-1 pl-1">
+                ${untilNextNotes.map(renderNote).join('')}
+              </div>
+            </div>
+          `;
+        }
+
+        if (monthEndNotes.length > 0 || assumptions.length > 0) {
+          html += `
+            <div>
+              <span class="text-[11px] font-bold text-slate-900 dark:text-white uppercase tracking-wider block mb-1">
+                ${t('whatif.explainability.horizonMonthEndTitle') || '2. Ay Sonu Projeksiyon Ufku:'}
+              </span>
+              <div class="space-y-1 pl-1">
+                ${monthEndNotes.map(renderNote).join('')}
+                ${assumptions.map(code => {
+                  const txt = assumptionTexts[code] || code;
+                  return `
+                    <div class="flex items-start space-x-2 py-0.5">
+                      <span class="inline-block w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-slate-500 mt-1.5 shrink-0"></span>
+                      <span class="text-xs leading-relaxed text-slate-600 dark:text-slate-400">${escapeHtml(txt)}</span>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          `;
+        }
+
+        this.whatifAssumptionsList.innerHTML = html;
+      }
+    }
+
+    if (typeof lucide !== 'undefined' && typeof lucide.createIcons === 'function') {
+      lucide.createIcons();
     }
   }
 }
