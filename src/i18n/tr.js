@@ -258,7 +258,8 @@ export default {
     noTimeline: 'Yaklaşan planlı akış bulunmuyor.',
     emptyTitle: 'Nakit Akışınızı Planlayın',
     emptyDesc: 'Bir sonraki burs, kira veya düzenli ödemenizi ekleyerek gelir gününe kadar ne kadar harcama alanınız olduğunu görebilirsiniz.',
-    addFirstPlan: 'İlk planımı ekle'
+    addFirstPlan: 'İlk planımı ekle',
+    tryScenario: 'Senaryo Dene'
   },
   coverage: {
     COVERED: 'Plan dengeli',
@@ -319,5 +320,69 @@ export default {
     save: 'Kaydet',
     emptyManager: 'Henüz kayıtlı bir planlı nakit akışınız yok.',
     emptyManagerDesc: 'Burs, kira veya fatura planı ekleyerek nakit planınızı başlatın.'
+  },
+  whatif: {
+    title: 'Senaryo Simülatörü',
+    subtitle: 'Bir finansal kararın bütçene olası etkisini gör.',
+    disclaimer: 'Bu sadece bir simülasyondur. İşlemleriniz ve planlarınız değiştirilmez.',
+    tabs: {
+      expense: 'Ek Harcama',
+      income: 'Ek Gelir',
+      percent: 'Harcama Oranı',
+      daily: 'Günlük Harcama'
+    },
+    helpers: {
+      expense: 'Bugün ek bir harcama yaparsam?',
+      income: 'Ek bir gelir elde edersem?',
+      percent: 'Kalan günlerde harcamalarımı artırır veya azaltırsam?',
+      daily: 'Her gün harcadığım ortalama tutarı değiştirirsem?'
+    },
+    inputs: {
+      amount: 'Tutar',
+      percent: 'Değişim Yüzdesi (%)',
+      dailyAmount: 'Günlük Tutar',
+      direction: 'Yön',
+      decrease: 'Azalt',
+      increase: 'Artır',
+      less: 'Daha Az',
+      more: 'Daha Fazla'
+    },
+    interpretations: {
+      percentDecrease: 'Kalan günlerde harcama %{percent} azalır',
+      percentIncrease: 'Kalan günlerde harcama %{percent} artar',
+      dailyLess: 'Her gün {amount} daha az harcarsam',
+      dailyMore: 'Her gün {amount} daha fazla harcarsam'
+    },
+    results: {
+      impactTitle: 'Kararın Olası Etkisi',
+      current: 'Mevcut',
+      simulated: 'Senaryo Sonrası',
+      difference: 'Fark',
+      projectedExpense: 'Ay Sonu Gider Tahmini',
+      projectedRemaining: 'Kalan Günler Gideri',
+      projectedEndBalance: 'Öngörülen Ay Sonu Bakiye',
+      dailyRate: 'Günlük Harcama Hızı',
+      notAvailable: '—',
+      balanceDecrease: 'Öngörülen ay sonu bakiye {amount} azalıyor',
+      balanceIncrease: 'Öngörülen ay sonu bakiye {amount} artıyor',
+      expenseIncrease: 'Öngörülen gider +{amount} artıyor',
+      expenseDecrease: 'Öngörülen gider {amount} azalıyor',
+      noImpact: 'Tahmin üzerinde belirgin bir değişim öngörülmüyor'
+    },
+    explainability: {
+      title: 'Bu sonuç nasıl hesaplandı?',
+      assumptions: {
+        BASELINE_FORECAST_UNCHANGED: 'Mevcut harcama temposu ve davranışsal tahmin temel alındı.',
+        NO_ADDITIONAL_INCOME_ASSUMED: 'Senaryo süresince ek başka bir gelir varsayılmadı.',
+        ONE_TIME_EVENT: 'Bu işlem tek seferlik kabul edildi, günlük harcama temposunu değiştirmedi.',
+        BASELINE_EXPENSE_FORECAST_UNCHANGED: 'Tek seferlik gelir harcama projeksiyonunu doğrudan değiştirmedi.',
+        ONE_TIME_INCOME_EVENT: 'Bu gelir tek seferlik kabul edildi.',
+        CHANGE_APPLIES_TO_REMAINING_DAYS_ONLY: 'Değişiklik yalnızca ayın kalan {days} günü için geçerlidir; geçmiş gerçekleşen harcamalar korunur.',
+        PAST_ACTUALS_UNCHANGED: 'Ayın başından bugüne yapılmış harcamalar sabit tutuldu.',
+        DAILY_RATE_NON_NEGATIVE: 'Günlük harcama temposu 0 TL altına düşemez.'
+      }
+    },
+    reset: 'Yeni Senaryo',
+    close: 'Tamam'
   }
 };

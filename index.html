@@ -274,11 +274,17 @@
           </div>
         </div>
 
-        <!-- Management CTA Button -->
-        <button id="btn-manage-cashflows" type="button" class="min-h-[36px] px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-600 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80 text-xs font-bold transition flex items-center justify-center space-x-1.5 shrink-0 active:scale-95">
-          <i data-lucide="calendar-clock" class="w-4 h-4"></i>
-          <span data-i18n="financialOutlook.manageCashflows">Planlı Gelir / Giderleri Yönet</span>
-        </button>
+        <!-- Management & Scenario CTA Buttons -->
+        <div class="flex items-center space-x-2 shrink-0 flex-wrap gap-y-1">
+          <button id="btn-open-whatif" type="button" class="min-h-[36px] px-3 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/60 dark:hover:bg-purple-900/60 text-purple-600 dark:text-purple-300 border border-purple-200/80 dark:border-purple-800/80 text-xs font-bold transition flex items-center justify-center space-x-1.5 shrink-0 active:scale-95">
+            <i data-lucide="sparkles" class="w-4 h-4 text-purple-500 dark:text-purple-400"></i>
+            <span data-i18n="financialOutlook.tryScenario">Senaryo Dene</span>
+          </button>
+          <button id="btn-manage-cashflows" type="button" class="min-h-[36px] px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-600 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80 text-xs font-bold transition flex items-center justify-center space-x-1.5 shrink-0 active:scale-95">
+            <i data-lucide="calendar-clock" class="w-4 h-4"></i>
+            <span data-i18n="financialOutlook.manageCashflows">Planlı Gelir / Giderleri Yönet</span>
+          </button>
+        </div>
       </div>
 
       <!-- 4 Compact Primary Metrics Grid -->
@@ -1304,6 +1310,235 @@
         </div>
 
       </form>
+
+    </div>
+  </div>
+
+  <!-- ================= WHAT-IF SCENARIO SIMULATOR MODAL (FAZ 5.6) ================= -->
+  <div id="whatif-modal" role="dialog" aria-modal="true" aria-labelledby="whatif-modal-title" class="hidden fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-slate-900/60 backdrop-blur-xs transition-opacity duration-200">
+    <div class="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-2xl max-w-xl w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[100dvh] sm:max-h-[90vh] h-[92dvh] sm:h-auto">
+      
+      <!-- Sticky Modal Header -->
+      <div class="sticky top-0 z-10 bg-white dark:bg-slate-900 p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+        <div class="flex items-center space-x-2.5">
+          <div class="w-8 h-8 rounded-xl bg-purple-50 dark:bg-purple-950 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
+            <i data-lucide="sparkles" class="w-4 h-4"></i>
+          </div>
+          <div>
+            <h3 id="whatif-modal-title" class="text-sm font-bold text-slate-900 dark:text-white" data-i18n="whatif.title">Senaryo Simülatörü</h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400" data-i18n="whatif.subtitle">Bir finansal kararın bütçene olası etkisini gör.</p>
+          </div>
+        </div>
+        <button id="whatif-modal-close" type="button" aria-label="Pencereyi Kapat" class="min-w-[40px] min-h-[40px] p-2 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <!-- Scrollable Modal Content -->
+      <div class="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 min-h-0 overscroll-contain">
+        
+        <!-- Disclaimer Note Banner -->
+        <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 flex items-center space-x-2 text-xs text-slate-600 dark:text-slate-400">
+          <i data-lucide="info" class="w-4 h-4 text-purple-500 dark:text-purple-400 shrink-0"></i>
+          <span data-i18n="whatif.disclaimer">Bu sadece bir simülasyondur. İşlemleriniz ve planlarınız değiştirilmez.</span>
+        </div>
+
+        <!-- Scenario Type Tabs (4 types) -->
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5" data-i18n="whatif.inputs.direction">Senaryo Türü</label>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl text-xs font-medium">
+            <button type="button" id="whatif-tab-expense" class="whatif-tab px-2.5 py-1.5 rounded-lg text-center transition bg-white dark:bg-slate-700 text-purple-600 dark:text-purple-300 font-bold shadow-xs" data-type="ONE_TIME_EXPENSE" data-i18n="whatif.tabs.expense">Ek Harcama</button>
+            <button type="button" id="whatif-tab-income" class="whatif-tab px-2.5 py-1.5 rounded-lg text-center transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white" data-type="ONE_TIME_INCOME" data-i18n="whatif.tabs.income">Ek Gelir</button>
+            <button type="button" id="whatif-tab-percent" class="whatif-tab px-2.5 py-1.5 rounded-lg text-center transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white" data-type="FUTURE_SPEND_PERCENT_CHANGE" data-i18n="whatif.tabs.percent">Harcama Oranı</button>
+            <button type="button" id="whatif-tab-daily" class="whatif-tab px-2.5 py-1.5 rounded-lg text-center transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white" data-type="FUTURE_DAILY_SPEND_CHANGE" data-i18n="whatif.tabs.daily">Günlük Harcama</button>
+          </div>
+        </div>
+
+        <!-- Dynamic Input Sections -->
+        <!-- 1. ONE_TIME_EXPENSE Section -->
+        <div id="whatif-section-expense" class="whatif-input-section space-y-2.5">
+          <p class="text-xs text-slate-500 dark:text-slate-400 font-medium" data-i18n="whatif.helpers.expense">Bugün ek bir harcama yaparsam?</p>
+          <div>
+            <label for="whatif-input-expense" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1" data-i18n="whatif.inputs.amount">Tutar</label>
+            <div class="relative">
+              <input type="number" id="whatif-input-expense" min="1" step="any" inputmode="decimal" placeholder="2000" class="w-full px-3 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-purple-500 transition" />
+            </div>
+          </div>
+          <!-- Presets -->
+          <div class="flex items-center space-x-1.5 flex-wrap gap-y-1">
+            <span class="text-[11px] text-slate-400 dark:text-slate-500 mr-1">Örnek:</span>
+            <button type="button" class="whatif-chip px-2.5 py-1 rounded-lg text-xs bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-purple-100 dark:hover:bg-purple-950/80 transition" data-target="whatif-input-expense" data-value="500">500 ₺</button>
+            <button type="button" class="whatif-chip px-2.5 py-1 rounded-lg text-xs bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-purple-100 dark:hover:bg-purple-950/80 transition" data-target="whatif-input-expense" data-value="1000">1.000 ₺</button>
+            <button type="button" class="whatif-chip px-2.5 py-1 rounded-lg text-xs bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-purple-100 dark:hover:bg-purple-950/80 transition" data-target="whatif-input-expense" data-value="2000">2.000 ₺</button>
+            <button type="button" class="whatif-chip px-2.5 py-1 rounded-lg text-xs bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-purple-100 dark:hover:bg-purple-950/80 transition" data-target="whatif-input-expense" data-value="5000">5.000 ₺</button>
+          </div>
+        </div>
+
+        <!-- 2. ONE_TIME_INCOME Section -->
+        <div id="whatif-section-income" class="whatif-input-section space-y-2.5 hidden">
+          <p class="text-xs text-slate-500 dark:text-slate-400 font-medium" data-i18n="whatif.helpers.income">Ek bir gelir elde edersem?</p>
+          <div>
+            <label for="whatif-input-income" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1" data-i18n="whatif.inputs.amount">Tutar</label>
+            <div class="relative">
+              <input type="number" id="whatif-input-income" min="1" step="any" inputmode="decimal" placeholder="3000" class="w-full px-3 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-purple-500 transition" />
+            </div>
+          </div>
+          <!-- Presets -->
+          <div class="flex items-center space-x-1.5 flex-wrap gap-y-1">
+            <span class="text-[11px] text-slate-400 dark:text-slate-500 mr-1">Örnek:</span>
+            <button type="button" class="whatif-chip px-2.5 py-1 rounded-lg text-xs bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-purple-100 dark:hover:bg-purple-950/80 transition" data-target="whatif-input-income" data-value="1000">1.000 ₺</button>
+            <button type="button" class="whatif-chip px-2.5 py-1 rounded-lg text-xs bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-purple-100 dark:hover:bg-purple-950/80 transition" data-target="whatif-input-income" data-value="2500">2.500 ₺</button>
+            <button type="button" class="whatif-chip px-2.5 py-1 rounded-lg text-xs bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-purple-100 dark:hover:bg-purple-950/80 transition" data-target="whatif-input-income" data-value="5000">5.000 ₺</button>
+          </div>
+        </div>
+
+        <!-- 3. FUTURE_SPEND_PERCENT_CHANGE Section -->
+        <div id="whatif-section-percent" class="whatif-input-section space-y-2.5 hidden">
+          <p class="text-xs text-slate-500 dark:text-slate-400 font-medium" data-i18n="whatif.helpers.percent">Kalan günlerde harcamalarımı artırır veya azaltırsam?</p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1" data-i18n="whatif.inputs.direction">Yön</label>
+              <div class="flex items-center rounded-xl bg-slate-100 dark:bg-slate-800 p-1 text-xs">
+                <button type="button" id="whatif-percent-dir-down" class="flex-1 py-1.5 rounded-lg text-center font-bold bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-xs transition" data-dir="down" data-i18n="whatif.inputs.decrease">Azalt (-)</button>
+                <button type="button" id="whatif-percent-dir-up" class="flex-1 py-1.5 rounded-lg text-center font-medium text-slate-600 dark:text-slate-400 transition" data-dir="up" data-i18n="whatif.inputs.increase">Artır (+)</button>
+              </div>
+            </div>
+            <div>
+              <label for="whatif-input-percent" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1" data-i18n="whatif.inputs.percent">Yüzde (%)</label>
+              <input type="number" id="whatif-input-percent" min="1" max="100" step="1" inputmode="numeric" placeholder="20" class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-purple-500 transition" />
+            </div>
+          </div>
+          <!-- Presets -->
+          <div class="flex items-center space-x-1.5 flex-wrap gap-y-1">
+            <span class="text-[11px] text-slate-400 dark:text-slate-500 mr-1">Örnek:</span>
+            <button type="button" class="whatif-chip px-2.5 py-1 rounded-lg text-xs bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-purple-100 dark:hover:bg-purple-950/80 transition" data-target="whatif-input-percent" data-value="10">%10</button>
+            <button type="button" class="whatif-chip px-2.5 py-1 rounded-lg text-xs bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-purple-100 dark:hover:bg-purple-950/80 transition" data-target="whatif-input-percent" data-value="20">%20</button>
+            <button type="button" class="whatif-chip px-2.5 py-1 rounded-lg text-xs bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-purple-100 dark:hover:bg-purple-950/80 transition" data-target="whatif-input-percent" data-value="30">%30</button>
+          </div>
+          <!-- Interpretation -->
+          <div id="whatif-percent-interpretation" class="text-xs font-semibold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 p-2.5 rounded-xl border border-purple-200/60 dark:border-purple-800/60">
+            Kalan günlerde harcama %20 azalır
+          </div>
+        </div>
+
+        <!-- 4. FUTURE_DAILY_SPEND_CHANGE Section -->
+        <div id="whatif-section-daily" class="whatif-input-section space-y-2.5 hidden">
+          <p class="text-xs text-slate-500 dark:text-slate-400 font-medium" data-i18n="whatif.helpers.daily">Her gün harcadığım ortalama tutarı değiştirirsem?</p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1" data-i18n="whatif.inputs.direction">Yön</label>
+              <div class="flex items-center rounded-xl bg-slate-100 dark:bg-slate-800 p-1 text-xs">
+                <button type="button" id="whatif-daily-dir-down" class="flex-1 py-1.5 rounded-lg text-center font-bold bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-xs transition" data-dir="down" data-i18n="whatif.inputs.less">Daha Az</button>
+                <button type="button" id="whatif-daily-dir-up" class="flex-1 py-1.5 rounded-lg text-center font-medium text-slate-600 dark:text-slate-400 transition" data-dir="up" data-i18n="whatif.inputs.more">Daha Fazla</button>
+              </div>
+            </div>
+            <div>
+              <label for="whatif-input-daily" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1" data-i18n="whatif.inputs.dailyAmount">Günlük Tutar</label>
+              <input type="number" id="whatif-input-daily" min="1" step="any" inputmode="decimal" placeholder="100" class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-purple-500 transition" />
+            </div>
+          </div>
+          <!-- Presets -->
+          <div class="flex items-center space-x-1.5 flex-wrap gap-y-1">
+            <span class="text-[11px] text-slate-400 dark:text-slate-500 mr-1">Örnek:</span>
+            <button type="button" class="whatif-chip px-2.5 py-1 rounded-lg text-xs bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-purple-100 dark:hover:bg-purple-950/80 transition" data-target="whatif-input-daily" data-value="50">50 ₺/gün</button>
+            <button type="button" class="whatif-chip px-2.5 py-1 rounded-lg text-xs bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-purple-100 dark:hover:bg-purple-950/80 transition" data-target="whatif-input-daily" data-value="100">100 ₺/gün</button>
+            <button type="button" class="whatif-chip px-2.5 py-1 rounded-lg text-xs bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-purple-100 dark:hover:bg-purple-950/80 transition" data-target="whatif-input-daily" data-value="150">150 ₺/gün</button>
+          </div>
+          <!-- Interpretation -->
+          <div id="whatif-daily-interpretation" class="text-xs font-semibold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 p-2.5 rounded-xl border border-purple-200/60 dark:border-purple-800/60">
+            Her gün 100 ₺ daha az harcarsam
+          </div>
+        </div>
+
+        <!-- Simulation Results Area -->
+        <div id="whatif-results-area" class="space-y-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+          
+          <!-- Impact Callout Card -->
+          <div id="whatif-impact-card" class="p-3.5 rounded-xl bg-purple-50/70 dark:bg-purple-950/40 border border-purple-200/80 dark:border-purple-800/80 flex items-center justify-between">
+            <div class="flex items-center space-x-2.5">
+              <div id="whatif-impact-icon-box" class="w-8 h-8 rounded-lg bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 flex items-center justify-center shrink-0">
+                <i id="whatif-impact-icon" data-lucide="trending-down" class="w-4 h-4"></i>
+              </div>
+              <div>
+                <span class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block" data-i18n="whatif.results.impactTitle">Kararın Olası Etkisi</span>
+                <span id="whatif-impact-text" class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">Simülasyon sonucu hesaplanıyor...</span>
+              </div>
+            </div>
+            <span id="whatif-impact-badge" class="px-2.5 py-1 rounded-full text-xs font-bold bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 shrink-0">--</span>
+          </div>
+
+          <!-- 3-Column Comparison Table (Current -> Simulated -> Delta) -->
+          <div class="overflow-x-auto rounded-xl border border-slate-200/80 dark:border-slate-700/80">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-slate-50 dark:bg-slate-800/70 text-[11px] font-bold text-slate-500 dark:text-slate-400 border-b border-slate-200/80 dark:border-slate-700/80">
+                <tr>
+                  <th class="py-2.5 px-3">Metrik</th>
+                  <th class="py-2.5 px-2 text-right" data-i18n="whatif.results.current">Mevcut</th>
+                  <th class="py-2.5 px-2 text-right" data-i18n="whatif.results.simulated">Senaryo Sonrası</th>
+                  <th class="py-2.5 px-3 text-right" data-i18n="whatif.results.difference">Fark</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+                <!-- Row 1: Projected Expense -->
+                <tr>
+                  <td class="py-2 px-3 font-semibold text-slate-700 dark:text-slate-300" data-i18n="whatif.results.projectedExpense">Ay Sonu Gider Tahmini</td>
+                  <td id="whatif-base-expense" class="py-2 px-2 text-right text-slate-600 dark:text-slate-400">--</td>
+                  <td id="whatif-sim-expense" class="py-2 px-2 text-right font-bold text-slate-900 dark:text-white">--</td>
+                  <td id="whatif-delta-expense" class="py-2 px-3 text-right font-bold text-slate-700 dark:text-slate-300">--</td>
+                </tr>
+                <!-- Row 2: Projected Remaining Expense -->
+                <tr>
+                  <td class="py-2 px-3 font-semibold text-slate-700 dark:text-slate-300" data-i18n="whatif.results.projectedRemaining">Kalan Günler Gideri</td>
+                  <td id="whatif-base-remaining" class="py-2 px-2 text-right text-slate-600 dark:text-slate-400">--</td>
+                  <td id="whatif-sim-remaining" class="py-2 px-2 text-right font-bold text-slate-900 dark:text-white">--</td>
+                  <td id="whatif-delta-remaining" class="py-2 px-3 text-right font-bold text-slate-700 dark:text-slate-300">--</td>
+                </tr>
+                <!-- Row 3: Projected Ending Balance -->
+                <tr>
+                  <td class="py-2 px-3 font-semibold text-slate-700 dark:text-slate-300" data-i18n="whatif.results.projectedEndBalance">Öngörülen Ay Sonu Bakiye</td>
+                  <td id="whatif-base-balance" class="py-2 px-2 text-right text-slate-600 dark:text-slate-400">--</td>
+                  <td id="whatif-sim-balance" class="py-2 px-2 text-right font-bold text-slate-900 dark:text-white">--</td>
+                  <td id="whatif-delta-balance" class="py-2 px-3 text-right font-bold text-slate-700 dark:text-slate-300">--</td>
+                </tr>
+                <!-- Row 4: Daily Rate -->
+                <tr>
+                  <td class="py-2 px-3 font-semibold text-slate-700 dark:text-slate-300" data-i18n="whatif.results.dailyRate">Günlük Harcama Hızı</td>
+                  <td id="whatif-base-rate" class="py-2 px-2 text-right text-slate-600 dark:text-slate-400">--</td>
+                  <td id="whatif-sim-rate" class="py-2 px-2 text-right font-bold text-slate-900 dark:text-white">--</td>
+                  <td id="whatif-delta-rate" class="py-2 px-3 text-right font-bold text-slate-700 dark:text-slate-300">--</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Explainability Collapsible -->
+          <details id="whatif-explainability" class="rounded-xl border border-slate-200/70 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 text-xs group">
+            <summary class="py-2.5 px-3.5 font-bold text-slate-700 dark:text-slate-300 cursor-pointer flex items-center justify-between select-none list-none">
+              <span class="flex items-center space-x-1.5">
+                <i data-lucide="help-circle" class="w-3.5 h-3.5 text-purple-500 shrink-0"></i>
+                <span data-i18n="whatif.explainability.title">Bu sonuç nasıl hesaplandı?</span>
+              </span>
+              <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400 group-open:rotate-180 transition-transform"></i>
+            </summary>
+            <div id="whatif-assumptions-list" class="px-3.5 pb-3 pt-1 space-y-1.5 text-slate-600 dark:text-slate-400 border-t border-slate-100 dark:border-slate-800/80">
+              <!-- Rendered dynamically -->
+            </div>
+          </details>
+
+        </div>
+
+      </div>
+
+      <!-- Sticky Footer -->
+      <div class="sticky bottom-0 z-10 bg-white dark:bg-slate-900 px-4 py-3 sm:p-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pb-4">
+        <button id="whatif-btn-reset" type="button" class="min-h-[40px] px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center space-x-1.5 active:scale-95">
+          <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+          <span data-i18n="whatif.reset">Yeni Senaryo</span>
+        </button>
+        <button id="whatif-btn-done" type="button" class="min-h-[40px] px-5 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition">
+          Tamam
+        </button>
+      </div>
 
     </div>
   </div>

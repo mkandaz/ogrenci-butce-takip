@@ -43,7 +43,10 @@ import {
   ArrowDownCircle,
   TrendingUp,
   Calculator,
-  CalendarPlus
+  CalendarPlus,
+  TrendingDown,
+  ChevronDown,
+  HelpCircle
 } from 'lucide';
 
 const appIcons = {
@@ -90,7 +93,10 @@ const appIcons = {
   ArrowDownCircle,
   TrendingUp,
   Calculator,
-  CalendarPlus
+  CalendarPlus,
+  TrendingDown,
+  ChevronDown,
+  HelpCircle
 };
 import { calculateSummary } from '../store/calculations.js';
 import { formatCurrency, formatNumber, formatDate, formatTime, formatMonthTitle, getCurrencySymbol } from '../utils/formatters.js';
@@ -290,6 +296,7 @@ export class UIManager {
     this.financialOutlookSection = document.getElementById('financial-outlook-section');
     this.outlookHistoricalBadge = document.getElementById('outlook-historical-badge');
     this.btnManageCashflows = document.getElementById('btn-manage-cashflows');
+    this.btnOpenWhatIf = document.getElementById('btn-open-whatif');
     this.metricNextIncomeDays = document.getElementById('metric-next-income-days');
     this.metricNextIncomeName = document.getElementById('metric-next-income-name');
     this.metricNextIncomeAmount = document.getElementById('metric-next-income-amount');
@@ -581,10 +588,15 @@ export class UIManager {
       });
     }
 
-    // Financial Outlook & Planned Cashflows (FAZ 5.5C)
+    // Financial Outlook & Planned Cashflows (FAZ 5.5C & FAZ 5.6)
     if (this.btnManageCashflows) {
       this.btnManageCashflows.addEventListener('click', () => {
         this.modalManager?.openCashflowManagerModal?.();
+      });
+    }
+    if (this.btnOpenWhatIf) {
+      this.btnOpenWhatIf.addEventListener('click', () => {
+        this.modalManager?.openWhatIfModal?.();
       });
     }
     if (this.btnFirstCashflow) {

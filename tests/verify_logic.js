@@ -9414,11 +9414,263 @@ console.log('\n--- 28. FAZ 5.5C — STUDENT FINANCIAL COMMAND CENTER UI (TC-366 
   globalThis.document = originalDoc;
 }
 
+// TC-389: FAZ 5.6 — WHAT-IF SIMULATOR UI & DETERMINISTIC ENGINE INTERACTION
+console.log('\n--- 29. FAZ 5.6 — WHAT-IF SIMULATOR UI (TC-389) ---');
+{
+  const indexHtml = fs.readFileSync(path.join(process.cwd(), 'index.html'), 'utf-8');
+
+  // 1. Static HTML & UI Architecture
+  assert(indexHtml.includes('id="btn-open-whatif"'), 'TC-389-1 Launcher button #btn-open-whatif exists in HTML');
+  assert(indexHtml.includes('data-i18n="financialOutlook.tryScenario"'), 'TC-389-1 Launcher button has data-i18n="financialOutlook.tryScenario"');
+  assert(indexHtml.includes('id="whatif-modal"'), 'TC-389-1 What-If modal #whatif-modal exists');
+  assert(indexHtml.includes('aria-modal="true"'), 'TC-389-1 Modal has aria-modal="true"');
+  assert(indexHtml.includes('id="whatif-tab-expense"'), 'TC-389-1 ONE_TIME_EXPENSE tab exists');
+  assert(indexHtml.includes('id="whatif-tab-income"'), 'TC-389-1 ONE_TIME_INCOME tab exists');
+  assert(indexHtml.includes('id="whatif-tab-percent"'), 'TC-389-1 FUTURE_SPEND_PERCENT_CHANGE tab exists');
+  assert(indexHtml.includes('id="whatif-tab-daily"'), 'TC-389-1 FUTURE_DAILY_SPEND_CHANGE tab exists');
+  assert(indexHtml.includes('id="whatif-impact-card"'), 'TC-389-1 Visual impact card exists');
+  assert(indexHtml.includes('id="whatif-base-expense"'), 'TC-389-1 Comparison table base expense cell exists');
+  assert(indexHtml.includes('id="whatif-sim-expense"'), 'TC-389-1 Comparison table sim expense cell exists');
+  assert(indexHtml.includes('id="whatif-delta-expense"'), 'TC-389-1 Comparison table delta expense cell exists');
+  assert(indexHtml.includes('id="whatif-explainability"'), 'TC-389-1 Explainability details element exists');
+  assert(indexHtml.includes('id="whatif-btn-reset"'), 'TC-389-1 Reset button #whatif-btn-reset exists');
+
+  // 2. DOM Mock & ModalManager Lifecycle
+  const originalDoc = globalThis.document;
+  const originalConfirm = globalThis.confirm;
+
+  const createMockEl = (id) => {
+    const el = {
+      id,
+      value: '',
+      textContent: '',
+      className: '',
+      innerHTML: '',
+      style: {},
+      classList: {
+        classes: new Set(['hidden']),
+        add(c) { this.classes.add(c); },
+        remove(c) { this.classes.delete(c); },
+        contains(c) { return this.classes.has(c); },
+        replace(oldC, newC) { this.classes.delete(oldC); this.classes.add(newC); }
+      },
+      children: [],
+      appendChild(ch) { this.children.push(ch); },
+      listeners: {},
+      addEventListener(evt, fn) {
+        if (!this.listeners[evt]) this.listeners[evt] = [];
+        this.listeners[evt].push(fn);
+      },
+      dispatchEvent(evt) {
+        const type = typeof evt === 'string' ? evt : evt.type;
+        (this.listeners[type] || []).forEach(fn => fn(evt));
+      },
+      setAttribute() {},
+      removeAttribute() {},
+      getAttribute(k) { return el[k] || ''; },
+      focus() {}
+    };
+    return el;
+  };
+
+  const whatifIds = [
+    'whatif-modal', 'whatif-modal-close', 'whatif-btn-done', 'whatif-btn-reset',
+    'whatif-tab-expense', 'whatif-tab-income', 'whatif-tab-percent', 'whatif-tab-daily',
+    'whatif-section-expense', 'whatif-section-income', 'whatif-section-percent', 'whatif-section-daily',
+    'whatif-input-expense', 'whatif-input-income', 'whatif-input-percent',
+    'whatif-percent-dir-down', 'whatif-percent-dir-up', 'whatif-percent-interpretation',
+    'whatif-input-daily', 'whatif-daily-dir-down', 'whatif-daily-dir-up', 'whatif-daily-interpretation',
+    'whatif-impact-card', 'whatif-impact-icon-box', 'whatif-impact-icon', 'whatif-impact-text', 'whatif-impact-badge',
+    'whatif-base-expense', 'whatif-sim-expense', 'whatif-delta-expense',
+    'whatif-base-remaining', 'whatif-sim-remaining', 'whatif-delta-remaining',
+    'whatif-base-balance', 'whatif-sim-balance', 'whatif-delta-balance',
+    'whatif-base-rate', 'whatif-sim-rate', 'whatif-delta-rate',
+    'whatif-explainability', 'whatif-assumptions-list',
+    'initial-budget-modal-close', 'initial-budget-modal-cancel', 'initial-budget-form',
+    'edit-initial-balance', 'edit-monthly-income', 'edit-target-month',
+    'auth-modal', 'auth-modal-close', 'auth-modal-cancel', 'btn-auth-google', 'btn-auth-guest',
+    'cashflow-manager-modal', 'cashflow-modal', 'confirm-modal'
+  ];
+
+  const elements = {};
+  whatifIds.forEach(id => {
+    elements[id] = createMockEl(id);
+  });
+
+  elements['whatif-tab-expense'].dataset = { type: 'ONE_TIME_EXPENSE' };
+  elements['whatif-tab-income'].dataset = { type: 'ONE_TIME_INCOME' };
+  elements['whatif-tab-percent'].dataset = { type: 'FUTURE_SPEND_PERCENT_CHANGE' };
+  elements['whatif-tab-daily'].dataset = { type: 'FUTURE_DAILY_SPEND_CHANGE' };
+  elements['whatif-percent-dir-down'].dataset = { dir: 'down' };
+  elements['whatif-percent-dir-up'].dataset = { dir: 'up' };
+  elements['whatif-daily-dir-down'].dataset = { dir: 'down' };
+  elements['whatif-daily-dir-up'].dataset = { dir: 'up' };
+
+  globalThis.document = {
+    body: { classList: { add() {}, remove() {}, contains() { return false; } } },
+    getElementById: (id) => elements[id] || null,
+    querySelectorAll: (sel) => {
+      if (sel === '.whatif-tab') {
+        return [elements['whatif-tab-expense'], elements['whatif-tab-income'], elements['whatif-tab-percent'], elements['whatif-tab-daily']];
+      }
+      if (sel === '.whatif-input-section') {
+        return [elements['whatif-section-expense'], elements['whatif-section-income'], elements['whatif-section-percent'], elements['whatif-section-daily']];
+      }
+      if (sel === '.whatif-chip') return [];
+      return [];
+    },
+    createElement: (tag) => createMockEl(tag),
+    addEventListener: () => {},
+    removeEventListener: () => {}
+  };
+
+  SafeStorage.removeItem(STORAGE_KEY);
+  const store = new BudgetStore();
+  const refDate = new Date('2026-09-15T12:00:00Z');
+  store.updateSettings({ initialBalance: 10000, targetMonth: '2026-09' });
+  store.addTransaction({ title: 'Kira', amount: 3000, type: 'expense', categoryId: 'cat_rent', date: '2026-09-02' });
+  store.addTransaction({ title: 'Market', amount: 1500, type: 'expense', categoryId: 'cat_market', date: '2026-09-10' });
+
+  const ui = {
+    store,
+    now: refDate,
+    selectedMonth: '2026-09',
+    currency: 'TRY',
+    getLanguage: () => 'tr'
+  };
+
+  const modalMgr = new ModalManager(store, ui);
+
+  // 3. Test Modal Open / Close Lifecycle
+  assert(elements['whatif-modal'].classList.contains('hidden'), 'TC-389-2 Modal is initially hidden');
+  modalMgr.openWhatIfModal();
+  assert(!elements['whatif-modal'].classList.contains('hidden'), 'TC-389-2 Modal is opened after openWhatIfModal()');
+  assert(modalMgr.currentWhatIfType === 'ONE_TIME_EXPENSE', 'TC-389-2 Default scenario type is ONE_TIME_EXPENSE');
+
+  modalMgr.closeWhatIfModal();
+  assert(elements['whatif-modal'].classList.contains('hidden'), 'TC-389-2 Modal is closed after closeWhatIfModal()');
+
+  // Re-open for simulation verifications
+  modalMgr.openWhatIfModal();
+
+  // 4. Scenario 1: ONE_TIME_EXPENSE (Bugün 2.000 TL ek harcama)
+  elements['whatif-input-expense'].value = '2000';
+  modalMgr.setWhatIfScenarioType('ONE_TIME_EXPENSE');
+  assert(elements['whatif-delta-expense'].textContent.includes('2.000'), 'TC-389-3 ONE_TIME_EXPENSE: Delta expense reflects +2,000 TL');
+  assert(elements['whatif-delta-expense'].textContent.startsWith('+'), 'TC-389-3 ONE_TIME_EXPENSE: Delta expense has plus prefix');
+  assert(elements['whatif-delta-balance'].textContent.includes('2.000'), 'TC-389-3 ONE_TIME_EXPENSE: Delta balance reflects -2,000 TL');
+  assert(elements['whatif-delta-balance'].textContent.startsWith('-'), 'TC-389-3 ONE_TIME_EXPENSE: Delta balance has minus prefix');
+  assert(elements['whatif-impact-card'] !== null, 'TC-389-3 Visual impact card is rendered');
+  assert(elements['whatif-impact-badge'].textContent.includes('2.000'), 'TC-389-3 Visual impact badge shows -2,000 TL');
+
+  // 5. Scenario 2: ONE_TIME_INCOME (3.000 TL ek gelir)
+  elements['whatif-input-income'].value = '3000';
+  modalMgr.setWhatIfScenarioType('ONE_TIME_INCOME');
+  assert(elements['whatif-delta-balance'].textContent.includes('3.000'), 'TC-389-4 ONE_TIME_INCOME: Delta balance reflects +3,000 TL');
+  assert(elements['whatif-delta-balance'].textContent.startsWith('+'), 'TC-389-4 ONE_TIME_INCOME: Delta balance has plus prefix');
+  assert(elements['whatif-delta-expense'].textContent.includes('0'), 'TC-389-4 ONE_TIME_INCOME: Delta expense is 0 (income does not change expense forecast)');
+  assert(elements['whatif-impact-badge'].textContent.includes('3.000'), 'TC-389-4 Visual impact badge shows +3,000 TL');
+
+  // 6. Scenario 3: FUTURE_SPEND_PERCENT_CHANGE (%20 azaltma vs artırma)
+  elements['whatif-input-percent'].value = '20';
+  modalMgr.setWhatIfPercentDirection('down');
+  modalMgr.setWhatIfScenarioType('FUTURE_SPEND_PERCENT_CHANGE');
+  assert(elements['whatif-percent-interpretation'].textContent.includes('%20'), 'TC-389-5 Percent interpretation text includes %20');
+  assert(elements['whatif-percent-interpretation'].textContent.toLowerCase().includes('azal'), 'TC-389-5 Interpretation reflects reduction');
+  assert(elements['whatif-delta-expense'].textContent.startsWith('-'), 'TC-389-5 Reducing spend decreases delta expense');
+
+  // Toggle to increase
+  modalMgr.setWhatIfPercentDirection('up');
+  assert(elements['whatif-percent-interpretation'].textContent.toLowerCase().includes('art'), 'TC-389-5 Interpretation reflects increase');
+  assert(elements['whatif-delta-expense'].textContent.startsWith('+'), 'TC-389-5 Increasing spend increases delta expense');
+
+  // 7. Scenario 4: FUTURE_DAILY_SPEND_CHANGE (Günde 100 TL daha az/fazla)
+  elements['whatif-input-daily'].value = '100';
+  modalMgr.setWhatIfDailyDirection('down');
+  modalMgr.setWhatIfScenarioType('FUTURE_DAILY_SPEND_CHANGE');
+  assert(elements['whatif-daily-interpretation'].textContent.includes('100'), 'TC-389-6 Daily interpretation includes 100');
+  assert(elements['whatif-daily-interpretation'].textContent.toLowerCase().includes('daha az'), 'TC-389-6 Daily interpretation reflects less');
+  assert(elements['whatif-delta-rate'].textContent.startsWith('-'), 'TC-389-6 Daily rate decreases');
+
+  // Toggle to increase
+  modalMgr.setWhatIfDailyDirection('up');
+  assert(elements['whatif-daily-interpretation'].textContent.toLowerCase().includes('daha fazla'), 'TC-389-6 Daily interpretation reflects more');
+  assert(elements['whatif-delta-rate'].textContent.startsWith('+'), 'TC-389-6 Daily rate increases');
+
+  // 8. Explainability Assumptions Verification
+  assert(elements['whatif-assumptions-list'].innerHTML.length > 0, 'TC-389-7 Explainability assumptions rendered into list');
+  assert(elements['whatif-assumptions-list'].innerHTML.includes('Değişiklik yalnızca'), 'TC-389-7 Contains remaining days assumption');
+  assert(elements['whatif-assumptions-list'].innerHTML.includes('sabit tutuldu') || elements['whatif-assumptions-list'].innerHTML.includes('korunur'), 'TC-389-7 Explains past actuals remain unchanged');
+
+  // 9. Null Projected End Balance Handling
+  modalMgr.renderWhatIfResults(
+    {
+      baseline: { projectedExpense: 1000, projectedRemainingExpense: 500, projectedEndBalance: null, dailyRate: 50 },
+      simulated: { projectedExpense: 1000, projectedRemainingExpense: 500, projectedEndBalance: null, dailyRate: 50 },
+      delta: { projectedExpense: 0, projectedRemainingExpense: 0, projectedEndBalance: null, dailyRate: 0 },
+      metadata: { daysRemaining: 15, assumptions: [] }
+    },
+    'TRY',
+    'tr',
+    true
+  );
+  assert(elements['whatif-base-balance'].textContent === '—', 'TC-389-8 Null base balance renders neutral dash "—", never 0');
+  assert(elements['whatif-sim-balance'].textContent === '—', 'TC-389-8 Null sim balance renders neutral dash "—", never 0');
+  assert(elements['whatif-delta-balance'].textContent === '—', 'TC-389-8 Null delta balance renders neutral dash "—", never 0');
+
+  // 10. Ephemeral Safety (Zero Database / Store Mutation)
+  const txCountBefore = store.getTransactions().length;
+  const cfCountBefore = store.getPlannedCashflows().length;
+  modalMgr.setWhatIfScenarioType('ONE_TIME_EXPENSE');
+  elements['whatif-input-expense'].value = '99999';
+  modalMgr.runWhatIfSimulation();
+  assert(store.getTransactions().length === txCountBefore, 'TC-389-9 Store transactions strictly unchanged after massive simulation');
+  assert(store.getPlannedCashflows().length === cfCountBefore, 'TC-389-9 Store planned cashflows strictly unchanged after simulation');
+
+  // 11. Temporal Independence (Selected Historical Month Independence)
+  ui.selectedMonth = '2026-05';
+  modalMgr.openWhatIfModal();
+  modalMgr.setWhatIfScenarioType('FUTURE_SPEND_PERCENT_CHANGE');
+  elements['whatif-input-percent'].value = '20';
+  modalMgr.runWhatIfSimulation();
+  assert(elements['whatif-assumptions-list'].innerHTML.includes('15') || elements['whatif-assumptions-list'].innerHTML.includes('kalan'), 'TC-389-10 Uses live reference date independent of selectedMonth 2026-05');
+
+  // 12. Reset Action ("Yeni Senaryo")
+  modalMgr.resetWhatIfSimulation();
+  assert(modalMgr.currentWhatIfType === 'ONE_TIME_EXPENSE', 'TC-389-11 Reset restores scenario to ONE_TIME_EXPENSE');
+  assert(modalMgr.whatifPercentDirection === 'down', 'TC-389-11 Reset restores percent direction to down');
+  assert(modalMgr.whatifDailyDirection === 'down', 'TC-389-11 Reset restores daily direction to down');
+  assert(elements['whatif-input-expense'].value === '', 'TC-389-11 Reset clears input values');
+
+  // 13. TR & EN Dictionary Completeness
+  assert(typeof tr.whatif === 'object', 'TC-389-12 tr.whatif is an object');
+  assert(typeof en.whatif === 'object', 'TC-389-12 en.whatif is an object');
+  const requiredKeys = ['title', 'subtitle', 'disclaimer', 'reset', 'close'];
+  requiredKeys.forEach(k => {
+    assert(Boolean(tr.whatif[k]), `TC-389-12 tr.whatif.${k} is non-empty string`);
+    assert(Boolean(en.whatif[k]), `TC-389-12 en.whatif.${k} is non-empty string`);
+  });
+  const requiredTabKeys = ['expense', 'income', 'percent', 'daily'];
+  requiredTabKeys.forEach(k => {
+    assert(Boolean(tr.whatif.tabs[k]), `TC-389-12 tr.whatif.tabs.${k} is non-empty string`);
+    assert(Boolean(en.whatif.tabs[k]), `TC-389-12 en.whatif.tabs.${k} is non-empty string`);
+  });
+  const requiredResultsKeys = ['current', 'simulated', 'difference', 'projectedExpense', 'projectedRemaining', 'projectedEndBalance', 'dailyRate', 'impactTitle', 'noImpact'];
+  requiredResultsKeys.forEach(k => {
+    assert(Boolean(tr.whatif.results[k]), `TC-389-12 tr.whatif.results.${k} is non-empty string`);
+    assert(Boolean(en.whatif.results[k]), `TC-389-12 en.whatif.results.${k} is non-empty string`);
+  });
+
+  globalThis.document = originalDoc;
+  globalThis.confirm = originalConfirm;
+}
+
 console.log('\n====================================================');
 console.log(`🏁 ENTEGRE TEST SONUCU: ${passed} PASSED, ${failed} FAILED`);
 console.log('====================================================');
 
 process.exit(failed > 0 ? 1 : 0);
+
 
 
 

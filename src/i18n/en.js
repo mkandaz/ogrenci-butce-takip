@@ -258,7 +258,8 @@ export default {
     noTimeline: 'No upcoming cashflows.',
     emptyTitle: 'Plan Your Cashflow',
     emptyDesc: 'Add your upcoming scholarship, rent, or recurring payment to see your safe daily spend until income day.',
-    addFirstPlan: 'Add my first plan'
+    addFirstPlan: 'Add my first plan',
+    tryScenario: 'Try a Scenario'
   },
   coverage: {
     COVERED: 'Covered',
@@ -319,5 +320,69 @@ export default {
     save: 'Save',
     emptyManager: 'You have no planned cashflows saved yet.',
     emptyManagerDesc: 'Start your cashflow plan by adding scholarships, rent, or bills.'
+  },
+  whatif: {
+    title: 'Scenario Simulator',
+    subtitle: 'See the potential impact of a financial decision on your budget.',
+    disclaimer: 'This is only a simulation. Your transactions and plans are not changed.',
+    tabs: {
+      expense: 'Extra Expense',
+      income: 'Extra Income',
+      percent: 'Spending Change',
+      daily: 'Daily Spending'
+    },
+    helpers: {
+      expense: 'What if I make an extra expense today?',
+      income: 'What if I receive an extra income?',
+      percent: 'What if I increase or decrease my spending for remaining days?',
+      daily: 'What if I change my average daily spending pace?'
+    },
+    inputs: {
+      amount: 'Amount',
+      percent: 'Change Percentage (%)',
+      dailyAmount: 'Daily Amount',
+      direction: 'Direction',
+      decrease: 'Decrease',
+      increase: 'Increase',
+      less: 'Less',
+      more: 'More'
+    },
+    interpretations: {
+      percentDecrease: 'Spending decreases by {percent}% for remaining days',
+      percentIncrease: 'Spending increases by {percent}% for remaining days',
+      dailyLess: 'If I spend {amount} less each day',
+      dailyMore: 'If I spend {amount} more each day'
+    },
+    results: {
+      impactTitle: 'Potential Impact',
+      current: 'Current',
+      simulated: 'After Scenario',
+      difference: 'Difference',
+      projectedExpense: 'Projected Month-End Spending',
+      projectedRemaining: 'Projected Remaining Spending',
+      projectedEndBalance: 'Projected Ending Balance',
+      dailyRate: 'Daily Spending Pace',
+      notAvailable: '—',
+      balanceDecrease: 'Projected ending balance decreases by {amount}',
+      balanceIncrease: 'Projected ending balance increases by {amount}',
+      expenseIncrease: 'Projected spending increases by +{amount}',
+      expenseDecrease: 'Projected spending decreases by {amount}',
+      noImpact: 'No significant difference expected on the projection'
+    },
+    explainability: {
+      title: 'How was this calculated?',
+      assumptions: {
+        BASELINE_FORECAST_UNCHANGED: 'Current spending pace and behavioral forecast were used as the baseline.',
+        NO_ADDITIONAL_INCOME_ASSUMED: 'No other additional income was assumed during the scenario.',
+        ONE_TIME_EVENT: 'This event is treated as one-time without altering daily habits.',
+        BASELINE_EXPENSE_FORECAST_UNCHANGED: 'One-time income does not directly alter spending projections.',
+        ONE_TIME_INCOME_EVENT: 'This income is treated as a one-time event.',
+        CHANGE_APPLIES_TO_REMAINING_DAYS_ONLY: 'The change applies only to the remaining {days} days; past actuals remain unchanged.',
+        PAST_ACTUALS_UNCHANGED: 'Spending from the beginning of the month to date remains fixed.',
+        DAILY_RATE_NON_NEGATIVE: 'Daily spending rate cannot fall below 0.'
+      }
+    },
+    reset: 'New Scenario',
+    close: 'Done'
   }
 };
