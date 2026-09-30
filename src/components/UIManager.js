@@ -117,7 +117,8 @@ export class UIManager {
     this.store = store;
     this.authService = options.authService || authService;
     this.syncService = options.syncService || new SyncService(this.store);
-    this.selectedMonth = this.store.state.settings.targetMonth || getCurrentYearMonth();
+    const initialNow = options.now instanceof Date ? options.now : (options.now ? new Date(options.now) : null);
+    this.selectedMonth = options.selectedMonth || (initialNow ? getCurrentYearMonth(initialNow) : (this.store.state.settings?.targetMonth || getCurrentYearMonth()));
     this.activeFilter = 'all'; // 'all' | 'income' | 'expense'
     this.searchQuery = '';
     this.categoryFilter = '';

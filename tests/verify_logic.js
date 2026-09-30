@@ -10435,6 +10435,66 @@ console.log('\n--- 30. FAZ 5.7 — MUVAZENE BRAND MIGRATION & VISUAL FREEZE (TC-
   globalThis.document = originalDoc;
 }
 
+// TC-392: FAZ 5.7.1 — Final Visual QA Patch & Month Rollover Verification
+console.log('\n--- 31. FAZ 5.7.1 — MONTH ROLLOVER & VISUAL QA PATCH (TC-392) ---');
+{
+  const indexHtml = fs.readFileSync(path.join(process.cwd(), 'index.html'), 'utf-8');
+
+  // 1. Fresh Initialization Month Rollover (2026-10-01 vs 2026-09-30)
+  SafeStorage.removeItem(STORAGE_KEY);
+  const freshStoreOct = new BudgetStore();
+  const octDate = new Date('2026-10-01T12:00:00');
+  const uiOct = new UIManager(freshStoreOct, { now: octDate });
+
+  assert(uiOct.selectedMonth === '2026-10', 'TC-392-1 Fresh init on 2026-10-01 selects October 2026 (2026-10)');
+  assert(formatMonthTitle(uiOct.selectedMonth, 'tr') === 'Ekim 2026', 'TC-392-1 Turkish month title for 2026-10 is Ekim 2026');
+  assert(formatMonthTitle(uiOct.selectedMonth, 'en') === 'October 2026', 'TC-392-1 English month title for 2026-10 is October 2026');
+
+  SafeStorage.removeItem(STORAGE_KEY);
+  const freshStoreSep = new BudgetStore();
+  const sepDate = new Date('2026-09-30T12:00:00');
+  const uiSep = new UIManager(freshStoreSep, { now: sepDate });
+
+  assert(uiSep.selectedMonth === '2026-09', 'TC-392-1 Fresh init on 2026-09-30 selects September 2026 (2026-09)');
+  assert(formatMonthTitle(uiSep.selectedMonth, 'tr') === 'Eylül 2026', 'TC-392-1 Turkish month title for 2026-09 is Eylül 2026');
+  assert(formatMonthTitle(uiSep.selectedMonth, 'en') === 'September 2026', 'TC-392-1 English month title for 2026-09 is September 2026');
+
+  // 2. Manual / Historical Month Selection Behavior
+  uiOct.setMonth('2026-08');
+  assert(uiOct.selectedMonth === '2026-08', 'TC-392-2 setMonth manually updates selectedMonth to August 2026');
+  assert(freshStoreOct.getSettings().targetMonth === '2026-08', 'TC-392-2 Manual month selection persists in store settings');
+
+  const historicalVm = getFinancialOutlookViewModel({
+    store: freshStoreOct,
+    selectedMonth: '2026-08',
+    now: octDate
+  });
+  assert(historicalVm.isHistorical === true, 'TC-392-2 FinancialOutlook identifies 2026-08 as historical from 2026-10-01');
+  assert(historicalVm.isCurrentMonth === false, 'TC-392-2 isCurrentMonth is false for historical period');
+  assert(historicalVm.targetMonth === '2026-08', 'TC-392-2 targetMonth is preserved as historical period');
+
+  // 3. Background Dot Pattern Refinement & Deep Stacking Architecture
+  assert(indexHtml.includes('id="bg-dot-pattern"'), 'TC-392-3 bg-dot-pattern container present');
+  assert(indexHtml.includes('pointer-events-none overflow-hidden z-0'), 'TC-392-3 bg-dot-pattern has zero pointer events and z-0');
+  assert(indexHtml.includes('<main class="relative z-10'), 'TC-392-3 main container elevated to relative z-10 above background');
+  assert(indexHtml.includes('<footer class="relative z-10'), 'TC-392-3 footer container elevated to relative z-10 above background');
+  assert(indexHtml.includes('r="18"') && indexHtml.includes('r="22"'), 'TC-392-3 Dot radii scaled up 1.5-2.5x with varied sizes');
+
+  // 4. Header Typographic Wordmark & Logo Cleanliness
+  const headerIdx = indexHtml.indexOf('<header');
+  const mainIdx = indexHtml.indexOf('<main');
+  const headerContent = indexHtml.slice(headerIdx, mainIdx);
+  assert(!headerContent.includes('graduation-cap'), 'TC-392-4 graduation-cap icon removed from header');
+  assert(headerContent.includes('data-i18n="brand.title">Muvazene</h1>'), 'TC-392-4 Muvazene wordmark present in header');
+  assert(headerContent.includes('data-i18n="brand.subtitle">Bugünü gör. Sonrasını dengele.</p>'), 'TC-392-4 Muvazene slogan present in header');
+
+  // 5. Polished Button System Invariants (Add Tx, Run Scenario, Manage Cash Flows)
+  assert(indexHtml.includes('id="btn-open-add-modal"') && indexHtml.includes('h-9 sm:h-10 px-3 sm:px-4 rounded-lg bg-[#356B57]'), 'TC-392-5 btn-open-add-modal has restrained radius and primary sage styling');
+  assert(indexHtml.includes('id="btn-open-whatif"') && indexHtml.includes('h-9 px-3.5 rounded-lg bg-[#356B57]'), 'TC-392-5 btn-open-whatif has h-9, rounded-lg and primary styling');
+  assert(indexHtml.includes('id="btn-manage-cashflows"') && indexHtml.includes('h-9 px-3.5 rounded-lg') && indexHtml.includes('border-[#DDDCD5] dark:border-[#27332B]'), 'TC-392-5 btn-manage-cashflows has h-9, rounded-lg and secondary border styling');
+  assert(indexHtml.includes('id="btn-empty-add-tx"') && indexHtml.includes('h-10 px-4 rounded-lg bg-[#356B57]'), 'TC-392-5 btn-empty-add-tx has h-10, rounded-lg and primary sage styling');
+}
+
 console.log('\n====================================================');
 console.log(`🏁 ENTEGRE TEST SONUCU: ${passed} PASSED, ${failed} FAILED`);
 console.log('====================================================');

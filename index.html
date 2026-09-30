@@ -43,28 +43,21 @@
 </head>
 <body class="bg-[#F6F5F1] dark:bg-[#101511] text-[#172033] dark:text-[#F0F3F1] min-h-screen antialiased flex flex-col transition-colors duration-200 relative">
 
-  <!-- Sparse Irregular Polka-Dot Motif (Static Decorative Background) -->
-  <div id="bg-dot-pattern" class="fixed inset-0 pointer-events-none overflow-hidden z-0 select-none opacity-60 dark:opacity-25" aria-hidden="true">
+  <!-- Sparse Irregular Polka-Dot Motif (Static Decorative Background — Deepest Layer) -->
+  <div id="bg-dot-pattern" class="fixed inset-0 pointer-events-none overflow-hidden z-0 select-none opacity-80 dark:opacity-40" aria-hidden="true">
     <svg class="w-full h-full" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
-      <!-- Top-right cluster (sparse, delicate) -->
-      <circle cx="89%" cy="6%" r="5" fill="#356B57" fill-opacity="0.35" />
-      <circle cx="94%" cy="11%" r="8" fill="#EAF2ED" fill-opacity="0.8" class="dark:fill-[#2B5948] dark:fill-opacity-40" />
-      <circle cx="85%" cy="14%" r="4" fill="#7257A8" fill-opacity="0.3" />
-      <circle cx="92%" cy="17%" r="6" fill="#B7791F" fill-opacity="0.3" />
-      
-      <!-- Mid-left cluster (delicate accents) -->
-      <circle cx="4%" cy="40%" r="7" fill="#356B57" fill-opacity="0.25" />
-      <circle cx="7%" cy="46%" r="4" fill="#7257A8" fill-opacity="0.25" />
-      <circle cx="2%" cy="51%" r="5" fill="#EAF2ED" fill-opacity="0.7" class="dark:fill-[#2B5948] dark:fill-opacity-30" />
-      
-      <!-- Bottom-right cluster (sparse rhythm) -->
-      <circle cx="95%" cy="78%" r="6" fill="#356B57" fill-opacity="0.3" />
-      <circle cx="90%" cy="84%" r="9" fill="#EAF2ED" fill-opacity="0.8" class="dark:fill-[#2B5948] dark:fill-opacity-40" />
-      <circle cx="86%" cy="89%" r="4.5" fill="#B7791F" fill-opacity="0.25" />
-      <circle cx="93%" cy="93%" r="5" fill="#7257A8" fill-opacity="0.25" />
+      <!-- Top-right cluster: sparse, editorial rhythm (radii 10-18px) -->
+      <circle cx="91%" cy="7%" r="18" fill="#356B57" fill-opacity="0.16" />
+      <circle cx="96%" cy="13%" r="10" fill="#EAF2ED" fill-opacity="0.75" class="dark:fill-[#2B5948] dark:fill-opacity-30" />
+      <circle cx="85%" cy="16%" r="14" fill="#7257A8" fill-opacity="0.12" />
 
-      <!-- Subtle isolated accent dot near header bottom left -->
-      <circle cx="3%" cy="10%" r="5" fill="#356B57" fill-opacity="0.2" />
+      <!-- Mid/lower-left: larger calm organic accents (radii 12-22px) -->
+      <circle cx="3%" cy="42%" r="22" fill="#356B57" fill-opacity="0.14" />
+      <circle cx="6%" cy="50%" r="12" fill="#B7791F" fill-opacity="0.12" />
+
+      <!-- Bottom-right: restrained rhythm (radii 14-20px) -->
+      <circle cx="94%" cy="83%" r="20" fill="#EAF2ED" fill-opacity="0.65" class="dark:fill-[#2B5948] dark:fill-opacity-30" />
+      <circle cx="88%" cy="89%" r="14" fill="#356B57" fill-opacity="0.14" />
     </svg>
   </div>
 
@@ -72,16 +65,11 @@
   <header class="sticky top-0 z-40 bg-white/95 dark:bg-[#171D19]/95 backdrop-blur-md border-b border-[#DDDCD5] dark:border-[#27332B] transition-colors relative">
     <div class="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-1 sm:gap-3">
       
-      <!-- Brand Logo -->
-      <div class="flex items-center space-x-2 sm:space-x-3 shrink-0">
-        <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-[#356B57] flex items-center justify-center text-white shadow-xs shrink-0">
-          <i data-lucide="graduation-cap" class="w-5 h-5 sm:w-6 sm:h-6"></i>
-        </div>
-        <div class="min-w-0">
-          <div class="flex items-center space-x-1.5 sm:space-x-2">
-            <h1 class="text-base sm:text-xl font-bold tracking-tight text-slate-900 dark:text-white truncate" data-i18n="brand.title">Muvazene</h1>
-          </div>
-          <p class="text-xs text-slate-500 dark:text-slate-400 hidden sm:block truncate" data-i18n="brand.subtitle">Bugünü gör. Sonrasını dengele.</p>
+      <!-- Brand Wordmark & Slogan (Clean typographic layout; neutral slot for future final logo) -->
+      <div class="flex items-center shrink-0">
+        <div class="min-w-0 flex flex-col justify-center">
+          <h1 class="text-lg sm:text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white leading-none" data-i18n="brand.title">Muvazene</h1>
+          <p class="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 hidden sm:block mt-1 font-medium tracking-tight" data-i18n="brand.subtitle">Bugünü gör. Sonrasını dengele.</p>
         </div>
       </div>
 
@@ -191,9 +179,9 @@
           <i data-lucide="sun" id="theme-icon-sun" class="w-4 h-4 sm:w-5 sm:h-5"></i>
         </button>
 
-        <!-- New Transaction CTA Button -->
-        <button id="btn-open-add-modal" type="button" class="min-h-[36px] sm:min-h-[44px] inline-flex items-center space-x-1.5 sm:space-x-2 px-2.5 sm:px-4 py-1.5 sm:py-2.5 rounded-lg bg-[#356B57] hover:bg-[#2B5948] active:scale-95 text-white font-medium text-xs sm:text-sm shadow-xs transition shrink-0">
-          <i data-lucide="plus-circle" class="w-4 h-4"></i>
+        <!-- New Transaction CTA Button (Primary) -->
+        <button id="btn-open-add-modal" type="button" class="h-9 sm:h-10 px-3 sm:px-4 rounded-lg bg-[#356B57] hover:bg-[#2B5948] active:scale-[0.98] text-white font-medium text-xs sm:text-sm shadow-xs transition-all duration-150 inline-flex items-center justify-center gap-1.5 sm:gap-2 shrink-0 select-none cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#356B57] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#171D19]">
+          <i data-lucide="plus-circle" class="w-4 h-4 shrink-0"></i>
           <span class="inline" data-i18n="nav.addTransaction">İşlem Ekle</span>
         </button>
       </div>
@@ -201,7 +189,7 @@
   </header>
 
   <!-- ================= MAIN CONTENT ================= -->
-  <main class="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6 overflow-x-hidden">
+  <main class="relative z-10 flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6 overflow-x-hidden">
 
     <!-- CRITICAL BUDGET HEALTH ALERT BANNER -->
     <section id="budget-alert-banner" class="hidden transition-all duration-300 rounded-2xl p-4 border flex items-start sm:items-center justify-between gap-3 shadow-sm" role="region" aria-label="Bütçe Durumu Bildirimi">
@@ -313,13 +301,13 @@
         </div>
 
         <!-- Management & Scenario CTA Buttons (Primary: Scenario, Secondary: Cashflows) -->
-        <div class="flex items-center space-x-2 shrink-0 flex-wrap gap-y-1">
-          <button id="btn-open-whatif" type="button" class="min-h-[36px] px-3.5 py-1.5 rounded-lg bg-[#356B57] hover:bg-[#2B5948] text-white text-xs font-semibold shadow-xs transition flex items-center justify-center space-x-1.5 shrink-0 active:scale-95">
-            <i data-lucide="sparkles" class="w-4 h-4"></i>
+        <div class="flex items-center gap-2 shrink-0 flex-wrap">
+          <button id="btn-open-whatif" type="button" class="h-9 px-3.5 rounded-lg bg-[#356B57] hover:bg-[#2B5948] active:scale-[0.98] text-white text-xs font-semibold shadow-xs transition-all duration-150 inline-flex items-center justify-center gap-1.5 shrink-0 select-none cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#356B57] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#171D19]">
+            <i data-lucide="sparkles" class="w-4 h-4 shrink-0"></i>
             <span data-i18n="financialOutlook.tryScenario">Senaryo Dene</span>
           </button>
-          <button id="btn-manage-cashflows" type="button" class="min-h-[36px] px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700/80 text-xs font-medium transition flex items-center justify-center space-x-1.5 shrink-0 active:scale-95">
-            <i data-lucide="calendar-clock" class="w-4 h-4 text-slate-500 dark:text-slate-400"></i>
+          <button id="btn-manage-cashflows" type="button" class="h-9 px-3.5 rounded-lg bg-white dark:bg-[#1C241F] hover:bg-[#F6F5F1] dark:hover:bg-[#232D27] active:scale-[0.98] text-slate-700 dark:text-slate-200 border border-[#DDDCD5] dark:border-[#27332B] shadow-xs text-xs font-medium transition-all duration-150 inline-flex items-center justify-center gap-1.5 shrink-0 select-none cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#356B57] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#171D19]">
+            <i data-lucide="calendar-clock" class="w-4 h-4 text-slate-500 dark:text-slate-400 shrink-0"></i>
             <span data-i18n="financialOutlook.manageCashflows">Planlı Gelir / Giderleri Yönet</span>
           </button>
         </div>
@@ -434,7 +422,7 @@
 
       <!-- Empty State for Planned Cashflows (Hidden when planned cashflows exist) -->
       <div id="outlook-empty-state" class="hidden p-4 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-center space-y-2.5 bg-slate-50/50 dark:bg-slate-800/20">
-        <div class="w-9 h-9 mx-auto rounded-full bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+        <div class="w-9 h-9 mx-auto rounded-full bg-[#EAF2ED] dark:bg-[#1A2E25] text-[#356B57] dark:text-[#44856D] flex items-center justify-center">
           <i data-lucide="calendar-plus" class="w-4 h-4"></i>
         </div>
         <div class="max-w-md mx-auto">
@@ -443,7 +431,7 @@
             Bir sonraki burs, kira veya düzenli ödemenizi ekleyerek gelir gününe kadar ne kadar harcama alanınız olduğunu görebilirsiniz.
           </p>
         </div>
-        <button id="btn-first-cashflow" type="button" class="min-h-[36px] px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition inline-flex items-center space-x-1.5 active:scale-95">
+        <button id="btn-first-cashflow" type="button" class="h-9 px-3.5 rounded-lg bg-[#356B57] hover:bg-[#2B5948] active:scale-[0.98] text-white text-xs font-semibold shadow-xs transition-all duration-150 inline-flex items-center justify-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#356B57] focus-visible:ring-offset-2">
           <i data-lucide="plus" class="w-4 h-4"></i>
           <span data-i18n="financialOutlook.addFirstPlan">İlk planımı ekle</span>
         </button>
@@ -629,7 +617,7 @@
           Arama kriterlerinize uyan bir işlem kaydı yok veya henüz bütçenize işlem eklemediniz.
         </p>
         <div class="mt-4 flex flex-wrap items-center justify-center gap-2" id="tx-empty-actions">
-          <button id="btn-empty-add-tx" type="button" class="min-h-[44px] px-4 py-2 rounded-lg bg-[#356B57] hover:bg-[#2B5948] text-white text-xs font-semibold shadow-xs transition" data-i18n="history.newTxBtn">
+          <button id="btn-empty-add-tx" type="button" class="h-10 px-4 rounded-lg bg-[#356B57] hover:bg-[#2B5948] active:scale-[0.98] text-white text-xs sm:text-sm font-medium shadow-xs transition-all duration-150 inline-flex items-center justify-center gap-1.5 select-none cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#356B57] focus-visible:ring-offset-2" data-i18n="history.newTxBtn">
             + Yeni İşlem Ekle
           </button>
         </div>
@@ -640,7 +628,7 @@
   </main>
 
   <!-- ================= FOOTER ================= -->
-  <footer class="mt-auto border-t border-[#DDDCD5] dark:border-[#27332B] bg-white/70 dark:bg-[#171D19]/70 backdrop-blur-xs py-5 text-xs text-slate-500 dark:text-slate-400">
+  <footer class="relative z-10 mt-auto border-t border-[#DDDCD5] dark:border-[#27332B] bg-white/70 dark:bg-[#171D19]/70 backdrop-blur-xs py-5 text-xs text-slate-500 dark:text-slate-400">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
       <div class="flex items-center space-x-2 text-center sm:text-left">
         <i data-lucide="shield-check" class="w-4 h-4 text-[#356B57] dark:text-[#44856D] shrink-0"></i>
@@ -760,7 +748,7 @@
           <button type="button" id="modal-btn-cancel" class="min-h-[44px] px-4 py-2.5 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition" data-i18n="modal.cancel">
             Vazgeç
           </button>
-          <button type="submit" id="modal-btn-submit" class="min-h-[44px] px-5 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white shadow-sm shadow-indigo-500/30 transition" data-i18n="modal.save">
+          <button type="submit" id="modal-btn-submit" class="h-10 px-5 rounded-lg text-xs font-semibold bg-[#356B57] hover:bg-[#2B5948] active:scale-[0.98] text-white shadow-xs transition-all duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#356B57] focus-visible:ring-offset-2" data-i18n="modal.save">
             Kaydet
           </button>
         </div>
@@ -822,7 +810,7 @@
         <button type="button" id="import-modal-cancel" class="min-h-[44px] px-4 py-2.5 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition" data-i18n="importModal.cancel">
           Vazgeç
         </button>
-        <button type="button" id="import-modal-confirm" class="min-h-[44px] px-5 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white shadow-sm shadow-indigo-500/30 transition" data-i18n="importModal.confirm">
+        <button type="button" id="import-modal-confirm" class="h-10 px-5 rounded-lg text-xs font-semibold bg-[#356B57] hover:bg-[#2B5948] active:scale-[0.98] text-white shadow-xs transition-all duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#356B57] focus-visible:ring-offset-2" data-i18n="importModal.confirm">
           Yükle ve Uygula
         </button>
       </div>
@@ -885,7 +873,7 @@
             <button type="button" id="preset-modal-cancel" class="min-h-[44px] px-4 py-2.5 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition" data-i18n="presets.cancel">
               Vazgeç
             </button>
-            <button type="submit" id="preset-modal-save" class="min-h-[44px] px-5 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white shadow-sm shadow-indigo-500/30 transition" data-i18n="presets.save">
+            <button type="submit" id="preset-modal-save" class="h-10 px-5 rounded-lg text-xs font-semibold bg-[#356B57] hover:bg-[#2B5948] active:scale-[0.98] text-white shadow-xs transition-all duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#356B57] focus-visible:ring-offset-2" data-i18n="presets.save">
               Kaydet
             </button>
           </div>
@@ -901,7 +889,7 @@
       
       <div class="flex items-center justify-between">
         <div class="flex items-center space-x-2.5">
-          <div class="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+          <div class="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 text-[#356B57] dark:text-[#44856D] flex items-center justify-center">
             <i data-lucide="wallet" class="w-4 h-4"></i>
           </div>
           <div>
@@ -920,7 +908,7 @@
             Başlangıç Bakiyesi
           </label>
           <div class="relative">
-            <input type="number" id="edit-initial-balance" min="0" step="any" placeholder="Örn: 1500" class="w-full px-3 py-2.5 text-xs font-bold rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition" />
+            <input type="number" id="edit-initial-balance" min="0" step="any" placeholder="Örn: 1500" class="w-full px-3 py-2.5 text-xs font-bold rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-[#356B57] transition" />
             <span class="currency-symbol absolute right-3 top-2.5 text-xs font-bold text-slate-400">₺</span>
           </div>
         </div>
@@ -930,7 +918,7 @@
             Aylık Düzenli Gelir (Burs/Harçlık)
           </label>
           <div class="relative">
-            <input type="number" id="edit-monthly-income" min="0" step="any" placeholder="Örn: 4000" class="w-full px-3 py-2.5 text-xs font-bold rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition" />
+            <input type="number" id="edit-monthly-income" min="0" step="any" placeholder="Örn: 4000" class="w-full px-3 py-2.5 text-xs font-bold rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-[#356B57] transition" />
             <span class="currency-symbol absolute right-3 top-2.5 text-xs font-bold text-slate-400">₺</span>
           </div>
         </div>
@@ -939,14 +927,14 @@
           <label for="edit-target-month" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1" data-i18n="initialBudgetModal.targetMonth">
             Takip Başlangıç Ayı
           </label>
-          <input type="month" id="edit-target-month" class="w-full px-3 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition" />
+          <input type="month" id="edit-target-month" class="w-full px-3 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-[#356B57] transition" />
         </div>
 
         <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end space-x-2">
           <button type="button" id="initial-budget-modal-cancel" class="min-h-[44px] px-4 py-2.5 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition" data-i18n="initialBudgetModal.cancel">
             Vazgeç
           </button>
-          <button type="submit" id="initial-budget-modal-save" class="min-h-[44px] px-5 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white shadow-sm shadow-indigo-500/30 transition" data-i18n="initialBudgetModal.save">
+          <button type="submit" id="initial-budget-modal-save" class="h-10 px-5 rounded-lg text-xs font-semibold bg-[#356B57] hover:bg-[#2B5948] active:scale-[0.98] text-white shadow-xs transition-all duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#356B57] focus-visible:ring-offset-2" data-i18n="initialBudgetModal.save">
             Güncelle ve Kaydet
           </button>
         </div>
@@ -961,8 +949,8 @@
       
       <!-- Header -->
       <div class="text-center space-y-2">
-        <div class="w-14 h-14 rounded-2xl bg-[#356B57] mx-auto flex items-center justify-center text-white shadow-xs">
-          <i data-lucide="graduation-cap" class="w-8 h-8"></i>
+        <div class="w-14 h-14 rounded-2xl bg-[#356B57] mx-auto flex items-center justify-center text-white shadow-xs font-extrabold text-2xl tracking-tight select-none">
+          M
         </div>
         <h2 id="onboard-modal-title" class="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white" data-i18n="onboarding.title">
           Muvazene'ye Hoş Geldin!
@@ -1054,7 +1042,7 @@
               </div>
 
               <div class="pt-3">
-                <button type="submit" id="btn-onboard-custom-submit" class="w-full min-h-[44px] px-4 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white shadow-md shadow-indigo-500/30 transition flex items-center justify-center space-x-1.5">
+                <button type="submit" id="btn-onboard-custom-submit" class="w-full h-10 px-4 rounded-lg text-xs font-semibold bg-[#356B57] hover:bg-[#2B5948] active:scale-[0.98] text-white shadow-xs transition-all duration-150 flex items-center justify-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#356B57] focus-visible:ring-offset-2">
                   <span data-i18n="onboarding.customSubmitBtn">Kişisel Bütçemi Başlat</span>
                   <i data-lucide="check-circle" class="w-3.5 h-3.5"></i>
                 </button>
@@ -1161,7 +1149,7 @@
           </div>
         </div>
         <div class="flex items-center space-x-2">
-          <button id="btn-manager-add-new" type="button" class="min-h-[36px] px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold text-xs transition flex items-center space-x-1 shadow-xs">
+          <button id="btn-manager-add-new" type="button" class="h-8 sm:h-9 px-3 rounded-lg bg-[#356B57] hover:bg-[#2B5948] active:scale-[0.98] text-white font-medium text-xs transition-all duration-150 inline-flex items-center justify-center gap-1 shadow-xs cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#356B57]">
             <i data-lucide="plus" class="w-3.5 h-3.5"></i>
             <span data-i18n="cashflow.addNew">+ Yeni Plan Ekle</span>
           </button>
