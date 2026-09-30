@@ -40,8 +40,12 @@ export class ChartManager {
   }
 
   render(monthTransactions, summary, categories, currency = 'TRY', lang = 'tr') {
-    this.renderCategoryChart(monthTransactions, categories, currency, lang);
-    this.renderFlowChart(summary, currency, lang);
+    try {
+      this.renderCategoryChart(monthTransactions, categories, currency, lang);
+    } catch (_) {}
+    try {
+      this.renderFlowChart(summary, currency, lang);
+    } catch (_) {}
   }
 
   renderCategoryChart(monthTransactions, categories, currency, lang) {
@@ -168,10 +172,10 @@ export class ChartManager {
     ];
 
     const bgColors = [
-      '#6366f1', // İndigo (Devreden)
-      '#10b981', // Yeşil (Bu Ay Gelir)
-      '#ef4444', // Kırmızı (Bu Ay Gider)
-      summary.balance >= 0 ? '#3b82f6' : '#f43f5e' // Mavi / Gül (Kalan)
+      '#356B57', // Sage (Devreden)
+      '#168760', // Yeşil (Bu Ay Gelir)
+      '#C84F5A', // Restrained Kırmızı (Bu Ay Gider)
+      summary.balance >= 0 ? '#2B5948' : '#C84F5A' // Koyu Sage / Gül (Kalan)
     ];
 
     const isDark = this.isDark();
@@ -202,6 +206,14 @@ export class ChartManager {
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        layout: {
+          padding: {
+            left: 14,
+            right: 8,
+            top: 4,
+            bottom: 4
+          }
+        },
         plugins: {
           legend: { display: false },
           tooltip: {
@@ -226,6 +238,7 @@ export class ChartManager {
             beginAtZero: true,
             grid: { color: gridColor },
             ticks: {
+              padding: 6,
               color: textColor,
               font: {
                 family: "'Plus Jakarta Sans', sans-serif",

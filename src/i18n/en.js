@@ -1,8 +1,10 @@
 export default {
   brand: {
-    title: 'Student Budget',
+    title: 'Muvazene',
+    browserTitle: 'Muvazene | Personal Budget & Cash Flow Planner',
     version: 'v1.1',
-    subtitle: 'Smart & Secure Student Budget Guide'
+    subtitle: 'See today. Balance what\'s ahead.',
+    slogan: 'See today. Balance what\'s ahead.'
   },
   nav: {
     prevMonth: 'Previous Month',
@@ -37,18 +39,18 @@ export default {
     success: 'Initial budget updated successfully!'
   },
   cards: {
-    netBalance: 'Remaining Net Budget',
+    netBalance: 'Remaining Budget',
     carriedOver: 'Carried Over:',
     spentRatio: 'Spent:',
-    dailyLimit: 'Daily Safe Limit',
+    dailyLimit: 'Safe Daily Spending',
     daysLeft: '{days} Days Left',
     perDay: '/ day',
     dailyTipNormal: 'Suggested spending limit for today',
     dailyTipDeficit: 'Budget depleted! No remaining daily limit',
-    thisMonthIncome: 'This Month Income',
-    thisMonthExpense: 'This Month Expense',
+    thisMonthIncome: 'Income This Month',
+    thisMonthExpense: 'Expenses This Month',
     txCount: 'Transactions:',
-    expenseCount: 'Expense Count:',
+    expenseCount: 'Expenses:',
     itemsCount: '{count} items'
   },
   health: {
@@ -73,29 +75,29 @@ export default {
     resetSuccess: 'Quick spends reset to default values.'
   },
   charts: {
-    categoryExpense: 'Expense Distribution by Category',
-    categorySubtitle: 'Where does your money go?',
+    categoryExpense: 'Spending by Category',
+    categorySubtitle: 'Where is your money going?',
     budgetBalance: 'Monthly Budget Balance',
-    balanceSubtitle: 'Total Income vs Spending Ratio',
+    balanceSubtitle: 'Income vs. Spending',
     emptyExpenses: 'No expenses recorded for this month yet.',
     emptyFlow: 'No financial records found for this period.',
-    carriedBalanceLabel: 'Carried Over Balance',
-    incomeLabel: 'This Month Income',
-    expenseLabel: 'This Month Expense',
+    carriedBalanceLabel: 'Carried Over',
+    incomeLabel: 'Income',
+    expenseLabel: 'Expenses',
     remainingLabel: 'Remaining Budget'
   },
   history: {
     title: 'Transaction History',
     txCount: '{count} Transactions',
     filterAll: 'All',
-    filterIncome: 'Incomes',
+    filterIncome: 'Income',
     filterExpense: 'Expenses',
     searchPlaceholder: 'Search transaction or notes...',
     allCategories: 'All Categories',
-    sortDateDesc: 'Date (Newest)',
-    sortDateAsc: 'Date (Oldest)',
-    sortAmountDesc: 'Amount (Highest)',
-    sortAmountAsc: 'Amount (Lowest)',
+    sortDateDesc: 'Newest First',
+    sortDateAsc: 'Oldest First',
+    sortAmountDesc: 'Highest Amount',
+    sortAmountAsc: 'Lowest Amount',
     emptyTitle: 'No Transactions Found',
     emptyDesc: 'No records match your search criteria or you have not added any transactions yet.',
     newTxBtn: '+ Add Transaction',
@@ -146,11 +148,11 @@ export default {
     resetDesc: 'All current transactions will be cleared and the onboarding screen will open. Do you wish to continue?'
   },
   onboarding: {
-    title: 'Welcome to Student Budget!',
-    desc: 'Ready to take control of your student budget and spend smartly? Choose how you want to start:',
+    title: 'Welcome to Muvazene!',
+    desc: 'See today. Balance what\'s ahead. Ready to take control of your budget? Choose how you want to start:',
     demoCardBadge: 'Quick Explore',
     demoCardTitle: 'Try with Demo Data',
-    demoCardDesc: 'See all analytics, charts and daily safe limits immediately with realistic student financial data.',
+    demoCardDesc: 'See all analytics, charts and daily safe limits immediately with realistic financial data.',
     demoCardBtn: 'Start with Demo',
     customCardBadge: 'Personal Setup',
     customCardTitle: 'Start with My Own Budget',
@@ -161,11 +163,14 @@ export default {
     monthlyIncomePlaceholder: 'e.g. 4000 (Scholarship/Family)',
     targetMonthLabel: 'Target Month to Track',
     customSubmitBtn: 'Start My Personal Budget',
-    privacyNote: 'All data is stored exclusively on your device (LocalStorage). No login or account required.'
+    privacyNote: 'Your data is stored only on this device. No login or account required.'
   },
   footer: {
-    privacy: 'Privacy-First: Your data is never sent to a server, stored locally on your device.',
-    copyright: 'Student Budget Tracker System © 2026'
+    privacy: 'Your data is stored only on this device.',
+    privacyLocal: 'Your data is stored only on this device.',
+    privacyCloud: 'Your data is synced across your devices with your account.',
+    developedBy: 'Muvazene v1.1 · Developed by Mehmet Tunahan Kandaz',
+    copyright: 'Muvazene v1.1 · Developed by Mehmet Tunahan Kandaz'
   },
   categories: {
     inc_kyk: 'Scholarship / Student Loan',
@@ -195,11 +200,13 @@ export default {
     orDivider: 'or',
     guestBtn: 'Continue as guest',
     guestSubtext: 'Your data is only stored on this device.',
-    localModeBadge: 'Local mode',
-    localModeTooltip: 'Data is stored only on this device.',
-    localDeviceBadge: 'Local mode',
+    localModeBadge: 'Local Mode',
+    localModeTooltip: 'Data is stored only on this device. Click for cloud sync.',
+    localDeviceBadge: 'Local Mode',
+    accountGuestPrimary: 'Local Mode',
+    accountGuestSecondary: 'On This Device',
     redirecting: 'Redirecting to Google...',
-    emailLabel: 'Student / Personal Email',
+    emailLabel: 'Personal Email',
     emailPlaceholder: 'example@university.edu',
     sendMagicLink: 'Send Magic Link',
     sending: 'Sending...',
@@ -235,13 +242,13 @@ export default {
     subtitle: 'Deterministic cashflow and spend projection',
     currentBadge: 'Today\'s financial status — Independent of selected month view.',
     historicalNotice: 'Viewing historical month. Cashflow outlook reflects today\'s real-time calendar.',
-    manageCashflows: 'Manage Planned Cashflows',
+    manageCashflows: 'Manage Planned Cash Flows',
     nextIncomeTitle: 'Next Income',
-    noNextIncome: 'No planned income',
+    noNextIncome: 'No Planned Income',
     noNextIncomeSub: 'Add a plan to compute safe limits',
     daysRemaining: '{days} days remaining',
     daysRemainingToday: 'Expected today',
-    safeDailySpendTitle: 'Safe Daily Spend',
+    safeDailySpendTitle: 'Safe Daily Spending',
     safeDailySpendSub: 'Until next income',
     currentPaceTitle: 'Current Spending Pace',
     currentPaceSub: 'Based on recent trend',
@@ -254,18 +261,18 @@ export default {
     noInsights: 'No notable insights yet.',
     daysCount: '{days} days left',
     obligationsReserved: 'Reserved obligations: {amount}',
-    upcomingTimelineTitle: 'Upcoming Cashflow Timeline',
+    upcomingTimelineTitle: 'Upcoming Cash Flows',
     noTimeline: 'No upcoming cashflows.',
     emptyTitle: 'Plan Your Cashflow',
     emptyDesc: 'Add your upcoming scholarship, rent, or recurring payment to see your safe daily spend until income day.',
     addFirstPlan: 'Add my first plan',
-    tryScenario: 'Try a Scenario'
+    tryScenario: 'Run a Scenario'
   },
   coverage: {
     COVERED: 'Covered',
     TIGHT: 'Getting tight',
     DEFICIT_BEFORE_INCOME: 'Pre-income shortfall',
-    NO_NEXT_INCOME: 'No planned income',
+    NO_NEXT_INCOME: 'No Planned Income',
     deficitContext: 'If current spending pace continues, a shortfall of approximately {amount} may occur before planned income.',
     tightContext: 'Your spending pace reached %{percent} of safe capacity. Spending should be balanced in remaining days.',
     coveredContext: 'Planned obligations and current spending pace are balanced within safe limits.'
@@ -278,14 +285,14 @@ export default {
     obligationsReserved: 'Reserved obligations: {amount}'
   },
   cashflow: {
-    managerTitle: 'Planned Income & Expenses',
+    managerTitle: 'Manage Planned Cash Flows',
     managerDesc: 'Manage recurring scholarships, family allowances, rent, and bills.',
-    addNew: '+ Add New Plan',
-    addTitle: 'Add Planned Cashflow',
-    editTitle: 'Edit Planned Cashflow',
-    name: 'Plan Name',
+    addNew: '+ Add Planned Cash Flow',
+    addTitle: 'Add Planned Cash Flow',
+    editTitle: 'Edit Planned Cash Flow',
+    name: 'Name',
     namePlaceholder: 'e.g. KYK Scholarship, Rent, Phone Bill',
-    type: 'Flow Type',
+    type: 'Cash Flow Type',
     income: 'Income (+)',
     expense: 'Expense (-)',
     amount: 'Amount',
@@ -440,5 +447,20 @@ export default {
     },
     reset: 'New Scenario',
     close: 'Done'
+  },
+  seo: {
+    metaDescription: 'Track income and expenses, manage planned cash flows, see future balance and calculate the impact of spending on your budget with Muvazene.',
+    h1: 'See today. Balance what\'s ahead.',
+    supportingCopy: 'Muvazene is not just an expense recorder. Going beyond simple tracking, it provides cash flow planning, safe daily spending limits until your next income, and What-If scenario simulations to forecast how financial choices impact your month-end balance.',
+    features: {
+      trackingTitle: 'Income & Expense Tracking',
+      trackingDesc: 'Log daily transactions with categories and monitor your remaining budget in real time.',
+      cashflowTitle: 'Planned Cash Flows',
+      cashflowDesc: 'Set up recurring and upcoming cash flows like rent, bills, or salary to visualize your financial horizon.',
+      forecastTitle: 'Month-End Spending Forecast',
+      forecastDesc: 'Project your expected end-of-month balance based on current spending pace and prevent budget deficits.',
+      whatifTitle: 'What-If / Spending Scenarios',
+      whatifDesc: 'Run simulations before making financial decisions to immediately see the impact on your safe daily spending.'
+    }
   }
 };
