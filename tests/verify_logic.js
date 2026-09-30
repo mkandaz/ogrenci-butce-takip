@@ -10005,9 +10005,9 @@ console.log('\n--- 30. FAZ 5.6 PATCH — CASHFLOW-AWARE WHAT-IF DECISION SUPPORT
     // Decision Support Elements
     'whatif-next-income-context', 'whatif-impact-card', 'whatif-impact-icon-box', 'whatif-impact-icon',
     'whatif-impact-text', 'whatif-impact-badge',
-    'whatif-decision-sim-safe-daily', 'whatif-decision-delta-safe-daily', 'whatif-decision-base-safe-daily-sub',
-    'whatif-decision-status-chip', 'whatif-decision-status-transition-sub',
-    'whatif-decision-sim-pre-balance', 'whatif-decision-delta-pre-balance', 'whatif-decision-base-pre-balance-sub',
+    'whatif-decision-base-safe-daily', 'whatif-decision-sim-safe-daily', 'whatif-decision-delta-safe-daily', 'whatif-decision-base-safe-daily-sub',
+    'whatif-decision-base-status-chip', 'whatif-decision-status-chip', 'whatif-decision-status-transition-sub',
+    'whatif-decision-base-pre-balance', 'whatif-decision-sim-pre-balance', 'whatif-decision-delta-pre-balance', 'whatif-decision-base-pre-balance-sub',
     'whatif-adjustment-callout', 'whatif-adjustment-text',
     'whatif-obligations-context-line', 'whatif-obligations-context-text',
     // Month-End Table
@@ -10075,6 +10075,7 @@ console.log('\n--- 30. FAZ 5.6 PATCH — CASHFLOW-AWARE WHAT-IF DECISION SUPPORT
   store.state.settings = { currency: 'TRY', language: 'tr' };
 
   const ui = new UIManager(store);
+  ui.chartManager = { render: () => {} };
   ui.now = new Date(2026, 8, 15, 12, 0, 0); // 2026-09-15
   const modalMgr = new ModalManager(store, ui);
 
@@ -10136,6 +10137,199 @@ console.log('\n--- 30. FAZ 5.6 PATCH — CASHFLOW-AWARE WHAT-IF DECISION SUPPORT
   assert(Boolean(en.whatif.explainability.horizonCashflowTitle), 'TC-390-13 en.whatif.explainability.horizonCashflowTitle exists');
   assert(Boolean(tr.whatif.explainability.horizonMonthEndTitle), 'TC-390-13 tr.whatif.explainability.horizonMonthEndTitle exists');
   assert(Boolean(en.whatif.explainability.horizonMonthEndTitle), 'TC-390-13 en.whatif.explainability.horizonMonthEndTitle exists');
+}
+
+// 12. Scenario K: What-If Decision Cards UI Polish & Responsive Comparisons (FAZ 5.6 UI Polish)
+{
+  const originalDoc = globalThis.document;
+  const elements = {};
+  const mockClassList = () => {
+    const list = new Set();
+    return {
+      add: (...cls) => cls.forEach(c => list.add(c)),
+      remove: (...cls) => cls.forEach(c => list.delete(c)),
+      contains: (c) => list.has(c),
+      toggle: (c) => list.has(c) ? list.delete(c) : list.add(c)
+    };
+  };
+
+  const ids = [
+    'whatif-tab-expense', 'whatif-tab-income', 'whatif-tab-percent', 'whatif-tab-daily',
+    'whatif-section-expense', 'whatif-section-income', 'whatif-section-percent', 'whatif-section-daily',
+    'whatif-input-expense', 'whatif-input-income', 'whatif-input-percent',
+    'whatif-percent-dir-down', 'whatif-percent-dir-up', 'whatif-percent-interpretation',
+    'whatif-input-daily', 'whatif-daily-dir-down', 'whatif-daily-dir-up', 'whatif-daily-interpretation',
+    'whatif-next-income-context', 'whatif-impact-card', 'whatif-impact-icon-box', 'whatif-impact-icon',
+    'whatif-impact-text', 'whatif-impact-badge',
+    'whatif-decision-base-safe-daily', 'whatif-decision-sim-safe-daily', 'whatif-decision-delta-safe-daily', 'whatif-decision-base-safe-daily-sub',
+    'whatif-decision-base-status-chip', 'whatif-decision-status-chip', 'whatif-decision-status-transition-sub',
+    'whatif-decision-base-pre-balance', 'whatif-decision-sim-pre-balance', 'whatif-decision-delta-pre-balance', 'whatif-decision-base-pre-balance-sub',
+    'whatif-adjustment-callout', 'whatif-adjustment-text',
+    'whatif-obligations-context-line', 'whatif-obligations-context-text',
+    'whatif-base-expense', 'whatif-sim-expense', 'whatif-delta-expense',
+    'whatif-base-remaining', 'whatif-sim-remaining', 'whatif-delta-remaining',
+    'whatif-base-balance', 'whatif-sim-balance', 'whatif-delta-balance',
+    'whatif-base-rate', 'whatif-sim-rate', 'whatif-delta-rate',
+    'whatif-assumptions-list'
+  ];
+
+  ids.forEach(id => {
+    elements[id] = {
+      id,
+      textContent: '',
+      innerHTML: '',
+      value: '',
+      className: '',
+      classList: mockClassList(),
+      attributes: {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      setAttribute(k, v) { this.attributes[k] = v; },
+      getAttribute(k) { return this.attributes[k]; }
+    };
+  });
+
+  elements['whatif-tab-expense'].dataset = { type: 'ONE_TIME_EXPENSE' };
+  elements['whatif-tab-income'].dataset = { type: 'ONE_TIME_INCOME' };
+  elements['whatif-tab-percent'].dataset = { type: 'FUTURE_SPEND_PERCENT_CHANGE' };
+  elements['whatif-tab-daily'].dataset = { type: 'FUTURE_DAILY_SPEND_CHANGE' };
+
+  globalThis.document = {
+    documentElement: { classList: mockClassList() },
+    body: { classList: mockClassList() },
+    getElementById: (id) => elements[id] || null,
+    createElement: () => ({
+      id: '',
+      textContent: '',
+      innerHTML: '',
+      className: '',
+      dataset: {},
+      classList: mockClassList(),
+      appendChild: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      setAttribute: () => {},
+      querySelector: () => ({ addEventListener: () => {} }),
+      querySelectorAll: () => []
+    }),
+    querySelectorAll: (sel) => {
+      if (sel === '.whatif-tab') return [elements['whatif-tab-expense'], elements['whatif-tab-income'], elements['whatif-tab-percent'], elements['whatif-tab-daily']];
+      if (sel === '.whatif-input-section') return [elements['whatif-section-expense'], elements['whatif-section-income'], elements['whatif-section-percent'], elements['whatif-section-daily']];
+      return [];
+    }
+  };
+
+  const store = new BudgetStore();
+  const testTxs = [
+    { id: 'tx-0', amount: 10000, type: 'income', date: '2026-09-01', category: 'inc_allowance', title: 'Maaş' },
+    { id: 'tx-1', amount: 500, type: 'expense', date: '2026-09-05', category: 'exp_food', title: 'Market' }
+  ];
+  const testPlans = [
+    { id: 'cf-1', name: 'Burs', amount: 6000, type: 'income', recurrence: 'monthly', dayOfMonth: 25, active: true },
+    { id: 'cf-2', name: 'Kira', amount: 3000, type: 'expense', recurrence: 'monthly', dayOfMonth: 20, active: true }
+  ];
+  store.state.transactions = testTxs;
+  store.state.plannedCashflows = testPlans;
+  store.state.settings = { currency: 'TRY', language: 'tr' };
+
+  const ui = new UIManager(store);
+  ui.chartManager = { render: () => {} };
+  ui.now = new Date(2026, 8, 15, 12, 0, 0); // 2026-09-15 (10 days until Sep 25 income)
+  const modalMgr = new ModalManager(store, ui);
+
+  // Subtest 1: Initial state (awaiting input)
+  modalMgr.runWhatIfSimulation();
+  assert(elements['whatif-decision-base-safe-daily'].textContent.includes('₺'), 'TC-390-14 Initial base safe daily rendered with currency');
+  assert(elements['whatif-decision-sim-safe-daily'].textContent === '—', 'TC-390-14 Initial sim safe daily is dash awaiting input');
+  assert(elements['whatif-decision-delta-safe-daily'].textContent === '—', 'TC-390-14 Initial delta safe daily is dash awaiting input');
+  assert(elements['whatif-decision-base-status-chip'].textContent.includes('Plan'), 'TC-390-14 Initial base status chip shows Plan status');
+  assert(elements['whatif-decision-status-chip'].textContent === '—', 'TC-390-14 Initial sim status chip is dash awaiting input');
+  assert(elements['whatif-decision-base-pre-balance'].textContent.includes('₺'), 'TC-390-14 Initial base pre-income balance rendered with currency');
+  assert(elements['whatif-decision-sim-pre-balance'].textContent === '—', 'TC-390-14 Initial sim pre-balance is dash awaiting input');
+  assert(elements['whatif-decision-delta-pre-balance'].textContent === '—', 'TC-390-14 Initial delta pre-balance is dash awaiting input');
+
+  // Subtest 2: Negative Delta (2,000 TL Expense)
+  modalMgr.setWhatIfScenarioType(SCENARIO_TYPES.ONE_TIME_EXPENSE);
+  elements['whatif-input-expense'].value = '2000';
+  modalMgr.runWhatIfSimulation();
+
+  // Safe daily comparison: base + arrow + sim + separate delta
+  assert(elements['whatif-decision-base-safe-daily'].textContent.includes('₺'), 'TC-390-14 Safe daily base renders current value');
+  assert(elements['whatif-decision-sim-safe-daily'].textContent.includes('/gün'), 'TC-390-14 Safe daily sim renders scenario with /gün unit');
+  assert(elements['whatif-decision-delta-safe-daily'].textContent.startsWith('-'), 'TC-390-14 Safe daily delta starts with negative sign');
+  assert(elements['whatif-decision-delta-safe-daily'].className.includes('bg-rose-50'), 'TC-390-14 Safe daily delta badge has semantic negative rose background');
+
+  // Coverage status transition: baseline -> scenario
+  assert(elements['whatif-decision-base-status-chip'].textContent.length > 0, 'TC-390-14 Coverage base status chip is populated');
+  assert(elements['whatif-decision-status-chip'].textContent.length > 0, 'TC-390-14 Coverage sim status chip is populated');
+  assert(elements['whatif-decision-status-transition-sub'].textContent.length > 0, 'TC-390-14 Coverage status sub badge indicates transition or state');
+
+  // Pre-income balance comparison: base + arrow + sim + separate delta
+  assert(elements['whatif-decision-base-pre-balance'].textContent.includes('₺'), 'TC-390-14 Pre-income balance base renders current balance');
+  assert(elements['whatif-decision-sim-pre-balance'].textContent.includes('₺'), 'TC-390-14 Pre-income balance sim renders scenario balance');
+  assert(elements['whatif-decision-delta-pre-balance'].textContent.includes('-') && elements['whatif-decision-delta-pre-balance'].textContent.includes('2.000'), 'TC-390-14 Pre-income balance delta shows -2.000 TL');
+  assert(elements['whatif-decision-delta-pre-balance'].className.includes('bg-rose-50'), 'TC-390-14 Pre-income balance delta badge has semantic negative rose background');
+
+  // Subtest 3: Positive Delta (3,000 TL Income)
+  modalMgr.setWhatIfScenarioType(SCENARIO_TYPES.ONE_TIME_INCOME);
+  elements['whatif-input-income'].value = '3000';
+  modalMgr.runWhatIfSimulation();
+
+  assert(elements['whatif-decision-delta-safe-daily'].textContent.startsWith('+'), 'TC-390-14 Positive safe daily delta starts with positive sign');
+  assert(elements['whatif-decision-delta-safe-daily'].className.includes('bg-emerald-50'), 'TC-390-14 Positive safe daily delta badge has emerald background');
+  assert(elements['whatif-decision-delta-pre-balance'].textContent.startsWith('+') && elements['whatif-decision-delta-pre-balance'].textContent.includes('3.000'), 'TC-390-14 Positive pre-income delta shows +3.000 TL');
+  assert(elements['whatif-decision-delta-pre-balance'].className.includes('bg-emerald-50'), 'TC-390-14 Positive pre-income balance badge has emerald background');
+
+  // Subtest 4: Unchanged / Zero Delta
+  modalMgr.setWhatIfScenarioType(SCENARIO_TYPES.FUTURE_DAILY_SPEND_CHANGE);
+  elements['whatif-input-daily'].value = '0';
+  modalMgr.runWhatIfSimulation();
+
+  assert(elements['whatif-decision-delta-safe-daily'].textContent === '—' || elements['whatif-decision-delta-safe-daily'].textContent === 'Değişmedi', 'TC-390-14 Zero input renders neutral dash or Değişmedi');
+
+  // Subtest 5: Status identical transition relationship
+  // Spend 100 TL - plan remains COVERED on both baseline and scenario
+  modalMgr.setWhatIfScenarioType(SCENARIO_TYPES.ONE_TIME_EXPENSE);
+  elements['whatif-input-expense'].value = '100';
+  modalMgr.runWhatIfSimulation();
+
+  assert(elements['whatif-decision-base-status-chip'].textContent === elements['whatif-decision-status-chip'].textContent, 'TC-390-14 Base and sim status chips are identical in balanced scenario');
+  assert(elements['whatif-decision-status-transition-sub'].textContent === 'Durum değişmedi', 'TC-390-14 Unchanged status transition sub displays Durum değişmedi');
+
+  // Subtest 6: Responsive DOM layout verification on index.html
+  const htmlContent = fs.readFileSync(path.resolve('index.html'), 'utf8');
+  assert(htmlContent.includes('grid grid-cols-1 sm:grid-cols-3 gap-2.5'), 'TC-390-14 Responsive grid grid-cols-1 sm:grid-cols-3 in index.html');
+  assert(htmlContent.includes('whatif-decision-base-safe-daily'), 'TC-390-14 whatif-decision-base-safe-daily markup present in index.html');
+  assert(htmlContent.includes('whatif-decision-base-status-chip'), 'TC-390-14 whatif-decision-base-status-chip markup present in index.html');
+  assert(htmlContent.includes('whatif-decision-base-pre-balance'), 'TC-390-14 whatif-decision-base-pre-balance markup present in index.html');
+  assert(htmlContent.includes('min-w-0'), 'TC-390-14 min-w-0 present to prevent flex/grid container overflow');
+  assert(htmlContent.includes('flex-wrap'), 'TC-390-14 flex-wrap present so long comparisons wrap cleanly');
+
+  // Subtest 7: TR / EN Dictionary Completeness for new status/unchanged keys
+  assert(tr.whatif.decision.unchanged === 'Değişmedi', 'TC-390-14 tr.whatif.decision.unchanged is Değişmedi');
+  assert(en.whatif.decision.unchanged === 'Unchanged', 'TC-390-14 en.whatif.decision.unchanged is Unchanged');
+  assert(tr.whatif.decision.statusUnchanged === 'Durum değişmedi', 'TC-390-14 tr.whatif.decision.statusUnchanged is Durum değişmedi');
+  assert(en.whatif.decision.statusUnchanged === 'Status unchanged', 'TC-390-14 en.whatif.decision.statusUnchanged is Status unchanged');
+
+  // Subtest 8: Multi-Currency USD and EUR formatting in decision comparisons
+  setLanguage('en');
+  store.state.settings = { currency: 'USD', language: 'en' };
+  modalMgr.setWhatIfScenarioType(SCENARIO_TYPES.ONE_TIME_EXPENSE);
+  elements['whatif-input-expense'].value = '1500';
+  modalMgr.runWhatIfSimulation();
+  assert(elements['whatif-decision-base-safe-daily'].textContent.includes('$'), 'TC-390-14 USD formatting renders $ on base safe daily');
+  assert(elements['whatif-decision-sim-safe-daily'].textContent.includes('$'), 'TC-390-14 USD formatting renders $ on sim safe daily');
+  assert(elements['whatif-decision-delta-safe-daily'].textContent.includes('$'), 'TC-390-14 USD formatting renders $ on delta safe daily');
+  assert(elements['whatif-decision-status-transition-sub'].textContent === 'Status unchanged', 'TC-390-14 EN statusUnchanged renders Status unchanged');
+
+  setLanguage('tr');
+  store.state.settings = { currency: 'EUR', language: 'tr' };
+  elements['whatif-input-expense'].value = '1500';
+  modalMgr.runWhatIfSimulation();
+  assert(elements['whatif-decision-base-safe-daily'].textContent.includes('€'), 'TC-390-14 EUR formatting renders € on base safe daily');
+  assert(elements['whatif-decision-sim-safe-daily'].textContent.includes('€'), 'TC-390-14 EUR formatting renders € on sim safe daily');
+
+  globalThis.document = originalDoc;
 }
 
 console.log('\n====================================================');

@@ -185,11 +185,16 @@ export class ModalManager {
 
     // What-If Decision Support Elements (FAZ 5.6 Cashflow-Aware)
     this.whatifNextIncomeContext = document.getElementById('whatif-next-income-context');
+    this.whatifDecisionBaseSafeDaily = document.getElementById('whatif-decision-base-safe-daily');
     this.whatifDecisionSimSafeDaily = document.getElementById('whatif-decision-sim-safe-daily');
     this.whatifDecisionDeltaSafeDaily = document.getElementById('whatif-decision-delta-safe-daily');
     this.whatifDecisionBaseSafeDailySub = document.getElementById('whatif-decision-base-safe-daily-sub');
+
+    this.whatifDecisionBaseStatusChip = document.getElementById('whatif-decision-base-status-chip');
     this.whatifDecisionStatusChip = document.getElementById('whatif-decision-status-chip');
     this.whatifDecisionStatusTransitionSub = document.getElementById('whatif-decision-status-transition-sub');
+
+    this.whatifDecisionBasePreBalance = document.getElementById('whatif-decision-base-pre-balance');
     this.whatifDecisionSimPreBalance = document.getElementById('whatif-decision-sim-pre-balance');
     this.whatifDecisionDeltaPreBalance = document.getElementById('whatif-decision-delta-pre-balance');
     this.whatifDecisionBasePreBalanceSub = document.getElementById('whatif-decision-base-pre-balance-sub');
@@ -1568,26 +1573,38 @@ export class ModalManager {
       const simSafeDaily = untilNext.simulated?.safeDailySpend ?? null;
       const deltaSafeDaily = untilNext.delta?.safeDailySpend ?? null;
 
+      const formattedBaseSafeDaily = (baseSafeDaily !== null)
+        ? formatCurrency(baseSafeDaily, currency, lang)
+        : notAvail;
+
+      if (this.whatifDecisionBaseSafeDaily) {
+        this.whatifDecisionBaseSafeDaily.textContent = formattedBaseSafeDaily;
+      }
       if (this.whatifDecisionBaseSafeDailySub) {
         this.whatifDecisionBaseSafeDailySub.textContent = (baseSafeDaily !== null)
-          ? `${t('whatif.results.current') || 'Mevcut'}: ${formatCurrency(baseSafeDaily, currency, lang)}/gün`
+          ? `${t('whatif.results.current') || 'Mevcut'}: ${formattedBaseSafeDaily}/gün`
           : `${t('whatif.results.current') || 'Mevcut'}: —`;
       }
+
       if (this.whatifDecisionSimSafeDaily) {
         this.whatifDecisionSimSafeDaily.textContent = (hasValidInput && simSafeDaily !== null)
           ? `${formatCurrency(simSafeDaily, currency, lang)}/gün`
           : notAvail;
       }
+
       if (this.whatifDecisionDeltaSafeDaily) {
-        if (!hasValidInput || deltaSafeDaily === null || deltaSafeDaily === 0) {
+        if (!hasValidInput || deltaSafeDaily === null) {
           this.whatifDecisionDeltaSafeDaily.textContent = '—';
-          this.whatifDecisionDeltaSafeDaily.className = 'text-[11px] font-semibold text-slate-400 dark:text-slate-500';
+          this.whatifDecisionDeltaSafeDaily.className = 'inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400';
+        } else if (deltaSafeDaily === 0) {
+          this.whatifDecisionDeltaSafeDaily.textContent = t('whatif.decision.unchanged') || 'Değişmedi';
+          this.whatifDecisionDeltaSafeDaily.className = 'inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400';
         } else if (deltaSafeDaily > 0) {
           this.whatifDecisionDeltaSafeDaily.textContent = `+${formatCurrency(deltaSafeDaily, currency, lang)}/gün`;
-          this.whatifDecisionDeltaSafeDaily.className = 'text-[11px] font-semibold text-emerald-600 dark:text-emerald-400';
+          this.whatifDecisionDeltaSafeDaily.className = 'inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60';
         } else {
           this.whatifDecisionDeltaSafeDaily.textContent = `-${formatCurrency(Math.abs(deltaSafeDaily), currency, lang)}/gün`;
-          this.whatifDecisionDeltaSafeDaily.className = 'text-[11px] font-semibold text-rose-600 dark:text-rose-400';
+          this.whatifDecisionDeltaSafeDaily.className = 'inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-bold bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200/60 dark:border-rose-800/60';
         }
       }
 
@@ -1596,27 +1613,51 @@ export class ModalManager {
       const simStatus = untilNext.simulated?.coverageStatus || COVERAGE_STATUS.NO_NEXT_INCOME;
       const baseStatusLabel = t('coverage.' + baseStatus) || baseStatus;
       const simStatusLabel = t('coverage.' + simStatus) || simStatus;
-      const activeStatus = hasValidInput ? simStatus : baseStatus;
-      const activeStatusLabel = hasValidInput ? simStatusLabel : baseStatusLabel;
+
+      const getStatusChipClass = (status, isScenario = false) => {
+        const weightClass = isScenario ? 'font-bold' : 'font-medium';
+        if (status === COVERAGE_STATUS.COVERED) {
+          return `inline-block px-2 py-0.5 rounded-md text-[11px] ${weightClass} bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300`;
+        } else if (status === COVERAGE_STATUS.TIGHT) {
+          return `inline-block px-2 py-0.5 rounded-md text-[11px] ${weightClass} bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300`;
+        } else if (status === COVERAGE_STATUS.DEFICIT_BEFORE_INCOME) {
+          return `inline-block px-2 py-0.5 rounded-md text-[11px] ${weightClass} bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300`;
+        }
+        return `inline-block px-2 py-0.5 rounded-md text-[11px] ${weightClass} bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300`;
+      };
+
+      if (this.whatifDecisionBaseStatusChip) {
+        this.whatifDecisionBaseStatusChip.textContent = baseStatusLabel;
+        this.whatifDecisionBaseStatusChip.className = getStatusChipClass(baseStatus, false);
+      }
 
       if (this.whatifDecisionStatusChip) {
-        this.whatifDecisionStatusChip.textContent = activeStatusLabel;
-        if (activeStatus === COVERAGE_STATUS.COVERED) {
-          this.whatifDecisionStatusChip.className = 'inline-block px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300';
-        } else if (activeStatus === COVERAGE_STATUS.TIGHT) {
-          this.whatifDecisionStatusChip.className = 'inline-block px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300';
-        } else if (activeStatus === COVERAGE_STATUS.DEFICIT_BEFORE_INCOME) {
-          this.whatifDecisionStatusChip.className = 'inline-block px-2 py-0.5 rounded-md text-[11px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300';
+        if (hasValidInput) {
+          this.whatifDecisionStatusChip.textContent = simStatusLabel;
+          this.whatifDecisionStatusChip.className = getStatusChipClass(simStatus, true);
         } else {
-          this.whatifDecisionStatusChip.className = 'inline-block px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
+          this.whatifDecisionStatusChip.textContent = '—';
+          this.whatifDecisionStatusChip.className = 'inline-block px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400';
         }
       }
 
       if (this.whatifDecisionStatusTransitionSub) {
-        if (hasValidInput && baseStatus !== simStatus) {
-          this.whatifDecisionStatusTransitionSub.textContent = `${baseStatusLabel} ➔ ${simStatusLabel}`;
+        if (!hasValidInput) {
+          this.whatifDecisionStatusTransitionSub.textContent = '—';
+          this.whatifDecisionStatusTransitionSub.className = 'inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400';
+        } else if (baseStatus === simStatus) {
+          this.whatifDecisionStatusTransitionSub.textContent = t('whatif.decision.statusUnchanged') || 'Durum değişmedi';
+          this.whatifDecisionStatusTransitionSub.className = 'inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400';
         } else {
-          this.whatifDecisionStatusTransitionSub.textContent = `${t('whatif.results.current') || 'Mevcut'}: ${baseStatusLabel}`;
+          const transitionText = `${baseStatusLabel} ➔ ${simStatusLabel}`;
+          this.whatifDecisionStatusTransitionSub.textContent = transitionText;
+          if (simStatus === COVERAGE_STATUS.DEFICIT_BEFORE_INCOME) {
+            this.whatifDecisionStatusTransitionSub.className = 'inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200/60 dark:border-rose-800/60';
+          } else if (simStatus === COVERAGE_STATUS.TIGHT) {
+            this.whatifDecisionStatusTransitionSub.className = 'inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60';
+          } else {
+            this.whatifDecisionStatusTransitionSub.className = 'inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60';
+          }
         }
       }
 
@@ -1625,26 +1666,38 @@ export class ModalManager {
       const simPreBal = untilNext.simulated?.projectedBalanceBeforeNextIncome ?? null;
       const deltaPreBal = untilNext.delta?.projectedBalanceBeforeNextIncome ?? null;
 
+      const formattedBasePreBal = (basePreBal !== null)
+        ? formatCurrency(basePreBal, currency, lang)
+        : notAvail;
+
+      if (this.whatifDecisionBasePreBalance) {
+        this.whatifDecisionBasePreBalance.textContent = formattedBasePreBal;
+      }
       if (this.whatifDecisionBasePreBalanceSub) {
         this.whatifDecisionBasePreBalanceSub.textContent = (basePreBal !== null)
-          ? `${t('whatif.results.current') || 'Mevcut'}: ${formatCurrency(basePreBal, currency, lang)}`
+          ? `${t('whatif.results.current') || 'Mevcut'}: ${formattedBasePreBal}`
           : `${t('whatif.results.current') || 'Mevcut'}: —`;
       }
+
       if (this.whatifDecisionSimPreBalance) {
         this.whatifDecisionSimPreBalance.textContent = (hasValidInput && simPreBal !== null)
           ? formatCurrency(simPreBal, currency, lang)
           : notAvail;
       }
+
       if (this.whatifDecisionDeltaPreBalance) {
-        if (!hasValidInput || deltaPreBal === null || deltaPreBal === 0) {
+        if (!hasValidInput || deltaPreBal === null) {
           this.whatifDecisionDeltaPreBalance.textContent = '—';
-          this.whatifDecisionDeltaPreBalance.className = 'text-[11px] font-semibold text-slate-400 dark:text-slate-500';
+          this.whatifDecisionDeltaPreBalance.className = 'inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400';
+        } else if (deltaPreBal === 0) {
+          this.whatifDecisionDeltaPreBalance.textContent = t('whatif.decision.unchanged') || 'Değişmedi';
+          this.whatifDecisionDeltaPreBalance.className = 'inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400';
         } else if (deltaPreBal > 0) {
           this.whatifDecisionDeltaPreBalance.textContent = `+${formatCurrency(deltaPreBal, currency, lang)}`;
-          this.whatifDecisionDeltaPreBalance.className = 'text-[11px] font-semibold text-emerald-600 dark:text-emerald-400';
+          this.whatifDecisionDeltaPreBalance.className = 'inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60';
         } else {
           this.whatifDecisionDeltaPreBalance.textContent = `-${formatCurrency(Math.abs(deltaPreBal), currency, lang)}`;
-          this.whatifDecisionDeltaPreBalance.className = 'text-[11px] font-semibold text-rose-600 dark:text-rose-400';
+          this.whatifDecisionDeltaPreBalance.className = 'inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-bold bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200/60 dark:border-rose-800/60';
         }
       }
 

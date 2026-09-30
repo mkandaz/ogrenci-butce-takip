@@ -367,6 +367,8 @@ export default {
       noNextIncomeContext: 'Planlı bir sonraki gelir bulunmuyor',
       obligationsReserved: 'Gelire kadar ayrılan yükümlülükler: {amount}',
       statusTransition: '{from} ➔ {to}',
+      statusUnchanged: 'Durum değişmedi',
+      unchanged: 'Değişmedi',
       adjustmentNeeded: 'Bu senaryoda günlük harcamayı yaklaşık {amount} azaltmak gerekiyor.',
       adjustmentBalanced: 'Mevcut tempo planlanan nakit akışı içinde kalıyor.',
       impacts: {

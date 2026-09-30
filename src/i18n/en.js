@@ -367,6 +367,8 @@ export default {
       noNextIncomeContext: 'No planned next income',
       obligationsReserved: 'Reserved obligations until income: {amount}',
       statusTransition: '{from} ➔ {to}',
+      statusUnchanged: 'Status unchanged',
+      unchanged: 'Unchanged',
       adjustmentNeeded: 'In this scenario, daily spending needs to be reduced by ~{amount}.',
       adjustmentBalanced: 'Current pace remains within planned cashflow.',
       impacts: {
