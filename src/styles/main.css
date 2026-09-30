@@ -6,12 +6,37 @@
 
 :root {
   --font-main: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --bg-page: #F6F5F1;
+  --text-primary: #172033;
+  --text-secondary: #667085;
+  --color-sage: #356B57;
+  --color-sage-hover: #2B5948;
+  --color-sage-soft: #EAF2ED;
+  --color-border: #DDDCD5;
+}
+
+.dark {
+  --bg-page: #101511;
+  --text-primary: #F0F3F1;
+  --text-secondary: #8B9990;
+  --color-sage: #44856D;
+  --color-sage-hover: #356B57;
+  --color-sage-soft: #172D24;
+  --color-border: #27332B;
 }
 
 body {
   font-family: var(--font-main);
+  background-color: var(--bg-page);
+  color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Tabular numerals for financial figures */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
 }
 
 /* Custom transitions */
@@ -148,7 +173,7 @@ body {
 
 /* Keyboard Navigation & Focus Ring for Accessibility (WCAG 2.4.7) */
 :focus-visible {
-  outline: 2px solid #6366f1;
+  outline: 2px solid #356B57;
   outline-offset: 2px;
 }
 

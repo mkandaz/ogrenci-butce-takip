@@ -1212,6 +1212,13 @@ export class UIManager {
     // Statik data-i18n etiketlerini güncelle
     const isConfirmModalOpen = this.modalManager?.confirmModal && !this.modalManager.confirmModal.classList.contains('hidden');
 
+    if (typeof document !== 'undefined') {
+      const browserTitle = t('brand.browserTitle');
+      if (browserTitle && browserTitle !== 'brand.browserTitle') {
+        document.title = browserTitle;
+      }
+    }
+
     document.querySelectorAll('[data-i18n]').forEach(el => {
       // Eğer onay modalı o anda açıksa içindeki dinamik metinleri ezme (flicker/flash önleme)
       if (isConfirmModalOpen && el.closest('#confirm-modal')) {
@@ -1234,6 +1241,15 @@ export class UIManager {
         el.setAttribute('title', t(key));
       }
     });
+
+    const footerPrivacyEl = (typeof document !== 'undefined' && typeof document.getElementById === 'function')
+      ? document.getElementById('footer-privacy-text')
+      : null;
+    if (footerPrivacyEl) {
+      const key = this.currentUser ? 'footer.privacyCloud' : 'footer.privacyLocal';
+      footerPrivacyEl.textContent = t(key);
+      footerPrivacyEl.setAttribute('data-i18n', key);
+    }
   }
 
   exportData() {
@@ -1258,12 +1274,29 @@ export class UIManager {
 
   renderAuthBadge(user) {
     if (typeof document === 'undefined') return;
+    this.currentUser = user || null;
+    const footerPrivacyEl = (typeof document !== 'undefined' && typeof document.getElementById === 'function')
+      ? document.getElementById('footer-privacy-text')
+      : null;
+    const headerAuthLabel = (typeof document !== 'undefined' && typeof document.getElementById === 'function')
+      ? document.getElementById('header-auth-label')
+      : null;
+    const headerAuthSub = (typeof document !== 'undefined' && typeof document.getElementById === 'function')
+      ? document.getElementById('header-auth-sub')
+      : null;
+
     if (user) {
       this.btnOpenAuth?.classList.add('hidden');
       this.userAuthBadge?.classList.remove('hidden');
       if (this.userEmailText) {
         this.userEmailText.textContent = user.email || 'Kullanıcı';
         this.userEmailText.title = user.email || '';
+      }
+      if (headerAuthLabel) {
+        headerAuthLabel.textContent = user.email || 'Kullanıcı';
+      }
+      if (headerAuthSub) {
+        headerAuthSub.textContent = t('auth.statusSynced');
       }
       const avatarUrl = user.user_metadata?.avatar_url || user.user_metadata?.picture;
       if (avatarUrl && this.userAvatarImg) {
@@ -1272,10 +1305,24 @@ export class UIManager {
       } else if (this.userAvatarImg) {
         this.userAvatarImg.classList.add('hidden');
       }
+      if (footerPrivacyEl) {
+        footerPrivacyEl.textContent = t('footer.privacyCloud');
+        footerPrivacyEl.setAttribute('data-i18n', 'footer.privacyCloud');
+      }
     } else {
       this.btnOpenAuth?.classList.remove('hidden');
       this.userAuthBadge?.classList.add('hidden');
       if (this.userAvatarImg) this.userAvatarImg.classList.add('hidden');
+      if (headerAuthLabel) {
+        headerAuthLabel.textContent = t('auth.accountGuestPrimary');
+      }
+      if (headerAuthSub) {
+        headerAuthSub.textContent = t('auth.accountGuestSecondary');
+      }
+      if (footerPrivacyEl) {
+        footerPrivacyEl.textContent = t('footer.privacyLocal');
+        footerPrivacyEl.setAttribute('data-i18n', 'footer.privacyLocal');
+      }
     }
     this.refreshIcons();
   }

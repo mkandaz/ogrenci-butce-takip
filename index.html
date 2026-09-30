@@ -3,14 +3,26 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Öğrenci Bütçem - Akıllı & Güvenli Bütçe Takip Sistemi</title>
-  <meta name="description" content="Üniversite öğrencileri için günlük güvenli harcama limitli, modern ve çevrimdışı bütçe takip uygulaması." />
-  <meta name="theme-color" content="#4f46e5" />
+  <title>Muvazene — Bütçeni Gör, Sonrasını Dengele</title>
+  <meta name="description" content="Muvazene — Bugünü gör, sonrasını dengele. Günlük güvenli harcama limitli, deterministik ve çevrimdışı bütçe ve karar destek uygulaması." />
+  <meta name="theme-color" content="#356B57" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <meta name="apple-mobile-web-app-title" content="Öğrenci Bütçem" />
+  <meta name="apple-mobile-web-app-title" content="Muvazene" />
+  <link rel="canonical" href="https://www.muvazene.app" />
+
+  <!-- OpenGraph Metadata -->
+  <meta property="og:title" content="Muvazene — Bütçeni Gör, Sonrasını Dengele" />
+  <meta property="og:description" content="Muvazene — Bugünü gör, sonrasını dengele. Kişisel bütçe, nakit akışı ve senaryo simülasyonu." />
+  <meta property="og:url" content="https://www.muvazene.app" />
+  <meta property="og:type" content="website" />
+
+  <!-- Twitter Metadata -->
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="Muvazene — Bütçeni Gör, Sonrasını Dengele" />
+  <meta name="twitter:description" content="Bugünü gör. Sonrasını dengele. Kişisel bütçe ve karar destek sistemi." />
 
   <!-- Render-Blocking CSS (FOUC Önleme) -->
   <link rel="stylesheet" href="/src/styles/main.css" />
@@ -29,43 +41,67 @@
     })();
   </script>
 </head>
-<body class="bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 min-h-screen antialiased flex flex-col transition-colors duration-200">
+<body class="bg-[#F6F5F1] dark:bg-[#101511] text-[#172033] dark:text-[#F0F3F1] min-h-screen antialiased flex flex-col transition-colors duration-200 relative">
+
+  <!-- Sparse Irregular Polka-Dot Motif (Static Decorative Background) -->
+  <div id="bg-dot-pattern" class="fixed inset-0 pointer-events-none overflow-hidden z-0 select-none opacity-60 dark:opacity-25" aria-hidden="true">
+    <svg class="w-full h-full" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+      <!-- Top-right cluster (sparse, delicate) -->
+      <circle cx="89%" cy="6%" r="5" fill="#356B57" fill-opacity="0.35" />
+      <circle cx="94%" cy="11%" r="8" fill="#EAF2ED" fill-opacity="0.8" class="dark:fill-[#2B5948] dark:fill-opacity-40" />
+      <circle cx="85%" cy="14%" r="4" fill="#7257A8" fill-opacity="0.3" />
+      <circle cx="92%" cy="17%" r="6" fill="#B7791F" fill-opacity="0.3" />
+      
+      <!-- Mid-left cluster (delicate accents) -->
+      <circle cx="4%" cy="40%" r="7" fill="#356B57" fill-opacity="0.25" />
+      <circle cx="7%" cy="46%" r="4" fill="#7257A8" fill-opacity="0.25" />
+      <circle cx="2%" cy="51%" r="5" fill="#EAF2ED" fill-opacity="0.7" class="dark:fill-[#2B5948] dark:fill-opacity-30" />
+      
+      <!-- Bottom-right cluster (sparse rhythm) -->
+      <circle cx="95%" cy="78%" r="6" fill="#356B57" fill-opacity="0.3" />
+      <circle cx="90%" cy="84%" r="9" fill="#EAF2ED" fill-opacity="0.8" class="dark:fill-[#2B5948] dark:fill-opacity-40" />
+      <circle cx="86%" cy="89%" r="4.5" fill="#B7791F" fill-opacity="0.25" />
+      <circle cx="93%" cy="93%" r="5" fill="#7257A8" fill-opacity="0.25" />
+
+      <!-- Subtle isolated accent dot near header bottom left -->
+      <circle cx="3%" cy="10%" r="5" fill="#356B57" fill-opacity="0.2" />
+    </svg>
+  </div>
 
   <!-- ================= NAVBAR ================= -->
-  <header class="sticky top-0 z-40 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800 transition-colors">
+  <header class="sticky top-0 z-40 bg-white/95 dark:bg-[#171D19]/95 backdrop-blur-md border-b border-[#DDDCD5] dark:border-[#27332B] transition-colors relative">
     <div class="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-1 sm:gap-3">
       
       <!-- Brand Logo -->
       <div class="flex items-center space-x-2 sm:space-x-3 shrink-0">
-        <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white shadow-md shadow-indigo-500/20 shrink-0">
+        <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-[#356B57] flex items-center justify-center text-white shadow-xs shrink-0">
           <i data-lucide="graduation-cap" class="w-5 h-5 sm:w-6 sm:h-6"></i>
         </div>
         <div class="min-w-0">
           <div class="flex items-center space-x-1.5 sm:space-x-2">
-            <h1 class="text-sm sm:text-lg font-bold tracking-tight text-slate-900 dark:text-white truncate" data-i18n="brand.title">Öğrenci Bütçem</h1>
-            <span class="text-[9px] sm:text-[10px] uppercase font-extrabold px-1 sm:px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 shrink-0">v1.1</span>
+            <h1 class="text-base sm:text-xl font-bold tracking-tight text-slate-900 dark:text-white truncate" data-i18n="brand.title">Muvazene</h1>
           </div>
-          <p class="text-xs text-slate-500 dark:text-slate-400 hidden sm:block truncate" data-i18n="brand.subtitle">Akıllı & Güvenli Bütçe Takip Rehberi</p>
+          <p class="text-xs text-slate-500 dark:text-slate-400 hidden sm:block truncate" data-i18n="brand.subtitle">Bugünü gör. Sonrasını dengele.</p>
         </div>
       </div>
 
       <!-- Header Actions -->
       <div class="flex items-center space-x-1 sm:space-x-2 lg:space-x-3 shrink-0">
         <!-- Month Navigator -->
-        <div id="month-navigator-container" class="flex items-center bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-0.5 shrink-0">
-          <button id="btn-prev-month" type="button" title="Önceki Ay" aria-label="Önceki Ay" class="min-w-[28px] sm:min-w-[36px] min-h-[28px] sm:min-h-[36px] p-1 sm:p-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 hover:shadow-xs transition flex items-center justify-center">
+        <div id="month-navigator-container" class="flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-0.5 shrink-0">
+          <button id="btn-prev-month" type="button" title="Önceki Ay" aria-label="Önceki Ay" class="min-w-[28px] sm:min-w-[36px] min-h-[28px] sm:min-h-[36px] p-1 sm:p-1.5 rounded-md text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 hover:shadow-xs transition flex items-center justify-center">
             <i data-lucide="chevron-left" class="w-3.5 h-3.5 sm:w-4 sm:h-4"></i>
           </button>
           
           <div class="relative flex items-center">
-            <button id="btn-month-display" type="button" class="flex items-center space-x-1 sm:space-x-1.5 px-1.5 sm:px-2.5 py-1 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-bold text-slate-800 dark:text-slate-200 hover:bg-white/80 dark:hover:bg-slate-700/80 transition" title="Ay Değiştir">
-              <i data-lucide="calendar" class="w-3 h-3 sm:w-3.5 sm:h-3.5 text-indigo-500"></i>
+            <button id="btn-month-display" type="button" class="flex items-center space-x-1 sm:space-x-1.5 px-1.5 sm:px-2.5 py-1 sm:py-1.5 rounded-md text-[11px] sm:text-xs font-bold text-slate-800 dark:text-slate-200 hover:bg-white/80 dark:hover:bg-slate-700/80 transition" title="Ay Değiştir">
+              <i data-lucide="calendar" class="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#356B57] dark:text-[#44856D]"></i>
               <span id="header-date-text">Eylül 2026</span>
             </button>
             <input type="month" id="header-month-picker" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full" title="Tarih seç" />
           </div>
 
-          <button id="btn-next-month" type="button" title="Sonraki Ay" aria-label="Sonraki Ay" class="min-w-[28px] sm:min-w-[36px] min-h-[28px] sm:min-h-[36px] p-1 sm:p-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 hover:shadow-xs transition flex items-center justify-center">
+          <button id="btn-next-month" type="button" title="Sonraki Ay" aria-label="Sonraki Ay" class="min-w-[28px] sm:min-w-[36px] min-h-[28px] sm:min-h-[36px] p-1 sm:p-1.5 rounded-md text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 hover:shadow-xs transition flex items-center justify-center">
             <i data-lucide="chevron-right" class="w-3.5 h-3.5 sm:w-4 sm:h-4"></i>
           </button>
         </div>
@@ -85,7 +121,7 @@
 
         <!-- Data & Settings Dropdown -->
         <div class="relative inline-block text-left shrink-0" id="backup-menu-container">
-          <button id="btn-backup-menu" type="button" title="Ayarlar & Veri Yönetimi" aria-label="Ayarlar ve Veri Menüsü" class="min-w-[32px] sm:min-w-[44px] min-h-[32px] sm:min-h-[44px] p-1.5 sm:p-2.5 rounded-xl flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition">
+          <button id="btn-backup-menu" type="button" title="Ayarlar & Veri Yönetimi" aria-label="Ayarlar ve Veri Menüsü" class="min-w-[32px] sm:min-w-[44px] min-h-[32px] sm:min-h-[44px] p-1.5 sm:p-2.5 rounded-lg flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition">
             <i data-lucide="settings" class="w-4 h-4 sm:w-5 sm:h-5"></i>
           </button>
           <!-- Backup dropdown menu -->
@@ -96,21 +132,17 @@
               <span data-i18n="menu.exportJson">Yedek İndir (JSON Export)</span>
             </button>
             <button id="btn-open-import" class="w-full text-left px-4 py-2.5 min-h-[44px] flex items-center space-x-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition">
-              <i data-lucide="upload" class="w-4 h-4 text-indigo-500"></i>
+              <i data-lucide="upload" class="w-4 h-4 text-[#356B57]"></i>
               <span data-i18n="menu.importJson">Yedek Yükle (JSON Import)</span>
             </button>
-            <button id="btn-load-seed" class="w-full text-left px-4 py-2.5 min-h-[44px] flex items-center space-x-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition">
-              <i data-lucide="sparkles" class="w-4 h-4 text-amber-500"></i>
-              <span data-i18n="menu.loadDemo">Demo Verilerini Yükle</span>
-            </button>
             <button id="btn-edit-initial-budget" class="w-full text-left px-4 py-2.5 min-h-[44px] flex items-center space-x-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition">
-              <i data-lucide="wallet" class="w-4 h-4 text-indigo-500"></i>
+              <i data-lucide="wallet" class="w-4 h-4 text-[#356B57]"></i>
               <span data-i18n="menu.editInitialBudget">Başlangıç Bütçesini Düzenle</span>
             </button>
             <div class="h-px bg-slate-200 dark:bg-slate-800 my-1"></div>
             <div class="px-3 py-1.5 text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 tracking-wider">Bulut & Hesap</div>
             <button id="btn-manual-sync" class="w-full text-left px-4 py-2.5 min-h-[44px] flex items-center space-x-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition">
-              <i data-lucide="refresh-cw" class="w-4 h-4 text-indigo-500"></i>
+              <i data-lucide="refresh-cw" class="w-4 h-4 text-[#356B57]"></i>
               <span data-i18n="auth.syncNow">Şimdi Eşitle</span>
             </button>
             <div class="h-px bg-slate-200 dark:bg-slate-800 my-1"></div>
@@ -127,14 +159,19 @@
 
         <!-- Cloud Sync & Auth Container -->
         <div id="cloud-sync-container" class="flex items-center shrink-0">
-          <!-- Logged Out State: "Yerel mod" Status Chip -->
-          <button id="btn-open-auth" type="button" class="inline-flex items-center space-x-1 sm:space-x-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition cursor-pointer select-none" title="Veriler yalnızca bu cihazda saklanıyor." data-i18n-title="auth.localModeTooltip">
-            <i data-lucide="hard-drive" class="w-3.5 h-3.5 text-slate-400 dark:text-slate-500"></i>
-            <span data-i18n="auth.localModeBadge">Yerel mod</span>
+          <!-- Logged Out State: Structured Account / Storage Status -->
+          <button id="btn-open-auth" type="button" class="inline-flex items-center space-x-2 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-left bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition cursor-pointer select-none" title="Veriler yalnızca bu cihazda saklanıyor." data-i18n-title="auth.localModeTooltip">
+            <div class="w-6 h-6 rounded-md bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-500 dark:text-slate-400 shrink-0">
+              <i data-lucide="hard-drive" class="w-3.5 h-3.5"></i>
+            </div>
+            <div class="flex flex-col leading-tight">
+              <span id="header-auth-label" class="text-[11px] sm:text-xs font-semibold text-slate-800 dark:text-slate-200" data-i18n="auth.accountGuestPrimary">Yerel kullanım</span>
+              <span id="header-auth-sub" class="text-[9px] sm:text-[10px] text-slate-500 dark:text-slate-400" data-i18n="auth.accountGuestSecondary">Bu cihazda</span>
+            </div>
           </button>
 
           <!-- Logged In State: User Badge & Sync Indicator -->
-          <div id="user-auth-badge" class="hidden flex items-center space-x-1 sm:space-x-1.5 text-xs bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 sm:px-2.5 py-1 sm:py-1.5">
+          <div id="user-auth-badge" class="hidden flex items-center space-x-1 sm:space-x-1.5 text-xs bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 sm:px-2.5 py-1 sm:py-1.5">
             <span id="sync-status-indicator" title="Senkronizasyon Durumu" class="flex items-center space-x-1 text-slate-600 dark:text-slate-300 cursor-pointer">
               <i data-lucide="cloud" id="icon-sync-cloud" class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-500"></i>
               <span id="sync-status-text" class="hidden sm:inline font-medium text-[11px]" data-i18n="auth.statusSynced">Bulut Eşitlendi</span>
@@ -142,20 +179,20 @@
             <span class="text-slate-300 dark:text-slate-600">|</span>
             <img id="user-avatar-img" class="w-4 h-4 sm:w-5 sm:h-5 rounded-full object-cover hidden" alt="Avatar" referrerpolicy="no-referrer" />
             <span id="user-email-text" class="font-bold text-slate-700 dark:text-slate-200 max-w-[60px] sm:max-w-[120px] truncate" title=""></span>
-            <button id="btn-sign-out" type="button" title="Çıkış Yap" class="min-w-[24px] sm:min-w-[28px] min-h-[24px] sm:min-h-[28px] p-0.5 sm:p-1 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition flex items-center justify-center">
+            <button id="btn-sign-out" type="button" title="Çıkış Yap" class="min-w-[24px] sm:min-w-[28px] min-h-[24px] sm:min-h-[28px] p-0.5 sm:p-1 rounded-md text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition flex items-center justify-center">
               <i data-lucide="log-out" class="w-3.5 h-3.5"></i>
             </button>
           </div>
         </div>
 
         <!-- Dark/Light Theme Toggle -->
-        <button id="btn-theme-toggle" type="button" title="Temayı Değiştir" aria-label="Temayı Değiştir" class="min-w-[32px] sm:min-w-[44px] min-h-[32px] sm:min-h-[44px] p-1.5 sm:p-2.5 rounded-xl flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition shrink-0">
+        <button id="btn-theme-toggle" type="button" title="Temayı Değiştir" aria-label="Temayı Değiştir" class="min-w-[32px] sm:min-w-[44px] min-h-[32px] sm:min-h-[44px] p-1.5 sm:p-2.5 rounded-lg flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition shrink-0">
           <i data-lucide="moon" id="theme-icon-moon" class="w-4 h-4 sm:w-5 sm:h-5 hidden"></i>
           <i data-lucide="sun" id="theme-icon-sun" class="w-4 h-4 sm:w-5 sm:h-5"></i>
         </button>
 
         <!-- New Transaction CTA Button -->
-        <button id="btn-open-add-modal" type="button" class="min-h-[36px] sm:min-h-[44px] inline-flex items-center space-x-1.5 sm:space-x-2 px-2.5 sm:px-4 py-1.5 sm:py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-medium text-xs sm:text-sm shadow-sm shadow-indigo-500/30 transition shrink-0">
+        <button id="btn-open-add-modal" type="button" class="min-h-[36px] sm:min-h-[44px] inline-flex items-center space-x-1.5 sm:space-x-2 px-2.5 sm:px-4 py-1.5 sm:py-2.5 rounded-lg bg-[#356B57] hover:bg-[#2B5948] active:scale-95 text-white font-medium text-xs sm:text-sm shadow-xs transition shrink-0">
           <i data-lucide="plus-circle" class="w-4 h-4"></i>
           <span class="inline" data-i18n="nav.addTransaction">İşlem Ekle</span>
         </button>
@@ -186,69 +223,69 @@
     <section class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
       
       <!-- 1. Kalan Bütçe (Net Balance) -->
-      <div class="transition-card bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between overflow-hidden">
+      <div class="transition-card bg-white dark:bg-[#171D19] p-4 sm:p-5 rounded-xl border border-[#DDDCD5] dark:border-[#27332B] shadow-xs flex flex-col justify-between overflow-hidden">
         <div>
           <div class="flex items-center justify-between">
             <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400" data-i18n="cards.netBalance">Kalan Net Bütçe</span>
-            <span id="badge-health-status" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+            <span id="badge-health-status" class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300">
               Sağlıklı
             </span>
           </div>
-          <div class="mt-3">
-            <span id="metric-net-balance" class="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white truncate block">
+          <div class="mt-2.5">
+            <span id="metric-net-balance" class="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white truncate block tabular-nums">
               0,00 ₺
             </span>
           </div>
         </div>
-        <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+        <div class="mt-3.5 pt-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
           <div class="flex items-center space-x-1">
             <span data-i18n="cards.carriedOver">Devreden:</span>
-            <span id="badge-carried-balance" class="font-bold text-slate-700 dark:text-slate-300">0,00 ₺</span>
+            <span id="badge-carried-balance" class="font-bold text-slate-700 dark:text-slate-300 tabular-nums">0,00 ₺</span>
           </div>
           <div class="flex items-center space-x-1">
             <span data-i18n="cards.spentRatio">Harcama:</span>
-            <span id="metric-spent-percent" class="font-bold text-slate-700 dark:text-slate-200">%0</span>
+            <span id="metric-spent-percent" class="font-bold text-slate-700 dark:text-slate-200 tabular-nums">%0</span>
           </div>
         </div>
       </div>
 
       <!-- 2. Bu Ay Gelir -->
-      <div class="transition-card bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between overflow-hidden">
+      <div class="transition-card bg-white dark:bg-[#171D19] p-4 sm:p-5 rounded-xl border border-[#DDDCD5] dark:border-[#27332B] shadow-xs flex flex-col justify-between overflow-hidden">
         <div>
           <div class="flex items-center justify-between">
             <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400" data-i18n="cards.thisMonthIncome">Bu Ay Gelir</span>
-            <div class="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+            <div class="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-[#168760] dark:text-[#34d399] flex items-center justify-center">
               <i data-lucide="arrow-down-left" class="w-4 h-4"></i>
             </div>
           </div>
-          <div class="mt-3">
-            <span id="metric-total-income" class="text-2xl sm:text-3xl font-extrabold tracking-tight text-emerald-600 dark:text-emerald-400 truncate block">
+          <div class="mt-2.5">
+            <span id="metric-total-income" class="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#168760] dark:text-[#34d399] truncate block tabular-nums">
               0,00 ₺
             </span>
           </div>
         </div>
-        <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+        <div class="mt-3.5 pt-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
           <span data-i18n="cards.txCount">İşlem Sayısı:</span>
           <span id="metric-income-count" class="font-bold text-slate-700 dark:text-slate-200">0 adet</span>
         </div>
       </div>
 
       <!-- 3. Bu Ay Gider -->
-      <div class="transition-card bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between overflow-hidden">
+      <div class="transition-card bg-white dark:bg-[#171D19] p-4 sm:p-5 rounded-xl border border-[#DDDCD5] dark:border-[#27332B] shadow-xs flex flex-col justify-between overflow-hidden">
         <div>
           <div class="flex items-center justify-between">
             <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400" data-i18n="cards.thisMonthExpense">Bu Ay Gider</span>
-            <div class="w-8 h-8 rounded-xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center">
+            <div class="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-950/60 text-[#C84F5A] dark:text-[#f87171] flex items-center justify-center">
               <i data-lucide="arrow-up-right" class="w-4 h-4"></i>
             </div>
           </div>
-          <div class="mt-3">
-            <span id="metric-total-expense" class="text-2xl sm:text-3xl font-extrabold tracking-tight text-rose-600 dark:text-rose-400 truncate block">
+          <div class="mt-2.5">
+            <span id="metric-total-expense" class="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#C84F5A] dark:text-[#f87171] truncate block tabular-nums">
               0,00 ₺
             </span>
           </div>
         </div>
-        <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+        <div class="mt-3.5 pt-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
           <span data-i18n="cards.expenseCount">Gider Adedi:</span>
           <span id="metric-expense-count" class="font-bold text-slate-700 dark:text-slate-200">0 adet</span>
         </div>
@@ -257,110 +294,111 @@
     </section>
 
     <!-- ================= FINANCIAL OUTLOOK SECTION (FAZ 5.5C) ================= -->
-    <section id="financial-outlook-section" class="bg-white dark:bg-slate-900 p-3.5 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3" aria-label="Finansal Görünüm">
+    <!-- ================= FINANCIAL OUTLOOK SECTION (FAZ 5.5C) ================= -->
+    <section id="financial-outlook-section" class="bg-white dark:bg-[#171D19] p-3.5 sm:p-4 rounded-xl border border-[#DDDCD5] dark:border-[#27332B] shadow-xs space-y-3.5" aria-label="Finansal Görünüm">
       
       <!-- Section Header -->
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-slate-100 dark:border-slate-800 pb-2.5">
         <div class="flex items-center space-x-2.5">
-          <div class="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+          <div class="w-8 h-8 rounded-lg bg-[#EAF2ED] dark:bg-[#1A3326] text-[#356B57] dark:text-[#44856D] flex items-center justify-center shrink-0">
             <i data-lucide="compass" class="w-4 h-4"></i>
           </div>
           <div>
             <div class="flex items-center space-x-2 flex-wrap gap-y-1">
               <h2 class="text-sm sm:text-base font-bold text-slate-900 dark:text-white" data-i18n="financialOutlook.title">Finansal Görünüm</h2>
-              <span id="outlook-historical-badge" class="hidden px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300" data-i18n="financialOutlook.currentBadge">Bugünkü finansal durum — Seçili ay görünümünden bağımsızdır.</span>
+              <span id="outlook-historical-badge" class="hidden px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300" data-i18n="financialOutlook.currentBadge">Bugünkü finansal durum — Seçili ay görünümünden bağımsızdır.</span>
             </div>
             <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5" data-i18n="financialOutlook.subtitle">Deterministik nakit akışı ve harcama projeksiyonu</p>
           </div>
         </div>
 
-        <!-- Management & Scenario CTA Buttons -->
+        <!-- Management & Scenario CTA Buttons (Primary: Scenario, Secondary: Cashflows) -->
         <div class="flex items-center space-x-2 shrink-0 flex-wrap gap-y-1">
-          <button id="btn-open-whatif" type="button" class="min-h-[36px] px-3 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/60 dark:hover:bg-purple-900/60 text-purple-600 dark:text-purple-300 border border-purple-200/80 dark:border-purple-800/80 text-xs font-bold transition flex items-center justify-center space-x-1.5 shrink-0 active:scale-95">
-            <i data-lucide="sparkles" class="w-4 h-4 text-purple-500 dark:text-purple-400"></i>
+          <button id="btn-open-whatif" type="button" class="min-h-[36px] px-3.5 py-1.5 rounded-lg bg-[#356B57] hover:bg-[#2B5948] text-white text-xs font-semibold shadow-xs transition flex items-center justify-center space-x-1.5 shrink-0 active:scale-95">
+            <i data-lucide="sparkles" class="w-4 h-4"></i>
             <span data-i18n="financialOutlook.tryScenario">Senaryo Dene</span>
           </button>
-          <button id="btn-manage-cashflows" type="button" class="min-h-[36px] px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-600 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80 text-xs font-bold transition flex items-center justify-center space-x-1.5 shrink-0 active:scale-95">
-            <i data-lucide="calendar-clock" class="w-4 h-4"></i>
+          <button id="btn-manage-cashflows" type="button" class="min-h-[36px] px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700/80 text-xs font-medium transition flex items-center justify-center space-x-1.5 shrink-0 active:scale-95">
+            <i data-lucide="calendar-clock" class="w-4 h-4 text-slate-500 dark:text-slate-400"></i>
             <span data-i18n="financialOutlook.manageCashflows">Planlı Gelir / Giderleri Yönet</span>
           </button>
         </div>
       </div>
 
-      <!-- 4 Compact Primary Metrics Grid -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
+      <!-- 4 Compact Primary Metrics Unified Panel -->
+      <div class="bg-slate-50/70 dark:bg-slate-800/40 rounded-xl border border-slate-200/80 dark:border-slate-700/80 divide-y sm:divide-y-0 sm:divide-x divide-slate-200/70 dark:divide-slate-700/70 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         
         <!-- Metric A: Next Income -->
-        <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between overflow-hidden">
+        <div class="p-3.5 flex flex-col justify-between overflow-hidden">
           <div class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-semibold">
             <span class="flex items-center space-x-1.5">
-              <i data-lucide="arrow-down-circle" class="w-3.5 h-3.5 text-emerald-500 shrink-0"></i>
+              <i data-lucide="arrow-down-circle" class="w-3.5 h-3.5 text-[#168760] dark:text-[#34d399] shrink-0"></i>
               <span data-i18n="financialOutlook.nextIncomeTitle">Bir Sonraki Gelir</span>
             </span>
             <span id="metric-next-income-days" class="text-[11px] font-bold text-slate-700 dark:text-slate-300">--</span>
           </div>
-          <div class="mt-1.5">
+          <div class="mt-2">
             <div id="metric-next-income-name" class="text-xs font-bold text-slate-900 dark:text-white truncate">Planlı gelir yok</div>
-            <div id="metric-next-income-amount" class="text-lg sm:text-xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-0.5 truncate">0,00 ₺</div>
+            <div id="metric-next-income-amount" class="text-lg sm:text-xl font-extrabold text-[#168760] dark:text-[#34d399] mt-0.5 truncate tabular-nums">0,00 ₺</div>
           </div>
-          <div class="mt-1.5 pt-1.5 border-t border-slate-200/60 dark:border-slate-700/60 text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
+          <div class="mt-2 pt-2 border-t border-slate-200/50 dark:border-slate-700/50 text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
             <span id="metric-next-income-date">--</span>
-            <span id="metric-obligations-reserved" class="truncate text-slate-600 dark:text-slate-300 font-medium">--</span>
+            <span id="metric-obligations-reserved" class="truncate text-slate-600 dark:text-slate-300 font-medium tabular-nums">--</span>
           </div>
         </div>
 
         <!-- Metric B: Safe Daily Spend -->
-        <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between overflow-hidden">
+        <div class="p-3.5 flex flex-col justify-between overflow-hidden">
           <div class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-semibold">
             <span class="flex items-center space-x-1.5">
-              <i data-lucide="shield" class="w-3.5 h-3.5 text-indigo-500 shrink-0"></i>
+              <i data-lucide="shield" class="w-3.5 h-3.5 text-[#356B57] dark:text-[#44856D] shrink-0"></i>
               <span data-i18n="financialOutlook.safeDailySpendTitle">Güvenli Günlük Limit</span>
             </span>
           </div>
-          <div class="mt-1.5">
+          <div class="mt-2">
             <div class="flex items-baseline space-x-1">
-              <span id="metric-safe-daily-spend" class="text-lg sm:text-xl font-extrabold text-slate-900 dark:text-white truncate">0,00 ₺</span>
+              <span id="metric-safe-daily-spend" class="text-lg sm:text-xl font-extrabold text-slate-900 dark:text-white truncate tabular-nums">0,00 ₺</span>
               <span class="text-xs text-slate-500 dark:text-slate-400" data-i18n="cards.perDay">/ gün</span>
             </div>
             <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate" data-i18n="financialOutlook.safeDailySpendSub">Bir sonraki gelire kadar</div>
           </div>
-          <div class="mt-1.5 pt-1.5 border-t border-slate-200/60 dark:border-slate-700/60 text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
+          <div class="mt-2 pt-2 border-t border-slate-200/50 dark:border-slate-700/50 text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
             <span id="metric-safe-daily-status">--</span>
           </div>
         </div>
 
         <!-- Metric C: Current Daily Pace -->
-        <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between overflow-hidden">
+        <div class="p-3.5 flex flex-col justify-between overflow-hidden">
           <div class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-semibold">
             <span class="flex items-center space-x-1.5">
-              <i data-lucide="trending-up" class="w-3.5 h-3.5 text-amber-500 shrink-0"></i>
+              <i data-lucide="trending-up" class="w-3.5 h-3.5 text-[#B7791F] shrink-0"></i>
               <span data-i18n="financialOutlook.currentPaceTitle">Mevcut Harcama Hızı</span>
             </span>
           </div>
-          <div class="mt-1.5">
+          <div class="mt-2">
             <div class="flex items-baseline space-x-1">
-              <span id="metric-current-daily-pace" class="text-lg sm:text-xl font-extrabold text-slate-900 dark:text-white truncate">0,00 ₺</span>
+              <span id="metric-current-daily-pace" class="text-lg sm:text-xl font-extrabold text-slate-900 dark:text-white truncate tabular-nums">0,00 ₺</span>
               <span class="text-xs text-slate-500 dark:text-slate-400" data-i18n="cards.perDay">/ gün</span>
             </div>
             <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate" data-i18n="financialOutlook.currentPaceSub">Son harcama trendine göre</div>
           </div>
-          <div class="mt-1.5 pt-1.5 border-t border-slate-200/60 dark:border-slate-700/60 text-[11px] flex items-center justify-between">
-            <span id="metric-daily-pace-diff" class="font-bold text-slate-600 dark:text-slate-300">--</span>
+          <div class="mt-2 pt-2 border-t border-slate-200/50 dark:border-slate-700/50 text-[11px] flex items-center justify-between">
+            <span id="metric-daily-pace-diff" class="font-bold text-slate-600 dark:text-slate-300 tabular-nums">--</span>
           </div>
         </div>
 
         <!-- Metric D: Month-End Forecast -->
-        <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between overflow-hidden">
+        <div class="p-3.5 flex flex-col justify-between overflow-hidden">
           <div class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-semibold">
             <span class="flex items-center space-x-1.5">
-              <i data-lucide="calculator" class="w-3.5 h-3.5 text-violet-500 shrink-0"></i>
+              <i data-lucide="calculator" class="w-3.5 h-3.5 text-[#7257A8] shrink-0"></i>
               <span data-i18n="financialOutlook.monthEndForecastTitle">Ay sonu gider tahmini</span>
             </span>
           </div>
-          <div class="mt-1.5">
-            <span id="metric-month-end-forecast" class="text-lg sm:text-xl font-extrabold text-slate-900 dark:text-white truncate block">0,00 ₺</span>
+          <div class="mt-2">
+            <span id="metric-month-end-forecast" class="text-lg sm:text-xl font-extrabold text-slate-900 dark:text-white truncate block tabular-nums">0,00 ₺</span>
           </div>
-          <div class="mt-1.5 pt-1.5 border-t border-slate-200/60 dark:border-slate-700/60 text-[11px]">
+          <div class="mt-2 pt-2 border-t border-slate-200/50 dark:border-slate-700/50 text-[11px]">
             <span id="metric-forecast-confidence-note" class="text-slate-500 dark:text-slate-400 truncate block">--</span>
           </div>
         </div>
@@ -368,7 +406,7 @@
       </div>
 
       <!-- Coverage Status, Utilization Bar & Factual Warning Row -->
-      <div id="outlook-coverage-card" class="p-3 sm:p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-2">
+      <div id="outlook-coverage-card" class="p-3 sm:p-3.5 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 space-y-2">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
           <div class="flex items-center space-x-2">
             <span class="text-xs font-semibold text-slate-600 dark:text-slate-300">Nakit Kaplama Durumu:</span>
@@ -378,14 +416,14 @@
           </div>
           <div class="flex items-center space-x-2 text-xs">
             <span class="font-semibold text-slate-500 dark:text-slate-400" data-i18n="planner.utilization">Kullanım:</span>
-            <span id="text-utilization-ratio" class="font-bold text-slate-800 dark:text-slate-200">%0</span>
+            <span id="text-utilization-ratio" class="font-bold text-slate-800 dark:text-slate-200 tabular-nums">%0</span>
             <span id="text-utilization-label" class="text-[11px] font-semibold text-slate-500 dark:text-slate-400">(Normal)</span>
           </div>
         </div>
 
         <!-- Progress bar for utilization -->
         <div class="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
-          <div id="bar-utilization" class="bg-indigo-600 h-1.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+          <div id="bar-utilization" class="bg-[#356B57] h-1.5 rounded-full transition-all duration-300" style="width: 0%"></div>
         </div>
 
         <!-- Factual Context Text -->
@@ -591,11 +629,8 @@
           Arama kriterlerinize uyan bir işlem kaydı yok veya henüz bütçenize işlem eklemediniz.
         </p>
         <div class="mt-4 flex flex-wrap items-center justify-center gap-2" id="tx-empty-actions">
-          <button id="btn-empty-add-tx" type="button" class="min-h-[44px] px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm transition" data-i18n="history.newTxBtn">
+          <button id="btn-empty-add-tx" type="button" class="min-h-[44px] px-4 py-2 rounded-lg bg-[#356B57] hover:bg-[#2B5948] text-white text-xs font-semibold shadow-xs transition" data-i18n="history.newTxBtn">
             + Yeni İşlem Ekle
-          </button>
-          <button id="btn-empty-reset-seed" type="button" class="min-h-[44px] px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold transition" data-i18n="history.loadSeedBtn">
-            Örnek Verileri Yükle
           </button>
         </div>
       </div>
@@ -605,14 +640,14 @@
   </main>
 
   <!-- ================= FOOTER ================= -->
-  <footer class="mt-auto border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 py-6 text-xs text-slate-500 dark:text-slate-400">
+  <footer class="mt-auto border-t border-[#DDDCD5] dark:border-[#27332B] bg-white/70 dark:bg-[#171D19]/70 backdrop-blur-xs py-5 text-xs text-slate-500 dark:text-slate-400">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
-      <div class="flex items-center space-x-2">
-        <i data-lucide="shield" class="w-4 h-4 text-indigo-500"></i>
-        <span data-i18n="footer.privacy">Gizlilik Odaklı: Verileriniz sunucuya gitmez, yalnızca cihazınızda (LocalStorage) saklanır.</span>
+      <div class="flex items-center space-x-2 text-center sm:text-left">
+        <i data-lucide="shield-check" class="w-4 h-4 text-[#356B57] dark:text-[#44856D] shrink-0"></i>
+        <span id="footer-privacy-text" data-i18n="footer.privacyLocal">Verileriniz yalnızca bu cihazda saklanır.</span>
       </div>
-      <div>
-        <span data-i18n="footer.copyright">Öğrenci Bütçe Takip Sistemi &copy; 2026</span>
+      <div class="text-center sm:text-right text-[11px] text-slate-500 dark:text-slate-400">
+        <span data-i18n="footer.developedBy">Muvazene v1.1 · Mehmet Tunahan Kandaz tarafından geliştirildi</span>
       </div>
     </div>
   </footer>
@@ -926,14 +961,14 @@
       
       <!-- Header -->
       <div class="text-center space-y-2">
-        <div class="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-500 mx-auto flex items-center justify-center text-white shadow-lg shadow-indigo-500/30">
+        <div class="w-14 h-14 rounded-2xl bg-[#356B57] mx-auto flex items-center justify-center text-white shadow-xs">
           <i data-lucide="graduation-cap" class="w-8 h-8"></i>
         </div>
         <h2 id="onboard-modal-title" class="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white" data-i18n="onboarding.title">
-          Öğrenci Bütçem'e Hoş Geldin!
+          Muvazene'ye Hoş Geldin!
         </h2>
         <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto leading-relaxed" data-i18n="onboarding.desc">
-          Bütçeni kontrol altına alıp harcamalarını akıllıca yönetmeye hazır mısın? Nasıl başlamak istediğini seç:
+          Bugünü gör. Sonrasını dengele. Bütçeni akıllıca yönetmeye hazır mısın? Nasıl başlamak istediğini seç:
         </p>
       </div>
 

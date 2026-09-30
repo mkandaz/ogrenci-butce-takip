@@ -1,8 +1,10 @@
 export default {
   brand: {
-    title: 'Öğrenci Bütçem',
+    title: 'Muvazene',
+    browserTitle: 'Muvazene — Bütçeni Gör, Sonrasını Dengele',
     version: 'v1.1',
-    subtitle: 'Akıllı & Güvenli Bütçe Takip Rehberi'
+    subtitle: 'Bugünü gör. Sonrasını dengele.',
+    slogan: 'Bugünü gör. Sonrasını dengele.'
   },
   nav: {
     prevMonth: 'Önceki Ay',
@@ -146,11 +148,11 @@ export default {
     resetDesc: 'Tüm mevcut işlemleriniz silinecek ve başlangıç (Onboarding) ekranına dönülecektir. Kişisel bütçenizi yeniden kurabilir veya demo verilerini seçebilirsiniz. Devam etmek istiyor musunuz?'
   },
   onboarding: {
-    title: "Öğrenci Bütçem'e Hoş Geldin!",
-    desc: 'Bütçeni kontrol altına alıp harcamalarını akıllıca yönetmeye hazır mısın? Nasıl başlamak istediğini seç:',
+    title: "Muvazene'ye Hoş Geldin!",
+    desc: 'Bugünü gör. Sonrasını dengele. Bütçeni akıllıca yönetmeye hazır mısın? Nasıl başlamak istediğini seç:',
     demoCardBadge: 'Hızlı Keşif',
     demoCardTitle: 'Demo Verilerle Dene',
-    demoCardDesc: 'KYK bursu, yurt kirası, yemekhane ve market gibi gerçekçi öğrenci verileriyle tüm grafikleri ve günlük limit hesaplamalarını hemen gör.',
+    demoCardDesc: 'KYK bursu, yurt kirası, yemekhane ve market gibi gerçekçi bütçe verileriyle tüm grafikleri ve günlük limit hesaplamalarını hemen gör.',
     demoCardBtn: 'Demo ile Başla',
     customCardBadge: 'Kişisel Başlangıç',
     customCardTitle: 'Kendi Bütçemle Başla',
@@ -161,11 +163,14 @@ export default {
     monthlyIncomePlaceholder: 'Örn: 4000 (KYK/Aile)',
     targetMonthLabel: 'Takip Edilecek Ay',
     customSubmitBtn: 'Kişisel Bütçemi Başlat',
-    privacyNote: 'Tüm verileriniz yalnızca tarayıcınızın yerel hafızasında saklanır. Hesap açma veya giriş gerekmez.'
+    privacyNote: 'Verileriniz yalnızca bu cihazda saklanır. Hesap açma veya giriş gerekmez.'
   },
   footer: {
-    privacy: 'Gizlilik Odaklı: Verileriniz sunucuya gitmez, yalnızca cihazınızda (LocalStorage) saklanır.',
-    copyright: 'Öğrenci Bütçe Takip Sistemi © 2026'
+    privacy: 'Verileriniz yalnızca bu cihazda saklanır.',
+    privacyLocal: 'Verileriniz yalnızca bu cihazda saklanır.',
+    privacyCloud: 'Verileriniz hesabınızla cihazlarınız arasında senkronize edilir.',
+    developedBy: 'Muvazene v1.1 · Mehmet Tunahan Kandaz tarafından geliştirildi',
+    copyright: 'Muvazene v1.1 · Mehmet Tunahan Kandaz tarafından geliştirildi'
   },
   categories: {
     inc_kyk: 'KYK Burs / Kredi',
@@ -195,11 +200,13 @@ export default {
     orDivider: 'veya',
     guestBtn: 'Üyeliksiz devam et',
     guestSubtext: 'Verilerin yalnızca bu cihazda saklanır.',
-    localModeBadge: 'Yerel mod',
-    localModeTooltip: 'Veriler yalnızca bu cihazda saklanıyor.',
-    localDeviceBadge: 'Yerel mod',
+    localModeBadge: 'Yerel kullanım',
+    localModeTooltip: 'Veriler yalnızca bu cihazda saklanıyor. Bulut eşitleme için tıklayın.',
+    localDeviceBadge: 'Yerel kullanım',
+    accountGuestPrimary: 'Yerel kullanım',
+    accountGuestSecondary: 'Bu cihazda',
     redirecting: 'Google\'a yönlendiriliyor...',
-    emailLabel: 'Öğrenci / Kişisel E-posta',
+    emailLabel: 'Kişisel E-posta',
     emailPlaceholder: 'ornek@universite.edu.tr',
     sendMagicLink: 'Giriş Bağlantısı Gönder',
     sending: 'Gönderiliyor...',
