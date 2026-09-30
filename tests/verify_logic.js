@@ -10698,6 +10698,9 @@ console.log('\n--- 33. FAZ 5.7.2 — SEO & WEB LAUNCH POLISH (TC-394) ---');
   assert(structuredData.url === 'https://www.muvazene.app', 'TC-394-5 Structured data URL is canonical');
   assert(structuredData.applicationCategory === 'FinanceApplication', 'TC-394-5 Structured data category is FinanceApplication');
   assert(structuredData.operatingSystem === 'Web', 'TC-394-5 Structured data operatingSystem is Web');
+  assert(structuredData.offers === undefined, 'TC-394-5 Structured data does not publish offers (pricing model not finalized)');
+  assert(!indexHtml.includes('property="og:image"'), 'TC-394-2 OG image tag omitted pending branded asset');
+  assert(!indexHtml.includes('name="twitter:image"'), 'TC-394-2 Twitter image tag omitted pending branded asset');
 
   // 6. Semantic Heading Hierarchy & Single Primary H1
   const h1Matches = indexHtml.match(/<h1[\s>]/g) || [];
