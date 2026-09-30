@@ -1,7 +1,7 @@
 export default {
   brand: {
     title: 'Muvazene',
-    browserTitle: 'Muvazene — See Today, Balance What\'s Ahead',
+    browserTitle: 'Muvazene | Personal Budget & Cash Flow Planner',
     version: 'v1.1',
     subtitle: 'See today. Balance what\'s ahead.',
     slogan: 'See today. Balance what\'s ahead.'
@@ -447,5 +447,20 @@ export default {
     },
     reset: 'New Scenario',
     close: 'Done'
+  },
+  seo: {
+    metaDescription: 'Track income and expenses, manage planned cash flows, see future balance and calculate the impact of spending on your budget with Muvazene.',
+    h1: 'See today. Balance what\'s ahead.',
+    supportingCopy: 'Muvazene is not just an expense recorder. Going beyond simple tracking, it provides cash flow planning, safe daily spending limits until your next income, and What-If scenario simulations to forecast how financial choices impact your month-end balance.',
+    features: {
+      trackingTitle: 'Income & Expense Tracking',
+      trackingDesc: 'Log daily transactions with categories and monitor your remaining budget in real time.',
+      cashflowTitle: 'Planned Cash Flows',
+      cashflowDesc: 'Set up recurring and upcoming cash flows like rent, bills, or salary to visualize your financial horizon.',
+      forecastTitle: 'Month-End Spending Forecast',
+      forecastDesc: 'Project your expected end-of-month balance based on current spending pace and prevent budget deficits.',
+      whatifTitle: 'What-If / Spending Scenarios',
+      whatifDesc: 'Run simulations before making financial decisions to immediately see the impact on your safe daily spending.'
+    }
   }
 };

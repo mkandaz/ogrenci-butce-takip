@@ -137,6 +137,10 @@ export class UIManager {
       this.initTheme();
       this.bindEvents();
 
+      this.currentUser = (this.authService && typeof this.authService.getUser === 'function')
+        ? this.authService.getUser()
+        : null;
+
       this.authService.onAuthStateChange((user) => {
         this.renderAuthBadge(user);
         if (user) {
@@ -155,12 +159,16 @@ export class UIManager {
 
       onLanguageChange(() => {
         this.render();
+        this.renderAuthBadge(this.getCurrentUser());
       });
 
       this.render();
-      this.renderAuthBadge(this.authService.getUser());
+      this.renderAuthBadge(this.getCurrentUser());
       this.renderSyncStatus(this.syncService.getStatus());
     } else {
+      this.currentUser = (this.authService && typeof this.authService.getUser === 'function')
+        ? this.authService.getUser()
+        : null;
       this.modalManager = {
         openOnboardingModal: () => {},
         closeOnboardingModal: () => {},
@@ -177,16 +185,12 @@ export class UIManager {
   }
 
   async initBootstrap() {
-    // 1. Eğer yerel veride kullanıcı zaten onboarded ise, onboarding gösterme
-    if (this.store.state.onboarded) {
-      return;
-    }
-
-    // 2. Supabase yapılandırılmışsa, session ve auth durumunu bekle
+    // 1. Supabase yapılandırılmışsa, session ve auth durumunu bekle
     if (this.authService && this.authService.isConfigured()) {
       try {
         const user = await this.authService.waitForAuth();
         if (user) {
+          this.currentUser = user;
           this.renderAuthBadge(user);
           this.renderSyncStatus('syncing', 'Bulut verileri eşitleniyor...');
           await this.syncService.sync(user);
@@ -199,7 +203,7 @@ export class UIManager {
       }
     }
 
-    // 3. Karar anı:
+    // 2. Karar anı:
     // Eğer cloud bootstrap veya yerel veriden onboarded true geldiyse onboarding açılmaz!
     if (this.store.state.onboarded) {
       if (typeof this.modalManager?.closeOnboardingModal === 'function') {
@@ -213,6 +217,7 @@ export class UIManager {
     }
 
     this.render();
+    this.renderAuthBadge(this.getCurrentUser());
   }
 
   cacheElements() {
@@ -1225,6 +1230,10 @@ export class UIManager {
       if (isConfirmModalOpen && el.closest('#confirm-modal')) {
         return;
       }
+      // DİKKAT: footer-privacy-text ve auth durum etiketleri dinamiktir; statik döngü ezmemeli!
+      if (el.id === 'footer-privacy-text' || el.id === 'header-auth-label' || el.id === 'header-auth-sub') {
+        return;
+      }
       const key = el.getAttribute('data-i18n');
       if (key) {
         el.textContent = t(key);
@@ -1243,14 +1252,34 @@ export class UIManager {
       }
     });
 
+    this.updateFooterPrivacyText();
+  }
+
+  getCurrentUser() {
+    return this.currentUser || (this.authService && typeof this.authService.getUser === 'function' ? this.authService.getUser() : null);
+  }
+
+  isCloudSyncActive() {
+    const user = this.getCurrentUser();
+    if (user) return true;
+    if (this.authService && typeof this.authService.isLoggedIn === 'function' && this.authService.isLoggedIn()) return true;
+    if (this.syncService && typeof this.syncService.getStatus === 'function') {
+      const status = this.syncService.getStatus();
+      if (status === 'synced' || status === 'syncing') return true;
+    }
+    return false;
+  }
+
+  updateFooterPrivacyText() {
     const footerPrivacyEl = (typeof document !== 'undefined' && typeof document.getElementById === 'function')
       ? document.getElementById('footer-privacy-text')
       : null;
-    if (footerPrivacyEl) {
-      const key = this.currentUser ? 'footer.privacyCloud' : 'footer.privacyLocal';
-      footerPrivacyEl.textContent = t(key);
-      footerPrivacyEl.setAttribute('data-i18n', key);
-    }
+    if (!footerPrivacyEl) return;
+
+    const isCloud = this.isCloudSyncActive();
+    const key = isCloud ? 'footer.privacyCloud' : 'footer.privacyLocal';
+    footerPrivacyEl.textContent = t(key);
+    footerPrivacyEl.setAttribute('data-i18n', key);
   }
 
   exportData() {
@@ -1275,10 +1304,7 @@ export class UIManager {
 
   renderAuthBadge(user) {
     if (typeof document === 'undefined') return;
-    this.currentUser = user || null;
-    const footerPrivacyEl = (typeof document !== 'undefined' && typeof document.getElementById === 'function')
-      ? document.getElementById('footer-privacy-text')
-      : null;
+    this.currentUser = user || (this.authService && typeof this.authService.getUser === 'function' ? this.authService.getUser() : null);
     const headerAuthLabel = (typeof document !== 'undefined' && typeof document.getElementById === 'function')
       ? document.getElementById('header-auth-label')
       : null;
@@ -1286,29 +1312,28 @@ export class UIManager {
       ? document.getElementById('header-auth-sub')
       : null;
 
-    if (user) {
+    if (this.currentUser) {
+      const activeUser = this.currentUser;
       this.btnOpenAuth?.classList.add('hidden');
       this.userAuthBadge?.classList.remove('hidden');
       if (this.userEmailText) {
-        this.userEmailText.textContent = user.email || 'Kullanıcı';
-        this.userEmailText.title = user.email || '';
+        this.userEmailText.textContent = activeUser.email || 'Kullanıcı';
+        this.userEmailText.title = activeUser.email || '';
       }
       if (headerAuthLabel) {
-        headerAuthLabel.textContent = user.email || 'Kullanıcı';
+        headerAuthLabel.textContent = activeUser.email || 'Kullanıcı';
+        headerAuthLabel.removeAttribute?.('data-i18n');
       }
       if (headerAuthSub) {
         headerAuthSub.textContent = t('auth.statusSynced');
+        headerAuthSub.setAttribute('data-i18n', 'auth.statusSynced');
       }
-      const avatarUrl = user.user_metadata?.avatar_url || user.user_metadata?.picture;
+      const avatarUrl = activeUser.user_metadata?.avatar_url || activeUser.user_metadata?.picture;
       if (avatarUrl && this.userAvatarImg) {
         this.userAvatarImg.src = avatarUrl;
         this.userAvatarImg.classList.remove('hidden');
       } else if (this.userAvatarImg) {
         this.userAvatarImg.classList.add('hidden');
-      }
-      if (footerPrivacyEl) {
-        footerPrivacyEl.textContent = t('footer.privacyCloud');
-        footerPrivacyEl.setAttribute('data-i18n', 'footer.privacyCloud');
       }
     } else {
       this.btnOpenAuth?.classList.remove('hidden');
@@ -1316,14 +1341,15 @@ export class UIManager {
       if (this.userAvatarImg) this.userAvatarImg.classList.add('hidden');
       if (headerAuthLabel) {
         headerAuthLabel.textContent = t('auth.accountGuestPrimary');
+        headerAuthLabel.setAttribute('data-i18n', 'auth.accountGuestPrimary');
       }
       if (headerAuthSub) {
         headerAuthSub.textContent = t('auth.accountGuestSecondary');
+        headerAuthSub.setAttribute('data-i18n', 'auth.accountGuestSecondary');
       }
-      if (footerPrivacyEl) {
-        footerPrivacyEl.textContent = t('footer.privacyLocal');
-        footerPrivacyEl.setAttribute('data-i18n', 'footer.privacyLocal');
-      }
+    }
+    if (typeof this.updateFooterPrivacyText === 'function') {
+      this.updateFooterPrivacyText();
     }
     this.refreshIcons();
   }
@@ -1331,6 +1357,8 @@ export class UIManager {
   renderSyncStatus(status, message = null) {
     if (typeof document === 'undefined') return;
     if (!this.iconSyncCloud) return;
+
+    const user = (typeof this.getCurrentUser === 'function') ? this.getCurrentUser() : this.currentUser;
 
     if (status === 'syncing') {
       this.iconSyncCloud.className = 'w-4 h-4 text-amber-500 animate-spin';
@@ -1341,6 +1369,12 @@ export class UIManager {
     } else if (status === 'synced') {
       this.iconSyncCloud.className = 'w-4 h-4 text-emerald-500';
       if (this.syncStatusText) this.syncStatusText.textContent = t('auth.statusSynced');
+      const headerAuthSub = (typeof document !== 'undefined' && typeof document.getElementById === 'function')
+        ? document.getElementById('header-auth-sub')
+        : null;
+      if (headerAuthSub && user) {
+        headerAuthSub.textContent = t('auth.statusSynced');
+      }
     } else if (status === 'offline') {
       this.iconSyncCloud.className = 'w-4 h-4 text-slate-400';
       if (this.syncStatusText) this.syncStatusText.textContent = t('auth.statusOffline');
@@ -1350,6 +1384,9 @@ export class UIManager {
     } else {
       this.iconSyncCloud.className = 'w-4 h-4 text-slate-400';
       if (this.syncStatusText) this.syncStatusText.textContent = t('auth.statusOffline');
+    }
+    if (typeof this.updateFooterPrivacyText === 'function') {
+      this.updateFooterPrivacyText();
     }
     this.refreshIcons();
   }

@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Muvazene — Bütçeni Gör, Sonrasını Dengele</title>
-  <meta name="description" content="Muvazene — Bugünü gör, sonrasını dengele. Günlük güvenli harcama limitli, deterministik ve çevrimdışı bütçe ve karar destek uygulaması." />
+  <title>Muvazene | Kişisel Bütçe Takip ve Nakit Akışı Planlama</title>
+  <meta name="description" content="Gelir ve giderlerini takip et, planlı ödemelerini yönet, nakit akışını gör ve harcamalarının gelecekteki bütçene etkisini Muvazene ile hesapla." />
   <meta name="theme-color" content="#356B57" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
@@ -14,15 +14,28 @@
   <link rel="canonical" href="https://www.muvazene.app" />
 
   <!-- OpenGraph Metadata -->
-  <meta property="og:title" content="Muvazene — Bütçeni Gör, Sonrasını Dengele" />
-  <meta property="og:description" content="Muvazene — Bugünü gör, sonrasını dengele. Kişisel bütçe, nakit akışı ve senaryo simülasyonu." />
+  <meta property="og:title" content="Muvazene | Kişisel Bütçe Takip ve Nakit Akışı Planlama" />
+  <meta property="og:description" content="Gelir ve giderlerini takip et, planlı ödemelerini yönet, nakit akışını gör ve harcamalarının gelecekteki bütçene etkisini Muvazene ile hesapla." />
   <meta property="og:url" content="https://www.muvazene.app" />
   <meta property="og:type" content="website" />
 
   <!-- Twitter Metadata -->
   <meta name="twitter:card" content="summary" />
-  <meta name="twitter:title" content="Muvazene — Bütçeni Gör, Sonrasını Dengele" />
-  <meta name="twitter:description" content="Bugünü gör. Sonrasını dengele. Kişisel bütçe ve karar destek sistemi." />
+  <meta name="twitter:title" content="Muvazene | Kişisel Bütçe Takip ve Nakit Akışı Planlama" />
+  <meta name="twitter:description" content="Gelir ve giderlerini takip et, planlı ödemelerini yönet, nakit akışını gör ve harcamalarının gelecekteki bütçene etkisini Muvazene ile hesapla." />
+
+  <!-- Structured Data (JSON-LD) -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "Muvazene",
+    "url": "https://www.muvazene.app",
+    "applicationCategory": "FinanceApplication",
+    "operatingSystem": "Web",
+    "description": "Gelir ve giderlerini takip et, planlı ödemelerini yönet, nakit akışını gör ve harcamalarının gelecekteki bütçene etkisini Muvazene ile hesapla."
+  }
+  </script>
 
   <!-- Render-Blocking CSS (FOUC Önleme) -->
   <link rel="stylesheet" href="/src/styles/main.css" />
@@ -68,7 +81,7 @@
       <!-- Brand Wordmark & Slogan (Clean typographic layout; neutral slot for future final logo) -->
       <div class="flex items-center shrink-0">
         <div class="min-w-0 flex flex-col justify-center">
-          <h1 class="text-lg sm:text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white leading-none" data-i18n="brand.title">Muvazene</h1>
+          <span class="text-lg sm:text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white leading-none" data-i18n="brand.title">Muvazene</span>
           <p class="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 hidden sm:block mt-1 font-medium tracking-tight" data-i18n="brand.subtitle">Bugünü gör. Sonrasını dengele.</p>
         </div>
       </div>
@@ -623,6 +636,62 @@
         </div>
       </div>
 
+    </section>
+
+    <!-- ================= PUBLIC OVERVIEW / SEARCH INTENT SECTION ================= -->
+    <section id="app-overview" class="mt-8 pt-8 border-t border-[#DDDCD5] dark:border-[#27332B] text-slate-700 dark:text-slate-300" aria-label="Muvazene Özellikleri ve Bütçe Planlama">
+      <div class="max-w-4xl mx-auto text-center space-y-3">
+        <h1 class="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white" data-i18n="seo.h1">Bütçeni gör. Sonrasını dengele.</h1>
+        <p class="text-xs sm:text-sm text-slate-600 dark:text-slate-400 leading-relaxed max-w-2xl mx-auto" data-i18n="seo.supportingCopy">
+          Muvazene sadece geçmiş harcamaları listeleyen bir bütçe defteri değildir. Gelir ve gider takibinin ötesine geçerek planlı nakit akışlarını, bir sonraki gelire kadar olan güvenli harcama hızını ve What-If senaryolarıyla harcama kararlarının ay sonu bakiyesine etkisini analiz eden akıllı finansal karar destek sistemidir.
+        </p>
+      </div>
+
+      <div class="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4 max-w-6xl mx-auto text-left">
+        <!-- Feature 1: Income & Expense Tracking -->
+        <div class="bg-white dark:bg-[#171D19] p-4 rounded-xl border border-[#DDDCD5] dark:border-[#27332B] shadow-xs">
+          <div class="w-8 h-8 rounded-lg bg-[#EAF2ED] dark:bg-[#1E2E25] flex items-center justify-center text-[#356B57] dark:text-[#529E82] mb-2.5">
+            <i data-lucide="receipt" class="w-4 h-4"></i>
+          </div>
+          <h2 class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white" data-i18n="seo.features.trackingTitle">Gelir ve Gider Takibi</h2>
+          <p class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed" data-i18n="seo.features.trackingDesc">
+            Günlük harcamalarınızı ve gelirlerinizi kategorize ederek kaydedin, kalan bütçenizi anlık takip edin.
+          </p>
+        </div>
+
+        <!-- Feature 2: Planned Cashflows -->
+        <div class="bg-white dark:bg-[#171D19] p-4 rounded-xl border border-[#DDDCD5] dark:border-[#27332B] shadow-xs">
+          <div class="w-8 h-8 rounded-lg bg-[#EAF2ED] dark:bg-[#1E2E25] flex items-center justify-center text-[#356B57] dark:text-[#529E82] mb-2.5">
+            <i data-lucide="calendar" class="w-4 h-4"></i>
+          </div>
+          <h2 class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white" data-i18n="seo.features.cashflowTitle">Planlı Nakit Akışları</h2>
+          <p class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed" data-i18n="seo.features.cashflowDesc">
+            Kira, fatura, burs veya maaş gibi beklenen nakit akışlarını tanımlayın, ödeme takvimini önceden görün.
+          </p>
+        </div>
+
+        <!-- Feature 3: Month-End Forecast -->
+        <div class="bg-white dark:bg-[#171D19] p-4 rounded-xl border border-[#DDDCD5] dark:border-[#27332B] shadow-xs">
+          <div class="w-8 h-8 rounded-lg bg-[#EAF2ED] dark:bg-[#1E2E25] flex items-center justify-center text-[#356B57] dark:text-[#529E82] mb-2.5">
+            <i data-lucide="trending-up" class="w-4 h-4"></i>
+          </div>
+          <h2 class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white" data-i18n="seo.features.forecastTitle">Ay sonu harcama tahmini</h2>
+          <p class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed" data-i18n="seo.features.forecastDesc">
+            Mevcut harcama hızınıza göre ay sonu olası bakiyenizi öngörün ve bütçenizi aşmadan önlem alın.
+          </p>
+        </div>
+
+        <!-- Feature 4: What-If Scenarios -->
+        <div class="bg-white dark:bg-[#171D19] p-4 rounded-xl border border-[#DDDCD5] dark:border-[#27332B] shadow-xs">
+          <div class="w-8 h-8 rounded-lg bg-[#EAF2ED] dark:bg-[#1E2E25] flex items-center justify-center text-[#356B57] dark:text-[#529E82] mb-2.5">
+            <i data-lucide="sparkles" class="w-4 h-4"></i>
+          </div>
+          <h2 class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white" data-i18n="seo.features.whatifTitle">What-If / Harcama Senaryoları</h2>
+          <p class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed" data-i18n="seo.features.whatifDesc">
+            Büyük bir harcama yapmadan önce simülasyon çalıştırın; güvenli limitinizin ve nakit akışınızın nasıl etkilendiğini anında görün.
+          </p>
+        </div>
+      </div>
     </section>
 
   </main>

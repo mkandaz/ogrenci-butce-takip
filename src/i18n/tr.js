@@ -1,7 +1,7 @@
 export default {
   brand: {
     title: 'Muvazene',
-    browserTitle: 'Muvazene — Bütçeni Gör, Sonrasını Dengele',
+    browserTitle: 'Muvazene | Kişisel Bütçe Takip ve Nakit Akışı Planlama',
     version: 'v1.1',
     subtitle: 'Bugünü gör. Sonrasını dengele.',
     slogan: 'Bugünü gör. Sonrasını dengele.'
@@ -447,5 +447,20 @@ export default {
     },
     reset: 'Yeni Senaryo',
     close: 'Tamam'
+  },
+  seo: {
+    metaDescription: 'Gelir ve giderlerini takip et, planlı ödemelerini yönet, nakit akışını gör ve harcamalarının gelecekteki bütçene etkisini Muvazene ile hesapla.',
+    h1: 'Bütçeni gör. Sonrasını dengele.',
+    supportingCopy: 'Muvazene sadece geçmiş harcamaları listeleyen bir bütçe defteri değildir. Gelir ve gider takibinin ötesine geçerek planlı nakit akışlarını, bir sonraki gelire kadar olan güvenli harcama hızını ve What-If senaryolarıyla harcama kararlarının ay sonu bakiyesine etkisini analiz eden akıllı finansal karar destek sistemidir.',
+    features: {
+      trackingTitle: 'Gelir ve Gider Takibi',
+      trackingDesc: 'Günlük harcamalarınızı ve gelirlerinizi kategorize ederek kaydedin, kalan bütçenizi anlık takip edin.',
+      cashflowTitle: 'Planlı Nakit Akışları',
+      cashflowDesc: 'Kira, fatura, burs veya maaş gibi beklenen nakit akışlarını tanımlayın, ödeme takvimini önceden görün.',
+      forecastTitle: 'Ay sonu harcama tahmini',
+      forecastDesc: 'Mevcut harcama hızınıza göre ay sonu olası bakiyenizi öngörün ve bütçenizi aşmadan önlem alın.',
+      whatifTitle: 'What-If / Harcama Senaryoları',
+      whatifDesc: 'Büyük bir harcama yapmadan önce simülasyon çalıştırın; güvenli limitinizin ve nakit akışınızın nasıl etkilendiğini anında görün.'
+    }
   }
 };

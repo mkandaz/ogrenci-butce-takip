@@ -10341,7 +10341,7 @@ console.log('\n--- 30. FAZ 5.7 — MUVAZENE BRAND MIGRATION & VISUAL FREEZE (TC-
   const mainCss = fs.readFileSync(path.join(process.cwd(), 'src/styles/main.css'), 'utf-8');
 
   // 1. Brand Migration in Head & Metadata
-  assert(indexHtml.includes('<title>Muvazene — Bütçeni Gör, Sonrasını Dengele</title>'), 'TC-391-1 Browser title matches Muvazene with official slogan');
+  assert(indexHtml.includes('<title>Muvazene | Kişisel Bütçe Takip ve Nakit Akışı Planlama</title>'), 'TC-391-1 Browser title matches Muvazene SEO title');
   assert(indexHtml.includes('https://www.muvazene.app'), 'TC-391-1 Canonical URL points to muvazene.app');
   assert(indexHtml.includes('content="Muvazene"'), 'TC-391-1 OpenGraph / Twitter app title references Muvazene');
   assert(indexHtml.includes('apple-mobile-web-app-title" content="Muvazene"'), 'TC-391-1 Apple mobile web app title is Muvazene');
@@ -10485,7 +10485,7 @@ console.log('\n--- 31. FAZ 5.7.1 — MONTH ROLLOVER & VISUAL QA PATCH (TC-392) -
   const mainIdx = indexHtml.indexOf('<main');
   const headerContent = indexHtml.slice(headerIdx, mainIdx);
   assert(!headerContent.includes('graduation-cap'), 'TC-392-4 graduation-cap icon removed from header');
-  assert(headerContent.includes('data-i18n="brand.title">Muvazene</h1>'), 'TC-392-4 Muvazene wordmark present in header');
+  assert(headerContent.includes('data-i18n="brand.title">Muvazene</span>'), 'TC-392-4 Muvazene wordmark present in header');
   assert(headerContent.includes('data-i18n="brand.subtitle">Bugünü gör. Sonrasını dengele.</p>'), 'TC-392-4 Muvazene slogan present in header');
 
   // 5. Polished Button System Invariants (Add Tx, Run Scenario, Manage Cash Flows)
@@ -10493,6 +10493,221 @@ console.log('\n--- 31. FAZ 5.7.1 — MONTH ROLLOVER & VISUAL QA PATCH (TC-392) -
   assert(indexHtml.includes('id="btn-open-whatif"') && indexHtml.includes('h-9 px-3.5 rounded-lg bg-[#356B57]'), 'TC-392-5 btn-open-whatif has h-9, rounded-lg and primary styling');
   assert(indexHtml.includes('id="btn-manage-cashflows"') && indexHtml.includes('h-9 px-3.5 rounded-lg') && indexHtml.includes('border-[#DDDCD5] dark:border-[#27332B]'), 'TC-392-5 btn-manage-cashflows has h-9, rounded-lg and secondary border styling');
   assert(indexHtml.includes('id="btn-empty-add-tx"') && indexHtml.includes('h-10 px-4 rounded-lg bg-[#356B57]'), 'TC-392-5 btn-empty-add-tx has h-10, rounded-lg and primary sage styling');
+}
+
+// TC-393: FOOTER PRIVACY & AUTH-STATE LIFECYCLE REGRESSION
+console.log('\n--- 32. FAZ 5.7.2 — FOOTER PRIVACY & AUTH-STATE LIFECYCLE (TC-393) ---');
+{
+  const originalDoc = globalThis.document;
+
+  const createMockEl = (id, overrides = {}) => {
+    const el = {
+      id,
+      textContent: '',
+      innerHTML: '',
+      value: '',
+      title: '',
+      attrs: {},
+      style: {},
+      dataset: {},
+      children: [],
+      classList: {
+        classes: new Set(),
+        add(c) { this.classes.add(c); },
+        remove(c) { this.classes.delete(c); },
+        contains(c) { return this.classes.has(c); }
+      },
+      setAttribute(k, v) { this.attrs[k] = v; },
+      getAttribute(k) { return this.attrs[k]; },
+      removeAttribute(k) { delete this.attrs[k]; },
+      appendChild(c) { this.children.push(c); },
+      removeChild(c) { this.children = this.children.filter(x => x !== c); },
+      querySelector: () => null,
+      querySelectorAll: () => [],
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      ...overrides
+    };
+    if (overrides.classes) {
+      overrides.classes.forEach(c => el.classList.classes.add(c));
+    }
+    return el;
+  };
+
+  const mockElements = {
+    'footer-privacy-text': createMockEl('footer-privacy-text', { textContent: tr.footer.privacyLocal, attrs: { 'data-i18n': 'footer.privacyLocal' } }),
+    'header-auth-label': createMockEl('header-auth-label', { textContent: tr.auth.accountGuestPrimary, attrs: { 'data-i18n': 'auth.accountGuestPrimary' } }),
+    'header-auth-sub': createMockEl('header-auth-sub', { textContent: tr.auth.accountGuestSecondary, attrs: { 'data-i18n': 'auth.accountGuestSecondary' } }),
+    'btn-open-auth': createMockEl('btn-open-auth'),
+    'user-auth-badge': createMockEl('user-auth-badge', { classes: ['hidden'] }),
+    'user-email-text': createMockEl('user-email-text'),
+    'user-avatar-img': createMockEl('user-avatar-img', { classes: ['hidden'] }),
+    'icon-sync-cloud': createMockEl('icon-sync-cloud'),
+    'sync-status-text': createMockEl('sync-status-text')
+  };
+
+  globalThis.document = {
+    title: '',
+    createElement: (tag) => createMockEl(tag),
+    getElementById: (id) => {
+      if (!mockElements[id]) {
+        mockElements[id] = createMockEl(id);
+      }
+      return mockElements[id];
+    },
+    querySelectorAll: (selector) => {
+      if (selector === '[data-i18n]') {
+        return Object.values(mockElements).filter(el => el.attrs && el.attrs['data-i18n']);
+      }
+      return [];
+    },
+    documentElement: {
+      classList: {
+        toggle: () => false,
+        add: () => {},
+        remove: () => {},
+        contains: () => false
+      }
+    },
+    addEventListener: () => {},
+    removeEventListener: () => {}
+  };
+
+  // 1. Fresh Guest State
+  const storeGuest = new BudgetStore();
+  let authListeners = [];
+  const mockAuthService = {
+    user: null,
+    isAuthenticated: function() { return Boolean(this.user); },
+    isLoggedIn: function() { return Boolean(this.user); },
+    getUser: function() { return this.user; },
+    isConfigured: () => true,
+    waitForAuth: async function() { return this.user; },
+    onAuthStateChange: function(cb) {
+      authListeners.push(cb);
+      if (this.user) cb(this.user);
+      return () => { authListeners = authListeners.filter(l => l !== cb); };
+    }
+  };
+  const mockSyncService = {
+    status: 'idle',
+    statusListeners: [],
+    getStatus: function() { return this.status; },
+    setStatus: function(s) {
+      this.status = s;
+      this.statusListeners.forEach(cb => cb(s));
+    },
+    onStatusChange: function(cb) { this.statusListeners.push(cb); },
+    sync: async () => {}
+  };
+
+  setLanguage('tr');
+  const ui = new UIManager(storeGuest, {
+    authService: mockAuthService,
+    syncService: mockSyncService,
+    modalManager: { closeAuthModal: () => {}, closeOnboardingModal: () => {} }
+  });
+
+  assert(mockElements['footer-privacy-text'].textContent === tr.footer.privacyLocal, 'TC-393-1 Fresh guest footer displays local privacy copy');
+  assert(mockElements['header-auth-label'].textContent === tr.auth.accountGuestPrimary, 'TC-393-1 Fresh guest header displays guest label');
+
+  // 2. Guest -> Google Login
+  const fakeUser = { email: 'ogrenci@muvazene.app', user_metadata: {} };
+  mockAuthService.user = fakeUser;
+  authListeners.forEach(cb => cb(fakeUser));
+
+  assert(mockElements['footer-privacy-text'].textContent === tr.footer.privacyCloud, 'TC-393-2 Logged in footer displays cloud privacy copy');
+  assert(mockElements['header-auth-label'].textContent === 'ogrenci@muvazene.app', 'TC-393-2 Logged in header displays user email');
+  assert(mockElements['user-auth-badge'].classList.contains('hidden') === false, 'TC-393-2 Logged in user-auth-badge is visible');
+
+  // 3. Authenticated Page Refresh (Initial user already present & onboarded = true)
+  const storeRefresh = new BudgetStore();
+  storeRefresh.state.onboarded = true;
+  const uiRefresh = new UIManager(storeRefresh, {
+    authService: mockAuthService,
+    syncService: mockSyncService,
+    modalManager: { closeAuthModal: () => {}, closeOnboardingModal: () => {} }
+  });
+
+  assert(mockElements['footer-privacy-text'].textContent === tr.footer.privacyCloud, 'TC-393-3 Authenticated page refresh immediately displays cloud privacy copy');
+  assert(mockElements['header-auth-label'].textContent === 'ogrenci@muvazene.app', 'TC-393-3 Authenticated page refresh displays user email');
+
+  // 4. TR <-> EN switch while authenticated
+  setLanguage('en');
+  uiRefresh.render();
+  uiRefresh.renderAuthBadge(uiRefresh.getCurrentUser());
+  assert(mockElements['footer-privacy-text'].textContent === en.footer.privacyCloud, 'TC-393-4 English switch preserves cloud copy in English');
+
+  setLanguage('tr');
+  uiRefresh.render();
+  uiRefresh.renderAuthBadge(uiRefresh.getCurrentUser());
+  assert(mockElements['footer-privacy-text'].textContent === tr.footer.privacyCloud, 'TC-393-4 Turkish switch returns cloud copy in Turkish');
+
+  // 5. Logout
+  mockAuthService.user = null;
+  authListeners.forEach(cb => cb(null));
+  assert(mockElements['footer-privacy-text'].textContent === tr.footer.privacyLocal, 'TC-393-5 Logout returns footer to local privacy copy');
+  assert(mockElements['header-auth-label'].textContent === tr.auth.accountGuestPrimary, 'TC-393-5 Logout restores guest header label');
+
+  // 6. Invariant: sync status 'synced' guarantees cloud copy
+  mockAuthService.user = fakeUser;
+  uiRefresh.renderAuthBadge(fakeUser);
+  mockSyncService.setStatus('synced');
+  assert(mockElements['footer-privacy-text'].textContent === tr.footer.privacyCloud, 'TC-393-6 Synced status ensures footer never shows local-only copy');
+
+  globalThis.document = originalDoc;
+}
+
+// TC-394: SEO & TECHNICAL WEB LAUNCH SPECIFICATIONS
+console.log('\n--- 33. FAZ 5.7.2 — SEO & WEB LAUNCH POLISH (TC-394) ---');
+{
+  const indexHtml = fs.readFileSync(path.join(process.cwd(), 'index.html'), 'utf-8');
+  const robotsTxtPath = path.join(process.cwd(), 'public/robots.txt');
+  const sitemapXmlPath = path.join(process.cwd(), 'public/sitemap.xml');
+
+  // 1. Page Title & Meta Description
+  assert(indexHtml.includes('<title>Muvazene | Kişisel Bütçe Takip ve Nakit Akışı Planlama</title>'), 'TC-394-1 Page title matches exact SEO title');
+  const expectedDesc = 'Gelir ve giderlerini takip et, planlı ödemelerini yönet, nakit akışını gör ve harcamalarının gelecekteki bütçene etkisini Muvazene ile hesapla.';
+  assert(indexHtml.includes(`content="${expectedDesc}"`), 'TC-394-1 Meta description matches natural Turkish copy');
+
+  // 2. Canonical Domain & Social Tags
+  assert(indexHtml.includes('<link rel="canonical" href="https://www.muvazene.app" />'), 'TC-394-2 Canonical points to https://www.muvazene.app');
+  assert(indexHtml.includes('<meta property="og:title" content="Muvazene | Kişisel Bütçe Takip ve Nakit Akışı Planlama" />'), 'TC-394-2 OG title matches SEO title');
+  assert(indexHtml.includes('<meta name="twitter:title" content="Muvazene | Kişisel Bütçe Takip ve Nakit Akışı Planlama" />'), 'TC-394-2 Twitter title matches SEO title');
+  assert(indexHtml.includes('<meta property="og:url" content="https://www.muvazene.app" />'), 'TC-394-2 OG URL is canonical production domain');
+
+  // 3. Robots.txt
+  assert(fs.existsSync(robotsTxtPath), 'TC-394-3 public/robots.txt exists');
+  const robotsContent = fs.readFileSync(robotsTxtPath, 'utf-8');
+  assert(robotsContent.includes('User-agent: *'), 'TC-394-3 robots.txt allows all user agents');
+  assert(robotsContent.includes('Allow: /'), 'TC-394-3 robots.txt allows root path');
+  assert(robotsContent.includes('Sitemap: https://www.muvazene.app/sitemap.xml'), 'TC-394-3 robots.txt references production sitemap');
+
+  // 4. Sitemap.xml
+  assert(fs.existsSync(sitemapXmlPath), 'TC-394-4 public/sitemap.xml exists');
+  const sitemapContent = fs.readFileSync(sitemapXmlPath, 'utf-8');
+  assert(sitemapContent.includes('<loc>https://www.muvazene.app/</loc>'), 'TC-394-4 sitemap references canonical production URL');
+  assert(sitemapContent.includes('xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"'), 'TC-394-4 sitemap uses standard sitemap schema');
+
+  // 5. JSON-LD Structured Data
+  const jsonLdMatch = indexHtml.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
+  assert(jsonLdMatch && jsonLdMatch[1], 'TC-394-5 JSON-LD script tag present in index.html');
+  const structuredData = JSON.parse(jsonLdMatch[1].trim());
+  assert(structuredData['@type'] === 'WebApplication', 'TC-394-5 Structured data type is WebApplication');
+  assert(structuredData.name === 'Muvazene', 'TC-394-5 Structured data name is Muvazene');
+  assert(structuredData.url === 'https://www.muvazene.app', 'TC-394-5 Structured data URL is canonical');
+  assert(structuredData.applicationCategory === 'FinanceApplication', 'TC-394-5 Structured data category is FinanceApplication');
+  assert(structuredData.operatingSystem === 'Web', 'TC-394-5 Structured data operatingSystem is Web');
+
+  // 6. Semantic Heading Hierarchy & Single Primary H1
+  const h1Matches = indexHtml.match(/<h1[\s>]/g) || [];
+  assert(h1Matches.length === 1, `TC-394-6 Single primary H1 present on page (found: ${h1Matches.length})`);
+  assert(indexHtml.includes('<h1 class="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white" data-i18n="seo.h1">Bütçeni gör. Sonrasını dengele.</h1>'), 'TC-394-6 Primary H1 matches core value proposition');
+  assert(indexHtml.includes('id="app-overview"'), 'TC-394-6 Semantic overview section present');
+  assert(indexHtml.includes('data-i18n="seo.features.trackingTitle"'), 'TC-394-6 Tracking feature card present');
+  assert(indexHtml.includes('data-i18n="seo.features.cashflowTitle"'), 'TC-394-6 Cashflow feature card present');
+  assert(indexHtml.includes('data-i18n="seo.features.forecastTitle"'), 'TC-394-6 Forecast feature card present');
+  assert(indexHtml.includes('data-i18n="seo.features.whatifTitle"'), 'TC-394-6 What-If feature card present');
 }
 
 console.log('\n====================================================');
