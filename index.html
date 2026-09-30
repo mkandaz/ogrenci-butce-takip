@@ -1451,67 +1451,140 @@
         </div>
 
         <!-- Simulation Results Area -->
-        <div id="whatif-results-area" class="space-y-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+        <div id="whatif-results-area" class="space-y-4 pt-3 border-t border-slate-100 dark:border-slate-800">
           
-          <!-- Impact Callout Card -->
-          <div id="whatif-impact-card" class="p-3.5 rounded-xl bg-purple-50/70 dark:bg-purple-950/40 border border-purple-200/80 dark:border-purple-800/80 flex items-center justify-between">
-            <div class="flex items-center space-x-2.5">
-              <div id="whatif-impact-icon-box" class="w-8 h-8 rounded-lg bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 flex items-center justify-center shrink-0">
-                <i id="whatif-impact-icon" data-lucide="trending-down" class="w-4 h-4"></i>
-              </div>
+          <!-- PRIMARY: Bir Sonraki Gelire Kadar (Until Next Income) -->
+          <div id="whatif-decision-section" class="space-y-3">
+            
+            <!-- Section Header & Context Pill -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
               <div>
-                <span class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block" data-i18n="whatif.results.impactTitle">Kararın Olası Etkisi</span>
-                <span id="whatif-impact-text" class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">Simülasyon sonucu hesaplanıyor...</span>
+                <span class="text-xs font-bold text-slate-900 dark:text-white flex items-center space-x-1.5">
+                  <i data-lucide="compass" class="w-3.5 h-3.5 text-purple-600 dark:text-purple-400"></i>
+                  <span data-i18n="whatif.decision.sectionTitle">Bir Sonraki Gelire Kadar</span>
+                </span>
+                <span class="text-[11px] text-slate-500 dark:text-slate-400 block" data-i18n="whatif.decision.sectionSubtitle">Nakit akışı ve planlı ödemelere etkisi</span>
+              </div>
+              <div id="whatif-context-pill" class="text-[11px] font-medium text-slate-600 dark:text-slate-300 bg-purple-50 dark:bg-purple-950/50 border border-purple-200/60 dark:border-purple-800/60 px-2.5 py-1 rounded-lg self-start sm:self-auto flex items-center space-x-1.5">
+                <i data-lucide="calendar-clock" class="w-3 h-3 text-purple-600 dark:text-purple-400 shrink-0"></i>
+                <span id="whatif-next-income-context">Sonraki gelir bekleniyor...</span>
               </div>
             </div>
-            <span id="whatif-impact-badge" class="px-2.5 py-1 rounded-full text-xs font-bold bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 shrink-0">--</span>
+
+            <!-- Primary Decision Impact Callout Card -->
+            <div id="whatif-impact-card" class="p-3.5 rounded-xl bg-purple-50/70 dark:bg-purple-950/40 border border-purple-200/80 dark:border-purple-800/80 flex items-center justify-between gap-2.5">
+              <div class="flex items-center space-x-2.5 min-w-0">
+                <div id="whatif-impact-icon-box" class="w-8 h-8 rounded-lg bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 flex items-center justify-center shrink-0">
+                  <i id="whatif-impact-icon" data-lucide="sparkles" class="w-4 h-4"></i>
+                </div>
+                <div class="min-w-0">
+                  <span class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block" data-i18n="whatif.results.impactTitle">Kararın Olası Etkisi</span>
+                  <p id="whatif-impact-text" class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white leading-snug">Simülasyon hesaplanıyor...</p>
+                </div>
+              </div>
+              <span id="whatif-impact-badge" class="px-2.5 py-1 rounded-full text-xs font-bold bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 shrink-0">--</span>
+            </div>
+
+            <!-- Priority Cashflow Decision Metrics (3 cards grid) -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              
+              <!-- Metric 1: Güvenli Günlük Limit -->
+              <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/70 flex flex-col justify-between">
+                <span class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block" data-i18n="whatif.decision.safeDailySpend">Güvenli Günlük Limit</span>
+                <div class="mt-1 flex items-baseline justify-between gap-1">
+                  <span id="whatif-decision-sim-safe-daily" class="text-sm font-bold text-slate-900 dark:text-white">--</span>
+                  <span id="whatif-decision-delta-safe-daily" class="text-[11px] font-semibold text-slate-500">--</span>
+                </div>
+                <span id="whatif-decision-base-safe-daily-sub" class="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Mevcut: --</span>
+              </div>
+
+              <!-- Metric 2: Nakit Kaplama Durumu -->
+              <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/70 flex flex-col justify-between">
+                <span class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block" data-i18n="whatif.decision.coverageStatus">Nakit Kaplama Durumu</span>
+                <div class="mt-1">
+                  <span id="whatif-decision-status-chip" class="inline-block px-2 py-0.5 rounded-md text-[11px] font-bold bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300">--</span>
+                </div>
+                <span id="whatif-decision-status-transition-sub" class="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Mevcut: --</span>
+              </div>
+
+              <!-- Metric 3: Gelir Öncesi Tahmini Bakiye -->
+              <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/70 flex flex-col justify-between">
+                <span class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block" data-i18n="whatif.decision.preIncomeBalance">Gelir Öncesi Bakiye</span>
+                <div class="mt-1 flex items-baseline justify-between gap-1">
+                  <span id="whatif-decision-sim-pre-balance" class="text-sm font-bold text-slate-900 dark:text-white">--</span>
+                  <span id="whatif-decision-delta-pre-balance" class="text-[11px] font-semibold text-slate-500">--</span>
+                </div>
+                <span id="whatif-decision-base-pre-balance-sub" class="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Mevcut: --</span>
+              </div>
+
+            </div>
+
+            <!-- Daily Adjustment Needed Notice (shown conditionally) -->
+            <div id="whatif-adjustment-callout" class="hidden p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200/70 dark:border-rose-800/60 flex items-center space-x-2 text-xs text-rose-800 dark:text-rose-200 font-medium">
+              <i data-lucide="alert-triangle" class="w-4 h-4 text-rose-500 shrink-0"></i>
+              <span id="whatif-adjustment-text">Bu senaryoda günlük harcamayı azaltmak gerekiyor.</span>
+            </div>
+
+            <!-- Next Income Obligations Context Line -->
+            <div id="whatif-obligations-context-line" class="text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between px-1">
+              <span id="whatif-obligations-context-text">Gelire kadar ayrılan yükümlülükler: --</span>
+            </div>
+
           </div>
 
-          <!-- 3-Column Comparison Table (Current -> Simulated -> Delta) -->
-          <div class="overflow-x-auto rounded-xl border border-slate-200/80 dark:border-slate-700/80">
-            <table class="w-full text-left text-xs">
-              <thead class="bg-slate-50 dark:bg-slate-800/70 text-[11px] font-bold text-slate-500 dark:text-slate-400 border-b border-slate-200/80 dark:border-slate-700/80">
-                <tr>
-                  <th class="py-2.5 px-3">Metrik</th>
-                  <th class="py-2.5 px-2 text-right" data-i18n="whatif.results.current">Mevcut</th>
-                  <th class="py-2.5 px-2 text-right" data-i18n="whatif.results.simulated">Senaryo Sonrası</th>
-                  <th class="py-2.5 px-3 text-right" data-i18n="whatif.results.difference">Fark</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
-                <!-- Row 1: Projected Expense -->
-                <tr>
-                  <td class="py-2 px-3 font-semibold text-slate-700 dark:text-slate-300" data-i18n="whatif.results.projectedExpense">Ay Sonu Gider Tahmini</td>
-                  <td id="whatif-base-expense" class="py-2 px-2 text-right text-slate-600 dark:text-slate-400">--</td>
-                  <td id="whatif-sim-expense" class="py-2 px-2 text-right font-bold text-slate-900 dark:text-white">--</td>
-                  <td id="whatif-delta-expense" class="py-2 px-3 text-right font-bold text-slate-700 dark:text-slate-300">--</td>
-                </tr>
-                <!-- Row 2: Projected Remaining Expense -->
-                <tr>
-                  <td class="py-2 px-3 font-semibold text-slate-700 dark:text-slate-300" data-i18n="whatif.results.projectedRemaining">Kalan Günler Gideri</td>
-                  <td id="whatif-base-remaining" class="py-2 px-2 text-right text-slate-600 dark:text-slate-400">--</td>
-                  <td id="whatif-sim-remaining" class="py-2 px-2 text-right font-bold text-slate-900 dark:text-white">--</td>
-                  <td id="whatif-delta-remaining" class="py-2 px-3 text-right font-bold text-slate-700 dark:text-slate-300">--</td>
-                </tr>
-                <!-- Row 3: Projected Ending Balance -->
-                <tr>
-                  <td class="py-2 px-3 font-semibold text-slate-700 dark:text-slate-300" data-i18n="whatif.results.projectedEndBalance">Öngörülen Ay Sonu Bakiye</td>
-                  <td id="whatif-base-balance" class="py-2 px-2 text-right text-slate-600 dark:text-slate-400">--</td>
-                  <td id="whatif-sim-balance" class="py-2 px-2 text-right font-bold text-slate-900 dark:text-white">--</td>
-                  <td id="whatif-delta-balance" class="py-2 px-3 text-right font-bold text-slate-700 dark:text-slate-300">--</td>
-                </tr>
-                <!-- Row 4: Daily Rate -->
-                <tr>
-                  <td class="py-2 px-3 font-semibold text-slate-700 dark:text-slate-300" data-i18n="whatif.results.dailyRate">Günlük Harcama Hızı</td>
-                  <td id="whatif-base-rate" class="py-2 px-2 text-right text-slate-600 dark:text-slate-400">--</td>
-                  <td id="whatif-sim-rate" class="py-2 px-2 text-right font-bold text-slate-900 dark:text-white">--</td>
-                  <td id="whatif-delta-rate" class="py-2 px-3 text-right font-bold text-slate-700 dark:text-slate-300">--</td>
-                </tr>
-              </tbody>
-            </table>
+          <!-- SECONDARY: Ay Sonu Etkisi (Month-End Impact) -->
+          <div id="whatif-monthend-section" class="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-slate-700 dark:text-slate-300" data-i18n="whatif.monthEnd.sectionTitle">Ay Sonu Etkisi</span>
+              <span class="text-[10px] text-slate-400 dark:text-slate-500" data-i18n="whatif.monthEnd.sectionSubtitle">Davranışsal harcama projeksiyonu</span>
+            </div>
+
+            <!-- 3-Column Comparison Table (Current -> Simulated -> Delta) -->
+            <div class="overflow-x-auto rounded-xl border border-slate-200/80 dark:border-slate-700/80">
+              <table class="w-full text-left text-xs">
+                <thead class="bg-slate-50 dark:bg-slate-800/70 text-[11px] font-bold text-slate-500 dark:text-slate-400 border-b border-slate-200/80 dark:border-slate-700/80">
+                  <tr>
+                    <th class="py-2 px-3">Metrik</th>
+                    <th class="py-2 px-2 text-right" data-i18n="whatif.results.current">Mevcut</th>
+                    <th class="py-2 px-2 text-right" data-i18n="whatif.results.simulated">Senaryo Sonrası</th>
+                    <th class="py-2 px-3 text-right" data-i18n="whatif.results.difference">Fark</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+                  <!-- Row 1: Projected Expense -->
+                  <tr>
+                    <td class="py-2 px-3 font-semibold text-slate-700 dark:text-slate-300" data-i18n="whatif.results.projectedExpense">Ay Sonu Gider Tahmini</td>
+                    <td id="whatif-base-expense" class="py-2 px-2 text-right text-slate-600 dark:text-slate-400">--</td>
+                    <td id="whatif-sim-expense" class="py-2 px-2 text-right font-bold text-slate-900 dark:text-white">--</td>
+                    <td id="whatif-delta-expense" class="py-2 px-3 text-right font-bold text-slate-700 dark:text-slate-300">--</td>
+                  </tr>
+                  <!-- Row 2: Projected Remaining Expense -->
+                  <tr>
+                    <td class="py-2 px-3 font-semibold text-slate-700 dark:text-slate-300" data-i18n="whatif.results.projectedRemaining">Kalan Günler Gideri</td>
+                    <td id="whatif-base-remaining" class="py-2 px-2 text-right text-slate-600 dark:text-slate-400">--</td>
+                    <td id="whatif-sim-remaining" class="py-2 px-2 text-right font-bold text-slate-900 dark:text-white">--</td>
+                    <td id="whatif-delta-remaining" class="py-2 px-3 text-right font-bold text-slate-700 dark:text-slate-300">--</td>
+                  </tr>
+                  <!-- Row 3: Projected Ending Balance -->
+                  <tr>
+                    <td class="py-2 px-3 font-semibold text-slate-700 dark:text-slate-300" data-i18n="whatif.results.projectedEndBalance">Öngörülen Ay Sonu Bakiye</td>
+                    <td id="whatif-base-balance" class="py-2 px-2 text-right text-slate-600 dark:text-slate-400">--</td>
+                    <td id="whatif-sim-balance" class="py-2 px-2 text-right font-bold text-slate-900 dark:text-white">--</td>
+                    <td id="whatif-delta-balance" class="py-2 px-3 text-right font-bold text-slate-700 dark:text-slate-300">--</td>
+                  </tr>
+                  <!-- Row 4: Daily Rate -->
+                  <tr>
+                    <td class="py-2 px-3 font-semibold text-slate-700 dark:text-slate-300" data-i18n="whatif.results.dailyRate">Günlük Harcama Hızı</td>
+                    <td id="whatif-base-rate" class="py-2 px-2 text-right text-slate-600 dark:text-slate-400">--</td>
+                    <td id="whatif-sim-rate" class="py-2 px-2 text-right font-bold text-slate-900 dark:text-white">--</td>
+                    <td id="whatif-delta-rate" class="py-2 px-3 text-right font-bold text-slate-700 dark:text-slate-300">--</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
 
-          <!-- Explainability Collapsible -->
+          <!-- THIRD: Explainability Collapsible -->
           <details id="whatif-explainability" class="rounded-xl border border-slate-200/70 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 text-xs group">
             <summary class="py-2.5 px-3.5 font-bold text-slate-700 dark:text-slate-300 cursor-pointer flex items-center justify-between select-none list-none">
               <span class="flex items-center space-x-1.5">
@@ -1520,7 +1593,7 @@
               </span>
               <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400 group-open:rotate-180 transition-transform"></i>
             </summary>
-            <div id="whatif-assumptions-list" class="px-3.5 pb-3 pt-1 space-y-1.5 text-slate-600 dark:text-slate-400 border-t border-slate-100 dark:border-slate-800/80">
+            <div id="whatif-assumptions-list" class="px-3.5 pb-3 pt-2 space-y-2 text-slate-600 dark:text-slate-400 border-t border-slate-100 dark:border-slate-800/80">
               <!-- Rendered dynamically -->
             </div>
           </details>

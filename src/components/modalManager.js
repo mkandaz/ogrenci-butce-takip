@@ -7,6 +7,8 @@ import { DEFAULT_PRESETS } from '../config/defaultData.js';
 import { authService } from '../services/authService.js';
 import { SCENARIO_TYPES, simulateWhatIf } from '../services/whatIfEngine.js';
 import { calculateSummary } from '../store/calculations.js';
+import { getWhatIfDecisionSupport, DECISION_IMPACT_CODES } from '../services/whatIfDecisionSupportService.js';
+import { COVERAGE_STATUS } from '../services/cashflowPlannerEngine.js';
 
 export class ModalManager {
   constructor(store, uiManager) {
@@ -180,6 +182,22 @@ export class ModalManager {
     this.whatifImpactIcon = document.getElementById('whatif-impact-icon');
     this.whatifImpactText = document.getElementById('whatif-impact-text');
     this.whatifImpactBadge = document.getElementById('whatif-impact-badge');
+
+    // What-If Decision Support Elements (FAZ 5.6 Cashflow-Aware)
+    this.whatifNextIncomeContext = document.getElementById('whatif-next-income-context');
+    this.whatifDecisionSimSafeDaily = document.getElementById('whatif-decision-sim-safe-daily');
+    this.whatifDecisionDeltaSafeDaily = document.getElementById('whatif-decision-delta-safe-daily');
+    this.whatifDecisionBaseSafeDailySub = document.getElementById('whatif-decision-base-safe-daily-sub');
+    this.whatifDecisionStatusChip = document.getElementById('whatif-decision-status-chip');
+    this.whatifDecisionStatusTransitionSub = document.getElementById('whatif-decision-status-transition-sub');
+    this.whatifDecisionSimPreBalance = document.getElementById('whatif-decision-sim-pre-balance');
+    this.whatifDecisionDeltaPreBalance = document.getElementById('whatif-decision-delta-pre-balance');
+    this.whatifDecisionBasePreBalanceSub = document.getElementById('whatif-decision-base-pre-balance-sub');
+    this.whatifAdjustmentCallout = document.getElementById('whatif-adjustment-callout');
+    this.whatifAdjustmentText = document.getElementById('whatif-adjustment-text');
+    this.whatifObligationsContextText = document.getElementById('whatif-obligations-context-text');
+
+    // Month-End Comparison Table Elements
     this.whatifBaseExpense = document.getElementById('whatif-base-expense');
     this.whatifSimExpense = document.getElementById('whatif-sim-expense');
     this.whatifDeltaExpense = document.getElementById('whatif-delta-expense');
@@ -1366,6 +1384,7 @@ export class ModalManager {
 
   runWhatIfSimulation() {
     const transactions = this.store.getTransactions ? this.store.getTransactions() : [];
+    const plannedCashflows = this.store.getPlannedCashflows ? this.store.getPlannedCashflows() : [];
     const settings = this.store.getSettings ? this.store.getSettings() : {};
     const currency = settings.currency || 'TRY';
     const lang = settings.language || 'tr';
@@ -1412,175 +1431,332 @@ export class ModalManager {
 
     this.updateWhatIfInterpretations(currency, lang);
 
-    const [curYStr, curMStr] = currentYearMonth.split('-');
-    const currentYear = parseInt(curYStr, 10) || safeNow.getFullYear();
-    const currentMonthNum = parseInt(curMStr, 10) || (safeNow.getMonth() + 1);
-
-    const simResult = simulateWhatIf({
+    const supportResult = getWhatIfDecisionSupport({
+      store: this.store,
       transactions,
-      options: {
-        now: safeNow,
-        referenceDate: safeNow,
-        targetYearMonth: currentYearMonth,
-        year: currentYear,
-        month: currentMonthNum,
-        currentAvailableBalance
-      },
-      scenario: scenario || { type: this.currentWhatIfType || SCENARIO_TYPES.ONE_TIME_EXPENSE, amount: 0 }
+      plannedCashflows,
+      currentAvailableBalance,
+      scenario: scenario || { type: this.currentWhatIfType || SCENARIO_TYPES.ONE_TIME_EXPENSE, amount: 0 },
+      now: safeNow
     });
 
-    this.renderWhatIfResults(simResult, currency, lang, hasValidInput);
+    this.renderWhatIfResults(supportResult, currency, lang, hasValidInput);
   }
 
-  renderWhatIfResults(simResult, currency, lang, hasValidInput) {
-    if (!simResult) return;
+  renderWhatIfResults(result, currency, lang, hasValidInput) {
+    if (!result) return;
 
     const notAvail = t('whatif.results.notAvailable') || '—';
+    const monthEnd = result.monthEnd || result;
+    const untilNext = result.untilNextIncome;
+    const hasNextIncome = Boolean(result.hasNextIncome);
 
-    // 1. Comparison Grid
-    // Projected Expense
-    if (this.whatifBaseExpense) this.whatifBaseExpense.textContent = formatCurrency(simResult.baseline.projectedExpense, currency, lang);
-    if (this.whatifSimExpense) this.whatifSimExpense.textContent = hasValidInput ? formatCurrency(simResult.simulated.projectedExpense, currency, lang) : notAvail;
-    if (this.whatifDeltaExpense) {
-      if (!hasValidInput || simResult.delta.projectedExpense === 0) {
-        this.whatifDeltaExpense.textContent = formatCurrency(0, currency, lang);
-        this.whatifDeltaExpense.className = 'py-2 px-3 text-right font-bold text-slate-700 dark:text-slate-300';
-      } else if (simResult.delta.projectedExpense > 0) {
-        this.whatifDeltaExpense.textContent = `+${formatCurrency(simResult.delta.projectedExpense, currency, lang)}`;
-        this.whatifDeltaExpense.className = 'py-2 px-3 text-right font-bold text-rose-600 dark:text-rose-400';
+    // 1. PRIMARY: Decision Support Section (Until Next Income)
+    // A. Next Income Context Pill
+    if (this.whatifNextIncomeContext) {
+      if (hasNextIncome && result.nextIncome) {
+        const inc = result.nextIncome;
+        if (inc.daysUntil === 0) {
+          this.whatifNextIncomeContext.textContent = t('whatif.decision.nextIncomeContextToday', { name: inc.name }) || `Sonraki gelir: ${inc.name} — Bugün bekleniyor`;
+        } else {
+          this.whatifNextIncomeContext.textContent = t('whatif.decision.nextIncomeContext', {
+            name: inc.name,
+            date: inc.date,
+            days: inc.daysUntil
+          }) || `Sonraki gelir: ${inc.name} — ${inc.date} (${inc.daysUntil} gün sonra)`;
+        }
       } else {
-        this.whatifDeltaExpense.textContent = `-${formatCurrency(Math.abs(simResult.delta.projectedExpense), currency, lang)}`;
-        this.whatifDeltaExpense.className = 'py-2 px-3 text-right font-bold text-emerald-600 dark:text-emerald-400';
+        this.whatifNextIncomeContext.textContent = t('whatif.decision.noNextIncomeContext') || 'Planlı bir sonraki gelir bulunmuyor';
       }
     }
 
-    // Projected Remaining Expense
-    if (this.whatifBaseRemaining) this.whatifBaseRemaining.textContent = formatCurrency(simResult.baseline.projectedRemainingExpense, currency, lang);
-    if (this.whatifSimRemaining) this.whatifSimRemaining.textContent = hasValidInput ? formatCurrency(simResult.simulated.projectedRemainingExpense, currency, lang) : notAvail;
-    if (this.whatifDeltaRemaining) {
-      if (!hasValidInput || simResult.delta.projectedRemainingExpense === 0) {
-        this.whatifDeltaRemaining.textContent = formatCurrency(0, currency, lang);
-        this.whatifDeltaRemaining.className = 'py-2 px-3 text-right font-bold text-slate-700 dark:text-slate-300';
-      } else if (simResult.delta.projectedRemainingExpense > 0) {
-        this.whatifDeltaRemaining.textContent = `+${formatCurrency(simResult.delta.projectedRemainingExpense, currency, lang)}`;
-        this.whatifDeltaRemaining.className = 'py-2 px-3 text-right font-bold text-rose-600 dark:text-rose-400';
-      } else {
-        this.whatifDeltaRemaining.textContent = `-${formatCurrency(Math.abs(simResult.delta.projectedRemainingExpense), currency, lang)}`;
-        this.whatifDeltaRemaining.className = 'py-2 px-3 text-right font-bold text-emerald-600 dark:text-emerald-400';
-      }
-    }
-
-    // Projected Ending Balance
-    const baseBal = simResult.baseline.projectedEndBalance;
-    const simBal = simResult.simulated.projectedEndBalance;
-    const deltaBal = simResult.delta.projectedEndBalance;
-
-    if (this.whatifBaseBalance) {
-      this.whatifBaseBalance.textContent = (baseBal !== null && !isNaN(baseBal))
-        ? formatCurrency(baseBal, currency, lang)
-        : notAvail;
-    }
-    if (this.whatifSimBalance) {
-      this.whatifSimBalance.textContent = (hasValidInput && simBal !== null && !isNaN(simBal))
-        ? formatCurrency(simBal, currency, lang)
-        : notAvail;
-    }
-    if (this.whatifDeltaBalance) {
-      if (!hasValidInput || deltaBal === null || isNaN(deltaBal)) {
-        this.whatifDeltaBalance.textContent = notAvail;
-        this.whatifDeltaBalance.className = 'py-2 px-3 text-right font-bold text-slate-400 dark:text-slate-500';
-      } else if (deltaBal > 0) {
-        this.whatifDeltaBalance.textContent = `+${formatCurrency(deltaBal, currency, lang)}`;
-        this.whatifDeltaBalance.className = 'py-2 px-3 text-right font-bold text-emerald-600 dark:text-emerald-400';
-      } else if (deltaBal < 0) {
-        this.whatifDeltaBalance.textContent = `-${formatCurrency(Math.abs(deltaBal), currency, lang)}`;
-        this.whatifDeltaBalance.className = 'py-2 px-3 text-right font-bold text-rose-600 dark:text-rose-400';
-      } else {
-        this.whatifDeltaBalance.textContent = formatCurrency(0, currency, lang);
-        this.whatifDeltaBalance.className = 'py-2 px-3 text-right font-bold text-slate-700 dark:text-slate-300';
-      }
-    }
-
-    // Daily Rate
-    if (this.whatifBaseRate) this.whatifBaseRate.textContent = `${formatCurrency(simResult.baseline.dailyRate, currency, lang)}/gün`;
-    if (this.whatifSimRate) this.whatifSimRate.textContent = hasValidInput ? `${formatCurrency(simResult.simulated.dailyRate, currency, lang)}/gün` : notAvail;
-    if (this.whatifDeltaRate) {
-      if (!hasValidInput || simResult.delta.dailyRate === 0) {
-        this.whatifDeltaRate.textContent = `${formatCurrency(0, currency, lang)}/gün`;
-        this.whatifDeltaRate.className = 'py-2 px-3 text-right font-bold text-slate-700 dark:text-slate-300';
-      } else if (simResult.delta.dailyRate > 0) {
-        this.whatifDeltaRate.textContent = `+${formatCurrency(simResult.delta.dailyRate, currency, lang)}/gün`;
-        this.whatifDeltaRate.className = 'py-2 px-3 text-right font-bold text-rose-600 dark:text-rose-400';
-      } else {
-        this.whatifDeltaRate.textContent = `-${formatCurrency(Math.abs(simResult.delta.dailyRate), currency, lang)}/gün`;
-        this.whatifDeltaRate.className = 'py-2 px-3 text-right font-bold text-emerald-600 dark:text-emerald-400';
-      }
-    }
-
-    // 2. Visual Impact Card
+    // B. Primary Decision Impact Callout Card
     if (this.whatifImpactCard && this.whatifImpactText && this.whatifImpactBadge) {
+      const impact = result.decisionImpact || {};
+      const code = impact.code || DECISION_IMPACT_CODES.AWAITING_INPUT;
+      const severity = impact.severity || 'neutral';
+
       if (!hasValidInput) {
-        this.whatifImpactText.textContent = lang === 'tr' ? 'Değer girerek olası etkiyi görün' : 'Enter a value to see potential impact';
+        this.whatifImpactText.textContent = t('whatif.decision.impacts.AWAITING_INPUT') || (lang === 'tr' ? 'Değer girerek bir sonraki gelire kadar olası etkiyi görün' : 'Enter a value to see potential impact until next income');
         this.whatifImpactBadge.textContent = '—';
         this.whatifImpactBadge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 shrink-0';
-        if (this.whatifImpactIconBox) this.whatifImpactIconBox.className = 'w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 flex items-center justify-center shrink-0';
+        this.whatifImpactCard.className = 'p-3.5 rounded-xl bg-purple-50/70 dark:bg-purple-950/40 border border-purple-200/80 dark:border-purple-800/80 flex items-center justify-between gap-2.5';
+        if (this.whatifImpactIconBox) this.whatifImpactIconBox.className = 'w-8 h-8 rounded-lg bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 flex items-center justify-center shrink-0';
+        if (this.whatifImpactIcon) this.whatifImpactIcon.setAttribute('data-lucide', 'sparkles');
       } else {
-        const deltaBal = simResult.delta.projectedEndBalance;
-        const deltaExp = simResult.delta.projectedExpense;
+        const formattedParams = { ...(impact.params || {}) };
+        if (formattedParams.amount !== undefined && typeof formattedParams.amount === 'number') {
+          formattedParams.amount = formatCurrency(formattedParams.amount, currency, lang);
+        }
+        if (formattedParams.from) {
+          formattedParams.from = t('coverage.' + formattedParams.from) || formattedParams.from;
+        }
+        if (formattedParams.to) {
+          formattedParams.to = t('coverage.' + formattedParams.to) || formattedParams.to;
+        }
 
-        if (deltaBal !== null && !isNaN(deltaBal) && deltaBal !== 0) {
-          if (deltaBal > 0) {
-            const formatted = formatCurrency(deltaBal, currency, lang);
-            this.whatifImpactText.textContent = t('whatif.results.balanceIncrease', { amount: formatted }) || `Öngörülen ay sonu bakiye ${formatted} artıyor`;
-            this.whatifImpactBadge.textContent = `+${formatted}`;
-            this.whatifImpactBadge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 shrink-0';
-            if (this.whatifImpactIconBox) this.whatifImpactIconBox.className = 'w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0';
-          } else {
-            const formatted = formatCurrency(Math.abs(deltaBal), currency, lang);
-            this.whatifImpactText.textContent = t('whatif.results.balanceDecrease', { amount: formatted }) || `Öngörülen ay sonu bakiye ${formatted} azalıyor`;
-            this.whatifImpactBadge.textContent = `-${formatted}`;
-            this.whatifImpactBadge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 shrink-0';
-            if (this.whatifImpactIconBox) this.whatifImpactIconBox.className = 'w-8 h-8 rounded-lg bg-rose-100 dark:bg-rose-950 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0';
-          }
-        } else if (deltaExp !== 0) {
-          if (deltaExp > 0) {
-            const formatted = formatCurrency(deltaExp, currency, lang);
-            this.whatifImpactText.textContent = t('whatif.results.expenseIncrease', { amount: formatted }) || `Öngörülen gider +${formatted} artıyor`;
-            this.whatifImpactBadge.textContent = `+${formatted}`;
-            this.whatifImpactBadge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 shrink-0';
-            if (this.whatifImpactIconBox) this.whatifImpactIconBox.className = 'w-8 h-8 rounded-lg bg-rose-100 dark:bg-rose-950 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0';
-          } else {
-            const formatted = formatCurrency(Math.abs(deltaExp), currency, lang);
-            this.whatifImpactText.textContent = t('whatif.results.expenseDecrease', { amount: formatted }) || `Öngörülen gider ${formatted} azalıyor`;
-            this.whatifImpactBadge.textContent = `-${formatted}`;
-            this.whatifImpactBadge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 shrink-0';
-            if (this.whatifImpactIconBox) this.whatifImpactIconBox.className = 'w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0';
-          }
+        let impactKey = `whatif.decision.impacts.${code}`;
+        if (code === DECISION_IMPACT_CODES.STATUS_SHIFT_DEFICIT && impact.params?.amount) {
+          impactKey = 'whatif.decision.impacts.STATUS_SHIFT_DEFICIT_AMOUNT';
+        }
+        this.whatifImpactText.textContent = t(impactKey, formattedParams) || code;
+
+        // Badge text
+        let badgeText = impact.badge || '—';
+        if (code === DECISION_IMPACT_CODES.STATUS_SHIFT_DEFICIT) {
+          badgeText = impact.params?.amount != null
+            ? `-${formatCurrency(impact.params.amount, currency, lang)}`
+            : (t('coverage.DEFICIT_BEFORE_INCOME') || 'Açık Riski');
+        } else if (code === DECISION_IMPACT_CODES.STATUS_SHIFT_TIGHT) {
+          badgeText = t('coverage.TIGHT') || 'Sınıra Yaklaşıyor';
+        } else if (code === DECISION_IMPACT_CODES.STATUS_SHIFT_COVERED || code === DECISION_IMPACT_CODES.PLAN_REMAINS_BALANCED) {
+          badgeText = t('coverage.COVERED') || 'Plan Dengeli';
+        } else if (code === DECISION_IMPACT_CODES.SAFE_SPEND_DECREASED && impact.params?.amount != null) {
+          badgeText = `-${formatCurrency(impact.params.amount, currency, lang)}/gün`;
+        } else if (code === DECISION_IMPACT_CODES.SAFE_SPEND_INCREASED && impact.params?.amount != null) {
+          badgeText = `+${formatCurrency(impact.params.amount, currency, lang)}/gün`;
+        } else if (code === DECISION_IMPACT_CODES.PRE_INCOME_BALANCE_DECREASED && impact.params?.amount != null) {
+          badgeText = `-${formatCurrency(impact.params.amount, currency, lang)}`;
+        } else if (code === DECISION_IMPACT_CODES.PRE_INCOME_BALANCE_INCREASED && impact.params?.amount != null) {
+          badgeText = `+${formatCurrency(impact.params.amount, currency, lang)}`;
+        } else if (code === DECISION_IMPACT_CODES.DEFICIT_DEEPENED && impact.params?.amount != null) {
+          badgeText = `-${formatCurrency(impact.params.amount, currency, lang)}`;
+        } else if (code === DECISION_IMPACT_CODES.DEFICIT_REDUCED && impact.params?.amount != null) {
+          badgeText = `+${formatCurrency(impact.params.amount, currency, lang)}`;
+        } else if (code === DECISION_IMPACT_CODES.DEFICIT_ADJUSTMENT_NEEDED && impact.params?.amount != null) {
+          badgeText = `-${formatCurrency(impact.params.amount, currency, lang)}/gün`;
+        } else if (code === DECISION_IMPACT_CODES.NO_NEXT_INCOME_MONTH_END_DECREASE && impact.params?.amount != null) {
+          badgeText = `-${formatCurrency(impact.params.amount, currency, lang)}`;
+        } else if (code === DECISION_IMPACT_CODES.NO_NEXT_INCOME_MONTH_END_INCREASE && impact.params?.amount != null) {
+          badgeText = `+${formatCurrency(impact.params.amount, currency, lang)}`;
+        } else if (code === DECISION_IMPACT_CODES.NO_NEXT_INCOME_MONTH_END_EXPENSE_INCREASE && impact.params?.amount != null) {
+          badgeText = `+${formatCurrency(impact.params.amount, currency, lang)}`;
+        } else if (code === DECISION_IMPACT_CODES.NO_NEXT_INCOME_MONTH_END_EXPENSE_DECREASE && impact.params?.amount != null) {
+          badgeText = `-${formatCurrency(impact.params.amount, currency, lang)}`;
+        }
+
+        this.whatifImpactBadge.textContent = badgeText;
+
+        if (severity === 'deficit') {
+          this.whatifImpactCard.className = 'p-3.5 rounded-xl bg-rose-50/70 dark:bg-rose-950/40 border border-rose-200/80 dark:border-rose-800/80 flex items-center justify-between gap-2.5';
+          if (this.whatifImpactIconBox) this.whatifImpactIconBox.className = 'w-8 h-8 rounded-lg bg-rose-100 dark:bg-rose-900 text-rose-700 dark:text-rose-300 flex items-center justify-center shrink-0';
+          this.whatifImpactBadge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 shrink-0';
+          if (this.whatifImpactIcon) this.whatifImpactIcon.setAttribute('data-lucide', 'alert-circle');
+        } else if (severity === 'warning') {
+          this.whatifImpactCard.className = 'p-3.5 rounded-xl bg-amber-50/70 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800/80 flex items-center justify-between gap-2.5';
+          if (this.whatifImpactIconBox) this.whatifImpactIconBox.className = 'w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0';
+          this.whatifImpactBadge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 shrink-0';
+          if (this.whatifImpactIcon) this.whatifImpactIcon.setAttribute('data-lucide', 'alert-triangle');
+        } else if (severity === 'positive') {
+          this.whatifImpactCard.className = 'p-3.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-800/80 flex items-center justify-between gap-2.5';
+          if (this.whatifImpactIconBox) this.whatifImpactIconBox.className = 'w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0';
+          this.whatifImpactBadge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 shrink-0';
+          if (this.whatifImpactIcon) this.whatifImpactIcon.setAttribute('data-lucide', 'trending-up');
         } else {
-          this.whatifImpactText.textContent = t('whatif.results.noImpact') || 'Tahmin üzerinde belirgin bir değişim öngörülmüyor';
-          this.whatifImpactBadge.textContent = formatCurrency(0, currency, lang);
-          this.whatifImpactBadge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 shrink-0';
+          this.whatifImpactCard.className = 'p-3.5 rounded-xl bg-purple-50/70 dark:bg-purple-950/40 border border-purple-200/80 dark:border-purple-800/80 flex items-center justify-between gap-2.5';
           if (this.whatifImpactIconBox) this.whatifImpactIconBox.className = 'w-8 h-8 rounded-lg bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 flex items-center justify-center shrink-0';
+          this.whatifImpactBadge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 shrink-0';
+          if (this.whatifImpactIcon) this.whatifImpactIcon.setAttribute('data-lucide', 'sparkles');
         }
       }
     }
 
-    // 3. Explainability List
+    // C. Decision Metrics 3 Cards
+    if (untilNext) {
+      // Metric 1: Safe Daily Spend
+      const baseSafeDaily = untilNext.baseline?.safeDailySpend ?? null;
+      const simSafeDaily = untilNext.simulated?.safeDailySpend ?? null;
+      const deltaSafeDaily = untilNext.delta?.safeDailySpend ?? null;
+
+      if (this.whatifDecisionBaseSafeDailySub) {
+        this.whatifDecisionBaseSafeDailySub.textContent = (baseSafeDaily !== null)
+          ? `${t('whatif.results.current') || 'Mevcut'}: ${formatCurrency(baseSafeDaily, currency, lang)}/gün`
+          : `${t('whatif.results.current') || 'Mevcut'}: —`;
+      }
+      if (this.whatifDecisionSimSafeDaily) {
+        this.whatifDecisionSimSafeDaily.textContent = (hasValidInput && simSafeDaily !== null)
+          ? `${formatCurrency(simSafeDaily, currency, lang)}/gün`
+          : notAvail;
+      }
+      if (this.whatifDecisionDeltaSafeDaily) {
+        if (!hasValidInput || deltaSafeDaily === null || deltaSafeDaily === 0) {
+          this.whatifDecisionDeltaSafeDaily.textContent = '—';
+          this.whatifDecisionDeltaSafeDaily.className = 'text-[11px] font-semibold text-slate-400 dark:text-slate-500';
+        } else if (deltaSafeDaily > 0) {
+          this.whatifDecisionDeltaSafeDaily.textContent = `+${formatCurrency(deltaSafeDaily, currency, lang)}/gün`;
+          this.whatifDecisionDeltaSafeDaily.className = 'text-[11px] font-semibold text-emerald-600 dark:text-emerald-400';
+        } else {
+          this.whatifDecisionDeltaSafeDaily.textContent = `-${formatCurrency(Math.abs(deltaSafeDaily), currency, lang)}/gün`;
+          this.whatifDecisionDeltaSafeDaily.className = 'text-[11px] font-semibold text-rose-600 dark:text-rose-400';
+        }
+      }
+
+      // Metric 2: Coverage Status
+      const baseStatus = untilNext.baseline?.coverageStatus || COVERAGE_STATUS.NO_NEXT_INCOME;
+      const simStatus = untilNext.simulated?.coverageStatus || COVERAGE_STATUS.NO_NEXT_INCOME;
+      const baseStatusLabel = t('coverage.' + baseStatus) || baseStatus;
+      const simStatusLabel = t('coverage.' + simStatus) || simStatus;
+      const activeStatus = hasValidInput ? simStatus : baseStatus;
+      const activeStatusLabel = hasValidInput ? simStatusLabel : baseStatusLabel;
+
+      if (this.whatifDecisionStatusChip) {
+        this.whatifDecisionStatusChip.textContent = activeStatusLabel;
+        if (activeStatus === COVERAGE_STATUS.COVERED) {
+          this.whatifDecisionStatusChip.className = 'inline-block px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300';
+        } else if (activeStatus === COVERAGE_STATUS.TIGHT) {
+          this.whatifDecisionStatusChip.className = 'inline-block px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300';
+        } else if (activeStatus === COVERAGE_STATUS.DEFICIT_BEFORE_INCOME) {
+          this.whatifDecisionStatusChip.className = 'inline-block px-2 py-0.5 rounded-md text-[11px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300';
+        } else {
+          this.whatifDecisionStatusChip.className = 'inline-block px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
+        }
+      }
+
+      if (this.whatifDecisionStatusTransitionSub) {
+        if (hasValidInput && baseStatus !== simStatus) {
+          this.whatifDecisionStatusTransitionSub.textContent = `${baseStatusLabel} ➔ ${simStatusLabel}`;
+        } else {
+          this.whatifDecisionStatusTransitionSub.textContent = `${t('whatif.results.current') || 'Mevcut'}: ${baseStatusLabel}`;
+        }
+      }
+
+      // Metric 3: Pre-Income Projected Balance
+      const basePreBal = untilNext.baseline?.projectedBalanceBeforeNextIncome ?? null;
+      const simPreBal = untilNext.simulated?.projectedBalanceBeforeNextIncome ?? null;
+      const deltaPreBal = untilNext.delta?.projectedBalanceBeforeNextIncome ?? null;
+
+      if (this.whatifDecisionBasePreBalanceSub) {
+        this.whatifDecisionBasePreBalanceSub.textContent = (basePreBal !== null)
+          ? `${t('whatif.results.current') || 'Mevcut'}: ${formatCurrency(basePreBal, currency, lang)}`
+          : `${t('whatif.results.current') || 'Mevcut'}: —`;
+      }
+      if (this.whatifDecisionSimPreBalance) {
+        this.whatifDecisionSimPreBalance.textContent = (hasValidInput && simPreBal !== null)
+          ? formatCurrency(simPreBal, currency, lang)
+          : notAvail;
+      }
+      if (this.whatifDecisionDeltaPreBalance) {
+        if (!hasValidInput || deltaPreBal === null || deltaPreBal === 0) {
+          this.whatifDecisionDeltaPreBalance.textContent = '—';
+          this.whatifDecisionDeltaPreBalance.className = 'text-[11px] font-semibold text-slate-400 dark:text-slate-500';
+        } else if (deltaPreBal > 0) {
+          this.whatifDecisionDeltaPreBalance.textContent = `+${formatCurrency(deltaPreBal, currency, lang)}`;
+          this.whatifDecisionDeltaPreBalance.className = 'text-[11px] font-semibold text-emerald-600 dark:text-emerald-400';
+        } else {
+          this.whatifDecisionDeltaPreBalance.textContent = `-${formatCurrency(Math.abs(deltaPreBal), currency, lang)}`;
+          this.whatifDecisionDeltaPreBalance.className = 'text-[11px] font-semibold text-rose-600 dark:text-rose-400';
+        }
+      }
+
+      // D. Adjustment Callout
+      const simAdjustment = untilNext.simulated?.dailyAdjustmentNeeded ?? 0;
+      if (this.whatifAdjustmentCallout && this.whatifAdjustmentText) {
+        if (hasValidInput && hasNextIncome && simAdjustment > 0) {
+          this.whatifAdjustmentCallout.classList.remove('hidden');
+          this.whatifAdjustmentText.textContent = t('whatif.decision.adjustmentNeeded', {
+            amount: formatCurrency(simAdjustment, currency, lang)
+          }) || `Bu senaryoda günlük harcamayı yaklaşık ${formatCurrency(simAdjustment, currency, lang)} azaltmak gerekiyor.`;
+        } else {
+          this.whatifAdjustmentCallout.classList.add('hidden');
+        }
+      }
+
+      // E. Obligations Context Line
+      if (this.whatifObligationsContextText) {
+        if (hasNextIncome && result.obligations) {
+          this.whatifObligationsContextText.textContent = t('whatif.decision.obligationsReserved', {
+            amount: formatCurrency(result.obligations.totalReserved, currency, lang)
+          }) || `Gelire kadar ayrılan yükümlülükler: ${formatCurrency(result.obligations.totalReserved, currency, lang)}`;
+        } else {
+          this.whatifObligationsContextText.textContent = t('whatif.decision.noNextIncomeContext') || 'Planlı bir sonraki gelir bulunmuyor';
+        }
+      }
+    }
+
+    // 2. SECONDARY: Month-End Comparison Table
+    if (monthEnd && monthEnd.baseline && monthEnd.simulated && monthEnd.delta) {
+      // Projected Expense
+      if (this.whatifBaseExpense) this.whatifBaseExpense.textContent = formatCurrency(monthEnd.baseline.projectedExpense, currency, lang);
+      if (this.whatifSimExpense) this.whatifSimExpense.textContent = hasValidInput ? formatCurrency(monthEnd.simulated.projectedExpense, currency, lang) : notAvail;
+      if (this.whatifDeltaExpense) {
+        if (!hasValidInput || monthEnd.delta.projectedExpense === 0) {
+          this.whatifDeltaExpense.textContent = formatCurrency(0, currency, lang);
+          this.whatifDeltaExpense.className = 'py-2 px-3 text-right font-bold text-slate-700 dark:text-slate-300';
+        } else if (monthEnd.delta.projectedExpense > 0) {
+          this.whatifDeltaExpense.textContent = `+${formatCurrency(monthEnd.delta.projectedExpense, currency, lang)}`;
+          this.whatifDeltaExpense.className = 'py-2 px-3 text-right font-bold text-rose-600 dark:text-rose-400';
+        } else {
+          this.whatifDeltaExpense.textContent = `-${formatCurrency(Math.abs(monthEnd.delta.projectedExpense), currency, lang)}`;
+          this.whatifDeltaExpense.className = 'py-2 px-3 text-right font-bold text-emerald-600 dark:text-emerald-400';
+        }
+      }
+
+      // Projected Remaining Expense
+      if (this.whatifBaseRemaining) this.whatifBaseRemaining.textContent = formatCurrency(monthEnd.baseline.projectedRemainingExpense, currency, lang);
+      if (this.whatifSimRemaining) this.whatifSimRemaining.textContent = hasValidInput ? formatCurrency(monthEnd.simulated.projectedRemainingExpense, currency, lang) : notAvail;
+      if (this.whatifDeltaRemaining) {
+        if (!hasValidInput || monthEnd.delta.projectedRemainingExpense === 0) {
+          this.whatifDeltaRemaining.textContent = formatCurrency(0, currency, lang);
+          this.whatifDeltaRemaining.className = 'py-2 px-3 text-right font-bold text-slate-700 dark:text-slate-300';
+        } else if (monthEnd.delta.projectedRemainingExpense > 0) {
+          this.whatifDeltaRemaining.textContent = `+${formatCurrency(monthEnd.delta.projectedRemainingExpense, currency, lang)}`;
+          this.whatifDeltaRemaining.className = 'py-2 px-3 text-right font-bold text-rose-600 dark:text-rose-400';
+        } else {
+          this.whatifDeltaRemaining.textContent = `-${formatCurrency(Math.abs(monthEnd.delta.projectedRemainingExpense), currency, lang)}`;
+          this.whatifDeltaRemaining.className = 'py-2 px-3 text-right font-bold text-emerald-600 dark:text-emerald-400';
+        }
+      }
+
+      // Projected Ending Balance
+      const baseBal = monthEnd.baseline.projectedEndBalance;
+      const simBal = monthEnd.simulated.projectedEndBalance;
+      const deltaBal = monthEnd.delta.projectedEndBalance;
+
+      if (this.whatifBaseBalance) {
+        this.whatifBaseBalance.textContent = (baseBal !== null && !isNaN(baseBal))
+          ? formatCurrency(baseBal, currency, lang)
+          : notAvail;
+      }
+      if (this.whatifSimBalance) {
+        this.whatifSimBalance.textContent = (hasValidInput && simBal !== null && !isNaN(simBal))
+          ? formatCurrency(simBal, currency, lang)
+          : notAvail;
+      }
+      if (this.whatifDeltaBalance) {
+        if (!hasValidInput || deltaBal === null || isNaN(deltaBal)) {
+          this.whatifDeltaBalance.textContent = notAvail;
+          this.whatifDeltaBalance.className = 'py-2 px-3 text-right font-bold text-slate-400 dark:text-slate-500';
+        } else if (deltaBal > 0) {
+          this.whatifDeltaBalance.textContent = `+${formatCurrency(deltaBal, currency, lang)}`;
+          this.whatifDeltaBalance.className = 'py-2 px-3 text-right font-bold text-emerald-600 dark:text-emerald-400';
+        } else if (deltaBal < 0) {
+          this.whatifDeltaBalance.textContent = `-${formatCurrency(Math.abs(deltaBal), currency, lang)}`;
+          this.whatifDeltaBalance.className = 'py-2 px-3 text-right font-bold text-rose-600 dark:text-rose-400';
+        } else {
+          this.whatifDeltaBalance.textContent = formatCurrency(0, currency, lang);
+          this.whatifDeltaBalance.className = 'py-2 px-3 text-right font-bold text-slate-700 dark:text-slate-300';
+        }
+      }
+
+      // Daily Rate
+      if (this.whatifBaseRate) this.whatifBaseRate.textContent = `${formatCurrency(monthEnd.baseline.dailyRate, currency, lang)}/gün`;
+      if (this.whatifSimRate) this.whatifSimRate.textContent = hasValidInput ? `${formatCurrency(monthEnd.simulated.dailyRate, currency, lang)}/gün` : notAvail;
+      if (this.whatifDeltaRate) {
+        if (!hasValidInput || monthEnd.delta.dailyRate === 0) {
+          this.whatifDeltaRate.textContent = `${formatCurrency(0, currency, lang)}/gün`;
+          this.whatifDeltaRate.className = 'py-2 px-3 text-right font-bold text-slate-700 dark:text-slate-300';
+        } else if (monthEnd.delta.dailyRate > 0) {
+          this.whatifDeltaRate.textContent = `+${formatCurrency(monthEnd.delta.dailyRate, currency, lang)}/gün`;
+          this.whatifDeltaRate.className = 'py-2 px-3 text-right font-bold text-rose-600 dark:text-rose-400';
+        } else {
+          this.whatifDeltaRate.textContent = `-${formatCurrency(Math.abs(monthEnd.delta.dailyRate), currency, lang)}/gün`;
+          this.whatifDeltaRate.className = 'py-2 px-3 text-right font-bold text-emerald-600 dark:text-emerald-400';
+        }
+      }
+    }
+
+    // 3. THIRD: Explainability Dual-Horizon List
     if (this.whatifAssumptionsList) {
-      const daysRem = simResult.metadata?.daysRemaining || 0;
-      const assumptions = simResult.metadata?.assumptions || [];
-
-      const assumptionTexts = {
-        BASELINE_FORECAST_UNCHANGED: t('whatif.explainability.assumptions.BASELINE_FORECAST_UNCHANGED') || 'Mevcut harcama temposu ve davranışsal tahmin temel alındı.',
-        NO_ADDITIONAL_INCOME_ASSUMED: t('whatif.explainability.assumptions.NO_ADDITIONAL_INCOME_ASSUMED') || 'Senaryo süresince ek başka bir gelir varsayılmadı.',
-        ONE_TIME_EVENT: t('whatif.explainability.assumptions.ONE_TIME_EVENT') || 'Bu işlem tek seferlik kabul edildi, günlük harcama temposunu değiştirmedi.',
-        BASELINE_EXPENSE_FORECAST_UNCHANGED: t('whatif.explainability.assumptions.BASELINE_EXPENSE_FORECAST_UNCHANGED') || 'Tek seferlik gelir harcama projeksiyonunu doğrudan değiştirmedi.',
-        ONE_TIME_INCOME_EVENT: t('whatif.explainability.assumptions.ONE_TIME_INCOME_EVENT') || 'Bu gelir tek seferlik kabul edildi.',
-        CHANGE_APPLIES_TO_REMAINING_DAYS_ONLY: t('whatif.explainability.assumptions.CHANGE_APPLIES_TO_REMAINING_DAYS_ONLY', { days: daysRem }) || `Değişiklik yalnızca ayın kalan ${daysRem} günü için geçerlidir; geçmiş gerçekleşen harcamalar korunur.`,
-        PAST_ACTUALS_UNCHANGED: t('whatif.explainability.assumptions.PAST_ACTUALS_UNCHANGED') || 'Ayın başından bugüne yapılmış harcamalar sabit tutuldu.',
-        DAILY_RATE_NON_NEGATIVE: t('whatif.explainability.assumptions.DAILY_RATE_NON_NEGATIVE') || 'Günlük harcama temposu 0 TL altına düşemez.'
-      };
-
       if (!hasValidInput) {
         this.whatifAssumptionsList.innerHTML = `
           <div class="py-1 text-slate-500 dark:text-slate-400">
@@ -1588,16 +1764,93 @@ export class ModalManager {
           </div>
         `;
       } else {
-        this.whatifAssumptionsList.innerHTML = assumptions.map(code => {
-          const txt = assumptionTexts[code] || code;
+        const expl = result.explainability || {};
+        const untilNextNotes = expl.untilNextIncome || [];
+        const monthEndNotes = expl.monthEnd || [];
+        const assumptions = expl.assumptions || monthEnd?.metadata?.assumptions || [];
+        const daysRem = monthEnd?.metadata?.daysRemaining || 0;
+
+        const assumptionTexts = {
+          BASELINE_FORECAST_UNCHANGED: t('whatif.explainability.assumptions.BASELINE_FORECAST_UNCHANGED') || 'Mevcut harcama temposu ve davranışsal tahmin temel alındı.',
+          NO_ADDITIONAL_INCOME_ASSUMED: t('whatif.explainability.assumptions.NO_ADDITIONAL_INCOME_ASSUMED') || 'Senaryo süresince ek başka bir gelir varsayılmadı.',
+          ONE_TIME_EVENT: t('whatif.explainability.assumptions.ONE_TIME_EVENT') || 'Bu işlem tek seferlik kabul edildi, günlük harcama temposunu değiştirmedi.',
+          BASELINE_EXPENSE_FORECAST_UNCHANGED: t('whatif.explainability.assumptions.BASELINE_EXPENSE_FORECAST_UNCHANGED') || 'Tek seferlik gelir harcama projeksiyonunu doğrudan değiştirmedi.',
+          ONE_TIME_INCOME_EVENT: t('whatif.explainability.assumptions.ONE_TIME_INCOME_EVENT') || 'Bu gelir tek seferlik kabul edildi.',
+          CHANGE_APPLIES_TO_REMAINING_DAYS_ONLY: t('whatif.explainability.assumptions.CHANGE_APPLIES_TO_REMAINING_DAYS_ONLY', { days: daysRem }) || `Değişiklik yalnızca ayın kalan ${daysRem} günü için geçerlidir; geçmiş gerçekleşen harcamalar korunur.`,
+          PAST_ACTUALS_UNCHANGED: t('whatif.explainability.assumptions.PAST_ACTUALS_UNCHANGED') || 'Ayın başından bugüne yapılmış harcamalar sabit tutuldu.',
+          DAILY_RATE_NON_NEGATIVE: t('whatif.explainability.assumptions.DAILY_RATE_NON_NEGATIVE') || 'Günlük harcama temposu 0 TL altına düşemez.'
+        };
+
+        const renderNote = (note) => {
+          const formattedParams = { ...(note.params || {}) };
+          if (formattedParams.amount !== undefined && typeof formattedParams.amount === 'number') {
+            formattedParams.amount = formatCurrency(formattedParams.amount, currency, lang);
+          }
+          if (formattedParams.newRate !== undefined && typeof formattedParams.newRate === 'number') {
+            formattedParams.newRate = formatCurrency(formattedParams.newRate, currency, lang);
+          }
+          if (formattedParams.amountPerDay !== undefined && typeof formattedParams.amountPerDay === 'number') {
+            formattedParams.amountPerDay = formatCurrency(formattedParams.amountPerDay, currency, lang);
+          }
+          if (formattedParams.obligations !== undefined && typeof formattedParams.obligations === 'number') {
+            formattedParams.obligations = formatCurrency(formattedParams.obligations, currency, lang);
+          }
+          if (formattedParams.dailyRate !== undefined && typeof formattedParams.dailyRate === 'number') {
+            formattedParams.dailyRate = formatCurrency(formattedParams.dailyRate, currency, lang);
+          }
+
+          const txt = t('whatif.explainability.notes.' + note.key, formattedParams) || note.key;
           return `
             <div class="flex items-start space-x-2 py-0.5">
               <span class="inline-block w-1.5 h-1.5 rounded-full bg-purple-500 dark:bg-purple-400 mt-1.5 shrink-0"></span>
-              <span class="text-xs leading-relaxed">${escapeHtml(txt)}</span>
+              <span class="text-xs leading-relaxed text-slate-700 dark:text-slate-300">${escapeHtml(txt)}</span>
             </div>
           `;
-        }).join('');
+        };
+
+        let html = '';
+
+        if (untilNextNotes.length > 0) {
+          html += `
+            <div class="mb-2.5">
+              <span class="text-[11px] font-bold text-slate-900 dark:text-white uppercase tracking-wider block mb-1">
+                ${t('whatif.explainability.horizonCashflowTitle') || '1. Bir Sonraki Gelire Kadar Ufku:'}
+              </span>
+              <div class="space-y-1 pl-1">
+                ${untilNextNotes.map(renderNote).join('')}
+              </div>
+            </div>
+          `;
+        }
+
+        if (monthEndNotes.length > 0 || assumptions.length > 0) {
+          html += `
+            <div>
+              <span class="text-[11px] font-bold text-slate-900 dark:text-white uppercase tracking-wider block mb-1">
+                ${t('whatif.explainability.horizonMonthEndTitle') || '2. Ay Sonu Projeksiyon Ufku:'}
+              </span>
+              <div class="space-y-1 pl-1">
+                ${monthEndNotes.map(renderNote).join('')}
+                ${assumptions.map(code => {
+                  const txt = assumptionTexts[code] || code;
+                  return `
+                    <div class="flex items-start space-x-2 py-0.5">
+                      <span class="inline-block w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-slate-500 mt-1.5 shrink-0"></span>
+                      <span class="text-xs leading-relaxed text-slate-600 dark:text-slate-400">${escapeHtml(txt)}</span>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          `;
+        }
+
+        this.whatifAssumptionsList.innerHTML = html;
       }
+    }
+
+    if (typeof lucide !== 'undefined' && typeof lucide.createIcons === 'function') {
+      lucide.createIcons();
     }
   }
 }

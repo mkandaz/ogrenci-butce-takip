@@ -353,6 +353,47 @@ export default {
       dailyLess: 'Her gün {amount} daha az harcarsam',
       dailyMore: 'Her gün {amount} daha fazla harcarsam'
     },
+    decision: {
+      sectionTitle: 'Bir Sonraki Gelire Kadar',
+      sectionSubtitle: 'Nakit akışı ve planlı ödemelere etkisi',
+      safeDailySpend: 'Güvenli Günlük Limit',
+      safeDailySpendSub: 'Bir sonraki gelire kadar harcanabilir tutar',
+      coverageStatus: 'Nakit Kaplama Durumu',
+      preIncomeBalance: 'Gelir Öncesi Tahmini Bakiye',
+      preIncomeBalanceSub: 'Sonraki gelirden hemen önceki bakiye',
+      dailyAdjustment: 'Gereken Günlük Ayarlama',
+      nextIncomeContext: 'Sonraki gelir: {name} — {date} ({days} gün sonra)',
+      nextIncomeContextToday: 'Sonraki gelir: {name} — Bugün bekleniyor',
+      noNextIncomeContext: 'Planlı bir sonraki gelir bulunmuyor',
+      obligationsReserved: 'Gelire kadar ayrılan yükümlülükler: {amount}',
+      statusTransition: '{from} ➔ {to}',
+      adjustmentNeeded: 'Bu senaryoda günlük harcamayı yaklaşık {amount} azaltmak gerekiyor.',
+      adjustmentBalanced: 'Mevcut tempo planlanan nakit akışı içinde kalıyor.',
+      impacts: {
+        AWAITING_INPUT: 'Değer girerek bir sonraki gelire kadar olası etkiyi görün',
+        STATUS_SHIFT_DEFICIT: 'Bu senaryo planı "Gelir öncesi açık riski" durumuna geçiriyor.',
+        STATUS_SHIFT_DEFICIT_AMOUNT: 'Bu senaryoda sonraki gelirden önce yaklaşık {amount} açık öngörülüyor.',
+        STATUS_SHIFT_TIGHT: 'Bu senaryo planı "Sınıra yaklaşıyor" durumuna getiriyor.',
+        STATUS_SHIFT_COVERED: 'Bu senaryo nakit kaplama durumunu "Plan dengeli" seviyesine iyileştiriyor.',
+        DEFICIT_DEEPENED: 'Bu senaryoda sonraki gelir öncesi açık {amount} daha artıyor.',
+        DEFICIT_REDUCED: 'Bu senaryoda sonraki gelir öncesi açık {amount} azalıyor.',
+        DEFICIT_ADJUSTMENT_NEEDED: 'Bu senaryo sonraki gelire kadar gereken günlük azaltmayı {amount}/gün seviyesine çıkarıyor.',
+        SAFE_SPEND_DECREASED: 'Bu senaryo güvenli günlük limitini {amount}/gün azaltıyor.',
+        SAFE_SPEND_INCREASED: 'Bu senaryo güvenli günlük limitini {amount}/gün artırıyor.',
+        PRE_INCOME_BALANCE_DECREASED: 'Bu senaryoda gelir öncesi tahmini bakiye {amount} azalıyor.',
+        PRE_INCOME_BALANCE_INCREASED: 'Bu senaryoda gelir öncesi tahmini bakiye {amount} artıyor.',
+        PLAN_REMAINS_BALANCED: 'Bu senaryoda plan dengeli kalıyor.',
+        NO_NEXT_INCOME_MONTH_END_DECREASE: 'Öngörülen ay sonu bakiye {amount} azalıyor.',
+        NO_NEXT_INCOME_MONTH_END_INCREASE: 'Öngörülen ay sonu bakiye {amount} artıyor.',
+        NO_NEXT_INCOME_MONTH_END_EXPENSE_INCREASE: 'Öngörülen ay sonu gider {amount} artıyor.',
+        NO_NEXT_INCOME_MONTH_END_EXPENSE_DECREASE: 'Öngörülen ay sonu gider {amount} azalıyor.',
+        NO_NEXT_INCOME_NEUTRAL: 'Tahmin üzerinde belirgin bir değişim öngörülmüyor.'
+      }
+    },
+    monthEnd: {
+      sectionTitle: 'Ay Sonu Etkisi',
+      sectionSubtitle: 'Davranışsal harcama projeksiyonu'
+    },
     results: {
       impactTitle: 'Kararın Olası Etkisi',
       current: 'Mevcut',
@@ -371,6 +412,19 @@ export default {
     },
     explainability: {
       title: 'Bu sonuç nasıl hesaplandı?',
+      horizonCashflowTitle: '1. Bir Sonraki Gelire Kadar Ufku:',
+      horizonMonthEndTitle: '2. Ay Sonu Projeksiyon Ufku:',
+      notes: {
+        EXPENSE_REDUCED_FROM_AVAILABLE_BALANCE: '{amount} tek seferlik harcama mevcut kullanılabilir bakiyeden düşüldü.',
+        ONE_TIME_EVENT_DOES_NOT_ALTER_DAILY_VELOCITY: 'Tek seferlik harcama günlük alışkanlık temposunu (rate) değiştirmedi.',
+        INCOME_ADDED_TO_AVAILABLE_BALANCE: '{amount} ek gelir mevcut kullanılabilir bakiyeye eklendi.',
+        ONE_TIME_INCOME_DOES_NOT_ALTER_DAILY_EXPENSE: 'Tek seferlik gelir harcama temposunu doğrudan değiştirmedi.',
+        FUTURE_SPEND_RATE_UPDATED_PERCENT: 'Kalan günlerin harcama hızı %{percent} oranında güncellendi ({newRate}/gün).',
+        FUTURE_SPEND_RATE_UPDATED_DAILY: 'Kalan günlerin harcama hızı günde {amountPerDay} olarak güncellendi ({newRate}/gün).',
+        NEXT_INCOME_HORIZON_APPLIED: 'Sonraki planlı gelir {name} ({date}, {days} gün) baz alındı; bu tarihe kadar {obligations} tutarında planlı gider ayrıldı.',
+        NO_NEXT_INCOME_PLANNED_NOTICE: 'Kayıtlı bir sonraki planlı gelir bulunmadığı için gelir öncesi bakiye yerine ay sonu harcama projeksiyonu değerlendirildi.',
+        MONTH_END_BEHAVIORAL_BASELINE_APPLIED: 'Ay sonu harcama projeksiyonu ise davranışsal tahmin motoruyla ({dailyRate}/gün tempo, kalan {daysRemaining} gün) bağımsız olarak hesaplandı.'
+      },
       assumptions: {
         BASELINE_FORECAST_UNCHANGED: 'Mevcut harcama temposu ve davranışsal tahmin temel alındı.',
         NO_ADDITIONAL_INCOME_ASSUMED: 'Senaryo süresince ek başka bir gelir varsayılmadı.',
