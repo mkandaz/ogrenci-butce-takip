@@ -1,15 +1,26 @@
+import { resolve } from 'path';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
+  build: {
+    rollupOptions: {
+      input: {
+        main: resolve(__dirname, 'index.html'),
+        hakkinda: resolve(__dirname, 'hakkinda/index.html'),
+        nasilCalisir: resolve(__dirname, 'nasil-calisir/index.html'),
+        gizlilik: resolve(__dirname, 'gizlilik/index.html')
+      }
+    }
+  },
   plugins: [
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'icons/*.png'],
+      includeAssets: ['favicon.svg', 'favicon-32x32.png', 'apple-touch-icon.png', 'icons/*.png', 'brand/*.svg', 'og-image.png'],
       manifest: {
         name: 'Muvazene — Bütçeni Gör, Sonrasını Dengele',
         short_name: 'Muvazene',
-        description: 'Bütçeni Gör, Sonrasını Dengele — Kişisel Bütçe ve Karar Destek Sistemi',
+        description: 'Kişisel Bütçe ve Nakit Akışı Planlama',
         theme_color: '#356B57',
         background_color: '#F6F5F1',
         display: 'standalone',
@@ -29,10 +40,16 @@ export default defineConfig({
             type: 'image/png'
           },
           {
-            src: '/icons/icon-512x512.png',
+            src: '/icons/icon-maskable-192x192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'maskable'
+          },
+          {
+            src: '/icons/icon-maskable-512x512.png',
             sizes: '512x512',
             type: 'image/png',
-            purpose: 'any maskable'
+            purpose: 'maskable'
           }
         ]
       },

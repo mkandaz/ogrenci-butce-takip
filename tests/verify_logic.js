@@ -10700,8 +10700,8 @@ console.log('\n--- 33. FAZ 5.7.2 — SEO & WEB LAUNCH POLISH (TC-394) ---');
   assert(structuredData.applicationCategory === 'FinanceApplication', 'TC-394-5 Structured data category is FinanceApplication');
   assert(structuredData.operatingSystem === 'Web', 'TC-394-5 Structured data operatingSystem is Web');
   assert(structuredData.offers === undefined, 'TC-394-5 Structured data does not publish offers (pricing model not finalized)');
-  assert(!indexHtml.includes('property="og:image"'), 'TC-394-2 OG image tag omitted pending branded asset');
-  assert(!indexHtml.includes('name="twitter:image"'), 'TC-394-2 Twitter image tag omitted pending branded asset');
+  assert(indexHtml.includes('property="og:image" content="https://www.muvazene.app/og-image.png"'), 'TC-394-2 OG image tag restored with branded 1200x630 asset');
+  assert(indexHtml.includes('name="twitter:image" content="https://www.muvazene.app/og-image.png"'), 'TC-394-2 Twitter image tag restored with branded 1200x630 asset');
 
   // 6. Semantic Heading Hierarchy & Single Primary H1
   const h1Matches = indexHtml.match(/<h1[\s>]/g) || [];
@@ -11028,6 +11028,189 @@ console.log('\n--- 35. FAZ 5.7.4 — RESTORE MONTHLY DAILY SPENDING SUMMARY CARD
   assert(!indexHtml.includes('from-indigo-600 via-indigo-700 to-violet-800'), 'TC-396-I Old purple gradient styling absent');
 
   globalThis.document = originalDoc;
+}
+
+// TC-397: FAZ 5.8 — MUVAZENE WEB FREEZE, BRAND ASSETS, PUBLIC PAGES & SEO CONTENT
+console.log('\n--- 36. FAZ 5.8 — WEB FREEZE, BRAND ASSETS & PUBLIC PAGES QA (TC-397) ---');
+{
+  const publicDir = path.resolve(process.cwd(), 'public');
+  const brandDir = path.resolve(publicDir, 'brand');
+  const iconsDir = path.resolve(publicDir, 'icons');
+
+  // Helper to read PNG dimensions
+  function getPngDimensions(filePath) {
+    const buf = fs.readFileSync(filePath);
+    // PNG signature check
+    assert(buf.slice(0, 8).toString('hex') === '89504e470d0a1a0a', `Valid PNG signature for ${filePath}`);
+    const width = buf.readUInt32BE(16);
+    const height = buf.readUInt32BE(20);
+    return { width, height };
+  }
+
+  // A. Brand Assets Verification
+  const requiredBrandFiles = [
+    path.join(brandDir, 'muvazene-mark.svg'),
+    path.join(brandDir, 'muvazene-mark-dark.svg'),
+    path.join(brandDir, 'muvazene-logo.svg'),
+    path.join(brandDir, 'muvazene-logo-dark.svg'),
+    path.join(brandDir, 'muvazene-app-icon-1024.png'),
+    path.join(publicDir, 'favicon.svg'),
+    path.join(publicDir, 'favicon-32x32.png'),
+    path.join(publicDir, 'apple-touch-icon.png'),
+    path.join(iconsDir, 'icon-192x192.png'),
+    path.join(iconsDir, 'icon-512x512.png'),
+    path.join(iconsDir, 'icon-maskable-192x192.png'),
+    path.join(iconsDir, 'icon-maskable-512x512.png'),
+    path.join(publicDir, 'og-image.png')
+  ];
+
+  requiredBrandFiles.forEach(file => {
+    assert(fs.existsSync(file), `TC-397-A Required asset exists: ${path.relative(publicDir, file)}`);
+  });
+
+  // Check PNG dimensions
+  const fav32 = getPngDimensions(path.join(publicDir, 'favicon-32x32.png'));
+  assert(fav32.width === 32 && fav32.height === 32, 'TC-397-A favicon-32x32.png is 32x32');
+
+  const appleIcon = getPngDimensions(path.join(publicDir, 'apple-touch-icon.png'));
+  assert(appleIcon.width === 180 && appleIcon.height === 180, 'TC-397-A apple-touch-icon.png is 180x180');
+
+  const icon192 = getPngDimensions(path.join(iconsDir, 'icon-192x192.png'));
+  assert(icon192.width === 192 && icon192.height === 192, 'TC-397-A icon-192x192.png is 192x192');
+
+  const icon512 = getPngDimensions(path.join(iconsDir, 'icon-512x512.png'));
+  assert(icon512.width === 512 && icon512.height === 512, 'TC-397-A icon-512x512.png is 512x512');
+
+  const maskable192 = getPngDimensions(path.join(iconsDir, 'icon-maskable-192x192.png'));
+  assert(maskable192.width === 192 && maskable192.height === 192, 'TC-397-A icon-maskable-192x192.png is 192x192');
+
+  const maskable512 = getPngDimensions(path.join(iconsDir, 'icon-maskable-512x512.png'));
+  assert(maskable512.width === 512 && maskable512.height === 512, 'TC-397-A icon-maskable-512x512.png is 512x512');
+
+  const appIcon1024 = getPngDimensions(path.join(brandDir, 'muvazene-app-icon-1024.png'));
+  assert(appIcon1024.width === 1024 && appIcon1024.height === 1024, 'TC-397-A muvazene-app-icon-1024.png is 1024x1024');
+
+  const ogImage = getPngDimensions(path.join(publicDir, 'og-image.png'));
+  assert(ogImage.width === 1200 && ogImage.height === 630, 'TC-397-A og-image.png is 1200x630');
+
+  // B. Legacy Asset Purge Verification
+  const faviconSvg = fs.readFileSync(path.join(publicDir, 'favicon.svg'), 'utf-8');
+  assert(!faviconSvg.includes('4F46E5') && !faviconSvg.includes('6366F1'), 'TC-397-B Legacy purple absent from favicon.svg');
+  assert(!faviconSvg.includes('polygon') && !faviconSvg.includes('rect x="2"'), 'TC-397-B Legacy graduation cap absent from favicon.svg');
+  assert(faviconSvg.includes('#1F7A56') || faviconSvg.includes('#8FB69A'), 'TC-397-B Brand palette present in favicon.svg');
+
+  const markSvg = fs.readFileSync(path.join(brandDir, 'muvazene-mark.svg'), 'utf-8');
+  assert(markSvg.includes('viewBox="0 0 204 116"'), 'TC-397-B Mark SVG uses tight 204x116 viewBox');
+
+  // C. Header Branding & Pure HTML Text
+  const indexHtml = fs.readFileSync(path.resolve(process.cwd(), 'index.html'), 'utf-8');
+  assert(indexHtml.includes('/brand/muvazene-mark.svg'), 'TC-397-C Header references light brand mark SVG');
+  assert(indexHtml.includes('/brand/muvazene-mark-dark.svg'), 'TC-397-C Header references dark brand mark SVG');
+  assert(indexHtml.includes('<span class="text-lg sm:text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white leading-none" data-i18n="brand.title">Muvazene</span>'), 'TC-397-C Header renders accessible HTML title Muvazene');
+  assert(indexHtml.includes('Bugünü gör. Sonrasını dengele.'), 'TC-397-C Header renders subtitle');
+
+  // D. Public Informational Pages Verification
+  const publicPages = [
+    {
+      relPath: 'hakkinda/index.html',
+      canonical: 'https://www.muvazene.app/hakkinda',
+      expectedTitlePart: 'Hakkında',
+      expectedH1: 'Muvazene Hakkında'
+    },
+    {
+      relPath: 'nasil-calisir/index.html',
+      canonical: 'https://www.muvazene.app/nasil-calisir',
+      expectedTitlePart: 'Nasıl Çalışır',
+      expectedH1: 'Muvazene Nasıl Çalışır?'
+    },
+    {
+      relPath: 'gizlilik/index.html',
+      canonical: 'https://www.muvazene.app/gizlilik',
+      expectedTitlePart: 'Gizlilik',
+      expectedH1: 'Gizlilik ve Veri Mimarisi'
+    }
+  ];
+
+  publicPages.forEach(page => {
+    const fullPath = path.resolve(process.cwd(), page.relPath);
+    assert(fs.existsSync(fullPath), `TC-397-D Public page exists: ${page.relPath}`);
+    const content = fs.readFileSync(fullPath, 'utf-8');
+
+    // Single H1 verification
+    const h1s = content.match(/<h1[\s>][\s\S]*?<\/h1>/gi) || [];
+    assert(h1s.length === 1, `TC-397-D Exactly 1 H1 on ${page.relPath} (found: ${h1s.length})`);
+    assert(h1s[0].includes(page.expectedH1), `TC-397-D H1 content on ${page.relPath} contains "${page.expectedH1}"`);
+
+    // Canonical link
+    assert(content.includes(`<link rel="canonical" href="${page.canonical}" />`) || content.includes(`<link rel="canonical" href="${page.canonical}">`), `TC-397-D Canonical link on ${page.relPath}`);
+
+    // Social preview metadata
+    assert(content.includes('property="og:image" content="https://www.muvazene.app/og-image.png"'), `TC-397-D og:image on ${page.relPath}`);
+    assert(content.includes('name="twitter:image" content="https://www.muvazene.app/og-image.png"'), `TC-397-D twitter:image on ${page.relPath}`);
+    assert(content.includes('name="twitter:card" content="summary_large_image"'), `TC-397-D summary_large_image on ${page.relPath}`);
+
+    // Favicon & Touch Icon
+    assert(content.includes('/favicon.svg'), `TC-397-D Favicon SVG linked on ${page.relPath}`);
+    assert(content.includes('/favicon-32x32.png'), `TC-397-D Favicon 32x32 linked on ${page.relPath}`);
+    assert(content.includes('/apple-touch-icon.png'), `TC-397-D Apple touch icon linked on ${page.relPath}`);
+
+    // Title
+    assert(content.includes(page.expectedTitlePart), `TC-397-D Title on ${page.relPath} contains "${page.expectedTitlePart}"`);
+  });
+
+  // E. Semantic Metric Distinction in nasil-calisir/index.html
+  const nasilCalisirContent = fs.readFileSync(path.resolve(process.cwd(), 'nasil-calisir/index.html'), 'utf-8');
+  assert(nasilCalisirContent.includes('Aylık Günlük Harcama'), 'TC-397-E nasil-calisir explains Aylık Günlük Harcama');
+  assert(nasilCalisirContent.includes('Güvenli Günlük Harcama'), 'TC-397-E nasil-calisir explains Güvenli Günlük Harcama');
+  assert(nasilCalisirContent.includes('planlı gelirinize'), 'TC-397-E nasil-calisir clarifies safe spending horizon');
+
+  // F. Privacy Architecture Truthfulness in gizlilik/index.html
+  const gizlilikContent = fs.readFileSync(path.resolve(process.cwd(), 'gizlilik/index.html'), 'utf-8');
+  assert(gizlilikContent.includes('asılsız teknik iddialarda bulunulmaz'), 'TC-397-F Disclaims unsubstantiated zero-knowledge claims in gizlilik.html');
+  assert(!gizlilikContent.toLowerCase().includes('uçtan uca') && !gizlilikContent.toLowerCase().includes('end-to-end'), 'TC-397-F No unsubstantiated end-to-end encryption claims in gizlilik.html');
+  assert(gizlilikContent.includes('Row Level Security') || gizlilikContent.includes('RLS'), 'TC-397-F RLS architecture documented truthfully in gizlilik.html');
+  assert(gizlilikContent.includes('IndexedDB') || gizlilikContent.includes('LocalStorage'), 'TC-397-F Local storage documented truthfully in gizlilik.html');
+
+  // G. Sitemap & Robots Coverage
+  const sitemapContent = fs.readFileSync(path.join(publicDir, 'sitemap.xml'), 'utf-8');
+  const expectedUrls = [
+    'https://www.muvazene.app/',
+    'https://www.muvazene.app/hakkinda',
+    'https://www.muvazene.app/nasil-calisir',
+    'https://www.muvazene.app/gizlilik'
+  ];
+  expectedUrls.forEach(url => {
+    assert(sitemapContent.includes(`<loc>${url}</loc>`), `TC-397-G Sitemap includes ${url}`);
+  });
+
+  // H. Vite Multi-Page Build & Vercel Rewrites
+  const viteConfigContent = fs.readFileSync(path.resolve(process.cwd(), 'vite.config.js'), 'utf-8');
+  assert(viteConfigContent.includes('hakkinda: resolve(__dirname, \'hakkinda/index.html\')'), 'TC-397-H Vite config includes hakkinda entry');
+  assert(viteConfigContent.includes('nasilCalisir: resolve(__dirname, \'nasil-calisir/index.html\')'), 'TC-397-H Vite config includes nasilCalisir entry');
+  assert(viteConfigContent.includes('gizlilik: resolve(__dirname, \'gizlilik/index.html\')'), 'TC-397-H Vite config includes gizlilik entry');
+
+  const vercelJsonPath = path.resolve(process.cwd(), 'vercel.json');
+  assert(fs.existsSync(vercelJsonPath), 'TC-397-H vercel.json exists');
+  const vercelJson = JSON.parse(fs.readFileSync(vercelJsonPath, 'utf-8'));
+  assert(vercelJson.cleanUrls === true, 'TC-397-H vercel.json enables cleanUrls');
+  assert(Array.isArray(vercelJson.rewrites) && vercelJson.rewrites.length >= 3, 'TC-397-H vercel.json configures rewrites for public pages');
+
+  // I. Landing Page Core Flow & Entry CTAs
+  assert(indexHtml.includes('Muvazene Karar Döngüsü'), 'TC-397-I Core decision flow title present');
+  assert(indexHtml.includes('Takip') && indexHtml.includes('Analiz') && indexHtml.includes('Tahmin') && indexHtml.includes('Senaryo') && indexHtml.includes('Karar'), 'TC-397-I All 5 steps of core decision flow present');
+  assert(indexHtml.includes('Üyeliksiz Hemen Kullan'), 'TC-397-I Guest entry CTA present on landing');
+  assert(indexHtml.includes('Google ile Eşitle'), 'TC-397-I Cloud sync CTA present on landing');
+
+  // J. Finance Engine Isolation
+  const sampleTx = [
+    { id: '1', title: 'Gelir', type: 'income', amount: 20000, date: '2026-10-01' },
+    { id: '2', title: 'Gider', type: 'expense', amount: 5000, date: '2026-10-02' }
+  ];
+  const refDate = new Date('2026-10-01T12:00:00');
+  const summary = calculateSummary(sampleTx, refDate, '2026-10');
+  assert(summary.balance === 15000, 'TC-397-J calculateSummary balance is 15000');
+  assert(summary.daysRemainingInMonth === 31, 'TC-397-J daysRemainingInMonth is 31');
+  assert(summary.dailySafeSpendLimit === Math.round((15000 / 31) * 100) / 100, 'TC-397-J dailySafeSpendLimit returns 483.87 TL/day');
 }
 
 console.log('\n====================================================');

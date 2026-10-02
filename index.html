@@ -7,6 +7,8 @@
   <meta name="description" content="Gelir ve giderlerini takip et, planlı ödemelerini yönet, nakit akışını gör ve harcamalarının gelecekteki bütçene etkisini Muvazene ile hesapla." />
   <meta name="theme-color" content="#356B57" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -18,11 +20,15 @@
   <meta property="og:description" content="Gelir ve giderlerini takip et, planlı ödemelerini yönet, nakit akışını gör ve harcamalarının gelecekteki bütçene etkisini Muvazene ile hesapla." />
   <meta property="og:url" content="https://www.muvazene.app" />
   <meta property="og:type" content="website" />
+  <meta property="og:image" content="https://www.muvazene.app/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
 
   <!-- Twitter Metadata -->
-  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Muvazene | Kişisel Bütçe Takip ve Nakit Akışı Planlama" />
   <meta name="twitter:description" content="Gelir ve giderlerini takip et, planlı ödemelerini yönet, nakit akışını gör ve harcamalarının gelecekteki bütçene etkisini Muvazene ile hesapla." />
+  <meta name="twitter:image" content="https://www.muvazene.app/og-image.png" />
 
   <!-- Structured Data (JSON-LD) -->
   <script type="application/ld+json">
@@ -33,7 +39,9 @@
     "url": "https://www.muvazene.app",
     "applicationCategory": "FinanceApplication",
     "operatingSystem": "Web",
-    "description": "Gelir ve giderlerini takip et, planlı ödemelerini yönet, nakit akışını gör ve harcamalarının gelecekteki bütçene etkisini Muvazene ile hesapla."
+    "description": "Gelir ve giderlerini takip et, planlı ödemelerini yönet, nakit akışını gör ve harcamalarının gelecekteki bütçene etkisini Muvazene ile hesapla.",
+    "image": "https://www.muvazene.app/og-image.png",
+    "logo": "https://www.muvazene.app/brand/muvazene-logo.svg"
   }
   </script>
 
@@ -78,13 +86,17 @@
   <header class="sticky top-0 z-40 bg-white/95 dark:bg-[#171D19]/95 backdrop-blur-md border-b border-[#DDDCD5] dark:border-[#27332B] transition-colors relative">
     <div class="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-1 sm:gap-3">
       
-      <!-- Brand Wordmark & Slogan (Clean typographic layout; neutral slot for future final logo) -->
-      <div class="flex items-center shrink-0">
+      <!-- Brand Wordmark & Slogan with SVG Mark -->
+      <a href="/" class="flex items-center gap-2.5 sm:gap-3 shrink-0 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#356B57] rounded-lg">
+        <div class="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center shrink-0">
+          <img src="/brand/muvazene-mark.svg" alt="" width="32" height="18" class="block dark:hidden" />
+          <img src="/brand/muvazene-mark-dark.svg" alt="" width="32" height="18" class="hidden dark:block" />
+        </div>
         <div class="min-w-0 flex flex-col justify-center">
           <span class="text-lg sm:text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white leading-none" data-i18n="brand.title">Muvazene</span>
           <p class="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 hidden sm:block mt-1 font-medium tracking-tight" data-i18n="brand.subtitle">Bugünü gör. Sonrasını dengele.</p>
         </div>
-      </div>
+      </a>
 
       <!-- Header Actions -->
       <div class="flex items-center space-x-1 sm:space-x-2 lg:space-x-3 shrink-0">
@@ -716,6 +728,64 @@
           </p>
         </div>
       </div>
+
+      <!-- Core Decision Flow: Takip -> Analiz -> Tahmin -> Senaryo -> Karar -->
+      <div class="mt-8 p-5 sm:p-6 bg-gradient-to-br from-[#F6F5F1] to-[#EAF2ED]/60 dark:from-[#171D19] dark:to-[#121714] rounded-2xl border border-[#DDDCD5] dark:border-[#27332B] max-w-6xl mx-auto">
+        <div class="text-center max-w-xl mx-auto mb-4">
+          <span class="text-[10px] font-bold uppercase tracking-wider text-[#356B57] dark:text-[#529E82]">Muvazene Karar Döngüsü</span>
+          <h2 class="text-sm sm:text-base font-bold text-slate-900 dark:text-white mt-1">Takip'ten Karar'a Kesintisiz Akış</h2>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-2 text-center">
+          <div class="p-3 rounded-xl bg-white/80 dark:bg-[#1E2E25]/50 border border-slate-200/60 dark:border-slate-800">
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[#EAF2ED] dark:bg-[#1E2E25] text-xs font-bold text-[#356B57] dark:text-[#529E82] mb-1.5">1</span>
+            <div class="text-xs font-bold text-slate-900 dark:text-white">Takip</div>
+            <p class="text-[10px] text-slate-500 dark:text-slate-400 mt-1 leading-tight">Harcamalarını anında kaydet</p>
+          </div>
+          <div class="p-3 rounded-xl bg-white/80 dark:bg-[#1E2E25]/50 border border-slate-200/60 dark:border-slate-800">
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[#EAF2ED] dark:bg-[#1E2E25] text-xs font-bold text-[#356B57] dark:text-[#529E82] mb-1.5">2</span>
+            <div class="text-xs font-bold text-slate-900 dark:text-white">Analiz</div>
+            <p class="text-[10px] text-slate-500 dark:text-slate-400 mt-1 leading-tight">Günlük harcama hızını gör</p>
+          </div>
+          <div class="p-3 rounded-xl bg-white/80 dark:bg-[#1E2E25]/50 border border-slate-200/60 dark:border-slate-800">
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[#EAF2ED] dark:bg-[#1E2E25] text-xs font-bold text-[#356B57] dark:text-[#529E82] mb-1.5">3</span>
+            <div class="text-xs font-bold text-slate-900 dark:text-white">Tahmin</div>
+            <p class="text-[10px] text-slate-500 dark:text-slate-400 mt-1 leading-tight">Nakit akışıyla ay sonunu öngör</p>
+          </div>
+          <div class="p-3 rounded-xl bg-white/80 dark:bg-[#1E2E25]/50 border border-slate-200/60 dark:border-slate-800">
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[#EAF2ED] dark:bg-[#1E2E25] text-xs font-bold text-[#356B57] dark:text-[#529E82] mb-1.5">4</span>
+            <div class="text-xs font-bold text-slate-900 dark:text-white">Senaryo</div>
+            <p class="text-[10px] text-slate-500 dark:text-slate-400 mt-1 leading-tight">What-If ile etkiyi simüle et</p>
+          </div>
+          <div class="p-3 rounded-xl bg-white/80 dark:bg-[#1E2E25]/50 border border-slate-200/60 dark:border-slate-800 col-span-2 sm:col-span-1">
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[#EAF2ED] dark:bg-[#1E2E25] text-xs font-bold text-[#356B57] dark:text-[#529E82] mb-1.5">5</span>
+            <div class="text-xs font-bold text-slate-900 dark:text-white">Karar</div>
+            <p class="text-[10px] text-slate-500 dark:text-slate-400 mt-1 leading-tight">Güvenli limitlerle dengede kal</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Visitor Entry CTAs (Local-First or Cloud Sync) -->
+      <div class="mt-6 p-4 sm:p-5 bg-white dark:bg-[#171D19] rounded-2xl border border-[#DDDCD5] dark:border-[#27332B] max-w-2xl mx-auto text-center space-y-3">
+        <h3 class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">Hemen Başlayın — Üyelik Zorunluluğu Yok</h3>
+        <p class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 leading-normal">
+          Muvazene yerel öncelikli (local-first) mimariye sahiptir. Tarayıcınızda anında kullanmaya başlayabilir veya dilediğiniz zaman Google hesabınızla bulut eşitlemesini açabilirsiniz.
+        </p>
+        <div class="flex flex-col sm:flex-row items-center justify-center gap-2.5 pt-1">
+          <a href="#" onclick="window.scrollTo({ top: 0, behavior: 'smooth' }); return false;" class="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 rounded-xl text-xs font-bold bg-[#356B57] hover:bg-[#285242] text-white shadow-xs transition">
+            <i data-lucide="sparkles" class="w-3.5 h-3.5 mr-1.5"></i>
+            <span>Üyeliksiz Hemen Kullan</span>
+          </a>
+          <button type="button" onclick="document.getElementById('btn-open-auth')?.click()" class="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition">
+            <svg class="w-3.5 h-3.5 mr-1.5 shrink-0" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
+              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"/>
+            </svg>
+            <span>Google ile Eşitle</span>
+          </button>
+        </div>
+      </div>
     </section>
 
   </main>
@@ -726,6 +796,13 @@
       <div class="flex items-center space-x-2 text-center sm:text-left">
         <i data-lucide="shield-check" class="w-4 h-4 text-[#356B57] dark:text-[#44856D] shrink-0"></i>
         <span id="footer-privacy-text" data-i18n="footer.privacyLocal">Verileriniz yalnızca bu cihazda saklanır.</span>
+      </div>
+      <div class="flex items-center gap-3 text-[11px] font-medium text-slate-500 dark:text-slate-400">
+        <a href="/nasil-calisir" class="hover:text-[#356B57] dark:hover:text-[#44856D] transition">Nasıl Çalışır?</a>
+        <span class="text-slate-300 dark:text-slate-700">·</span>
+        <a href="/hakkinda" class="hover:text-[#356B57] dark:hover:text-[#44856D] transition">Hakkında</a>
+        <span class="text-slate-300 dark:text-slate-700">·</span>
+        <a href="/gizlilik" class="hover:text-[#356B57] dark:hover:text-[#44856D] transition">Gizlilik</a>
       </div>
       <div class="text-center sm:text-right text-[11px] text-slate-500 dark:text-slate-400">
         <span data-i18n="footer.developedBy">Muvazene v1.1 · Mehmet Tunahan Kandaz tarafından geliştirildi</span>
