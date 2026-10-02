@@ -264,6 +264,12 @@ export class UIManager {
     this.metricTotalExpense = document.getElementById('metric-total-expense');
     this.metricExpenseCount = document.getElementById('metric-expense-count');
 
+    // FAZ 5.7.4 Monthly Daily Spending (Hero Card 4)
+    this.metricMonthlyDailySpending = document.getElementById('metric-monthly-daily-spending');
+    this.badgeMonthlyDaysLeft = document.getElementById('badge-monthly-days-left');
+    this.metricMonthlyDailySub = document.getElementById('metric-monthly-daily-sub');
+    this.metricMonthlyPerDayUnit = document.getElementById('metric-monthly-per-day-unit');
+
     // Alert Banner
     this.budgetAlertBanner = document.getElementById('budget-alert-banner');
     this.alertBannerIconBox = document.getElementById('alert-banner-icon-box');
@@ -630,11 +636,11 @@ export class UIManager {
     return `${this.selectedMonth}-01`;
   }
 
-  render() {
+  render(now = new Date()) {
     if (typeof document === 'undefined') return;
     const transactions = this.store.getTransactions();
-    const currentMonth = this.selectedMonth || getCurrentYearMonth();
-    const summary = calculateSummary(transactions, new Date(), currentMonth);
+    const currentMonth = this.selectedMonth || getCurrentYearMonth(now);
+    const summary = calculateSummary(transactions, now, currentMonth);
     const settings = this.store.getSettings();
     const currency = settings.currency || 'TRY';
     const lang = getLanguage();
@@ -647,9 +653,9 @@ export class UIManager {
     }
 
     this.renderHeaderDate(lang);
-    this.renderDashboardCards(summary, currency, lang);
+    this.renderDashboardCards(summary, currency, lang, now);
     this.renderAlertBanner(summary);
-    this.renderFinancialOutlook(currency, lang);
+    this.renderFinancialOutlook(currency, lang, now);
     this.renderQuickPresets(currency, lang);
     this.renderCategoryFilterDropdown(lang);
     this.renderTransactions(currency, lang);
@@ -678,7 +684,7 @@ export class UIManager {
     }
   }
 
-  renderDashboardCards(summary, currency, lang) {
+  renderDashboardCards(summary, currency, lang, now = new Date()) {
     // 1. Kalan Net Bütçe
     if (this.metricNetBalance) {
       this.metricNetBalance.textContent = formatCurrency(summary.balance, currency, lang);
@@ -707,20 +713,7 @@ export class UIManager {
       this.badgeHealthStatus.textContent = badgeText;
     }
 
-    // 2. Günlük Güvenli Harcama Limiti
-    if (this.metricDailyLimit) {
-      this.metricDailyLimit.textContent = formatCurrency(summary.dailySafeSpendLimit, currency, lang);
-    }
-    if (this.badgeDaysLeft) {
-      this.badgeDaysLeft.textContent = t('cards.daysLeft', { days: summary.daysRemainingInMonth });
-    }
-    if (this.metricDailyTip) {
-      this.metricDailyTip.textContent = summary.balance <= 0
-        ? t('cards.dailyTipDeficit')
-        : t('cards.dailyTipNormal');
-    }
-
-    // 3. Bu Ay Gelir
+    // 2. Bu Ay Gelir
     if (this.metricTotalIncome) {
       this.metricTotalIncome.textContent = formatCurrency(summary.totalIncome, currency, lang);
     }
@@ -728,12 +721,76 @@ export class UIManager {
       this.metricIncomeCount.textContent = t('cards.itemsCount', { count: summary.incomeCount });
     }
 
-    // 4. Bu Ay Gider
+    // 3. Bu Ay Gider
     if (this.metricTotalExpense) {
       this.metricTotalExpense.textContent = formatCurrency(summary.totalExpense, currency, lang);
     }
     if (this.metricExpenseCount) {
       this.metricExpenseCount.textContent = t('cards.itemsCount', { count: summary.expenseCount });
+    }
+
+    // 4. Aylık Günlük Harcama (Hero Card 4)
+    const currentYM = getCurrentYearMonth(now);
+    const selectedYM = this.selectedMonth || currentYM;
+    const isCurrentMonth = selectedYM === currentYM;
+    const isHistorical = selectedYM < currentYM;
+    const isFuture = selectedYM > currentYM;
+
+    if (this.metricMonthlyDailySpending) {
+      if (isCurrentMonth) {
+        this.metricMonthlyDailySpending.textContent = formatCurrency(summary.dailySafeSpendLimit, currency, lang);
+        if (this.metricMonthlyPerDayUnit) {
+          this.metricMonthlyPerDayUnit.classList.remove('hidden');
+        }
+      } else {
+        this.metricMonthlyDailySpending.textContent = '—';
+        if (this.metricMonthlyPerDayUnit) {
+          this.metricMonthlyPerDayUnit.classList.add('hidden');
+        }
+      }
+    }
+
+    if (this.badgeMonthlyDaysLeft) {
+      if (isCurrentMonth) {
+        this.badgeMonthlyDaysLeft.textContent = t('cards.daysLeft', { days: summary.daysRemainingInMonth });
+      } else {
+        this.badgeMonthlyDaysLeft.textContent = '—';
+      }
+    }
+
+    if (this.metricMonthlyDailySub) {
+      if (isHistorical) {
+        this.metricMonthlyDailySub.textContent = t('cards.dailyTipHistorical');
+      } else if (isFuture) {
+        this.metricMonthlyDailySub.textContent = t('cards.dailyTipFuture');
+      } else {
+        this.metricMonthlyDailySub.textContent = summary.balance <= 0
+          ? t('cards.dailyTipDeficit')
+          : t('cards.dailyTipNormal');
+      }
+    }
+
+    // Legacy fallback (defensive for backward compatibility if old IDs are present)
+    if (this.metricDailyLimit) {
+      this.metricDailyLimit.textContent = isCurrentMonth
+        ? formatCurrency(summary.dailySafeSpendLimit, currency, lang)
+        : '—';
+    }
+    if (this.badgeDaysLeft) {
+      this.badgeDaysLeft.textContent = isCurrentMonth
+        ? t('cards.daysLeft', { days: summary.daysRemainingInMonth })
+        : '—';
+    }
+    if (this.metricDailyTip) {
+      if (isHistorical) {
+        this.metricDailyTip.textContent = t('cards.dailyTipHistorical');
+      } else if (isFuture) {
+        this.metricDailyTip.textContent = t('cards.dailyTipFuture');
+      } else {
+        this.metricDailyTip.textContent = summary.balance <= 0
+          ? t('cards.dailyTipDeficit')
+          : t('cards.dailyTipNormal');
+      }
     }
   }
 
@@ -1228,8 +1285,8 @@ export class UIManager {
       if (isConfirmModalOpen && el.closest('#confirm-modal')) {
         return;
       }
-      // DİKKAT: footer-privacy-text ve auth durum etiketleri dinamiktir; statik döngü ezmemeli!
-      if (el.id === 'footer-privacy-text' || el.id === 'header-auth-label' || el.id === 'header-auth-sub') {
+      // DİKKAT: footer-privacy-text, auth durum ve dinamik hero kart alt metinleri statik döngü tarafından ezilmemeli!
+      if (el.id === 'footer-privacy-text' || el.id === 'header-auth-label' || el.id === 'header-auth-sub' || el.id === 'metric-monthly-daily-sub' || el.id === 'metric-daily-tip') {
         return;
       }
       const key = el.getAttribute('data-i18n');

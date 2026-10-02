@@ -220,8 +220,8 @@
       </button>
     </section>
 
-    <!-- HERO DASHBOARD: 3 SUMMARY METRIC CARDS -->
-    <section class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+    <!-- HERO DASHBOARD: 4 SUMMARY METRIC CARDS -->
+    <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
       
       <!-- 1. Kalan Bütçe (Net Balance) -->
       <div class="transition-card bg-white dark:bg-[#171D19] p-4 sm:p-5 rounded-xl border border-[#DDDCD5] dark:border-[#27332B] shadow-xs flex flex-col justify-between overflow-hidden">
@@ -289,6 +289,30 @@
         <div class="mt-3.5 pt-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
           <span data-i18n="cards.expenseCount">Gider Adedi:</span>
           <span id="metric-expense-count" class="font-bold text-slate-700 dark:text-slate-200">0 adet</span>
+        </div>
+      </div>
+
+      <!-- 4. Aylık Günlük Harcama -->
+      <div class="transition-card bg-white dark:bg-[#171D19] p-4 sm:p-5 rounded-xl border border-[#DDDCD5] dark:border-[#27332B] shadow-xs flex flex-col justify-between overflow-hidden">
+        <div>
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400" data-i18n="cards.dailyLimit">Aylık Günlük Harcama</span>
+            <span id="badge-monthly-days-left" class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+              --
+            </span>
+          </div>
+          <div class="mt-2.5">
+            <div class="flex items-baseline space-x-1">
+              <span id="metric-monthly-daily-spending" class="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white truncate block tabular-nums">
+                0,00 ₺
+              </span>
+              <span id="metric-monthly-per-day-unit" class="text-xs font-medium text-slate-500 dark:text-slate-400" data-i18n="cards.perDay">/ gün</span>
+            </div>
+          </div>
+        </div>
+        <div class="mt-3.5 pt-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+          <span id="metric-monthly-daily-sub" class="truncate" data-i18n="cards.dailyTipNormal">Ay sonuna kadar</span>
+          <i data-lucide="calendar" class="w-3.5 h-3.5 text-slate-400 shrink-0 ml-1"></i>
         </div>
       </div>
 
