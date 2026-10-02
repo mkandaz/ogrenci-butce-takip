@@ -9335,11 +9335,12 @@ console.log('\n--- 28. FAZ 5.5C — STUDENT FINANCIAL COMMAND CENTER UI (TC-366 
   assert(indexHtml.includes('data-i18n="financialOutlook.safeDailySpendTitle"'), 'TC-388 safeDailySpendTitle data-i18n tag exists');
   assert(indexHtml.includes('data-i18n="financialOutlook.safeDailySpendSub"'), 'TC-388 safeDailySpendSub data-i18n tag exists');
 
-  // 3. Remaining 3 hero cards balanced in 3-column responsive grid
-  assert(indexHtml.includes('grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4'), 'TC-388 Hero summary grid uses 3 balanced columns (sm:grid-cols-3)');
+  // 3. Hero summary grid restored to 4-column responsive layout (FAZ 5.7.4)
+  assert(indexHtml.includes('grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4'), 'TC-388 Hero summary grid uses responsive 4-column layout (sm:grid-cols-2 lg:grid-cols-4)');
   assert(indexHtml.includes('id="metric-net-balance"'), 'TC-388 Hero card 1 (Net Balance) exists');
   assert(indexHtml.includes('id="metric-total-income"'), 'TC-388 Hero card 2 (Total Income) exists');
   assert(indexHtml.includes('id="metric-total-expense"'), 'TC-388 Hero card 3 (Total Expense) exists');
+  assert(indexHtml.includes('id="metric-monthly-daily-spending"'), 'TC-388 Hero card 4 (Monthly Daily Spending) exists');
 
   // 4. Financial Outlook compactness
   assert(indexHtml.includes('id="financial-outlook-section"') && indexHtml.includes('p-3.5 sm:p-4'), 'TC-388 Financial Outlook has compact padding (p-3.5 sm:p-4)');
@@ -10843,6 +10844,190 @@ console.log('\n--- 34. FAZ 5.7.3 — TIME MODEL, MONTH ROLLOVER & CASHFLOW QA (T
   });
   // Next income: Oct 6, daysUntil = 5. Available = 1000, obligations = 0 => 1000 / 5 = 200/day
   assert(testPlan.spending.safeDailySpendUntilNextIncome === 200, 'TC-395-E Planner math contract unchanged (1000 / 5 days = 200 TL/day)');
+}
+
+// TC-396: FAZ 5.7.4 — RESTORE MONTHLY DAILY SPENDING SUMMARY CARD
+console.log('\n--- 35. FAZ 5.7.4 — RESTORE MONTHLY DAILY SPENDING SUMMARY CARD (TC-396) ---');
+{
+  const indexHtml = fs.readFileSync(path.join(process.cwd(), 'index.html'), 'utf-8');
+
+  // A. Positive balance: remaining budget = 9300, valid remaining days = N => 9300 / N
+  // On 2026-10-02 (October has 31 days): remaining days = 31 - 2 + 1 = 30.
+  const txsPositive = [
+    { id: 'tx-1', title: 'Maaş', amount: 10000, type: 'income', date: '2026-10-01' },
+    { id: 'tx-2', title: 'Market', amount: 700, type: 'expense', date: '2026-10-02' }
+  ];
+  const refOct2 = new Date('2026-10-02T12:00:00');
+  const summaryOct2 = calculateSummary(txsPositive, refOct2, '2026-10');
+  assert(summaryOct2.balance === 9300, 'TC-396-A Net balance is 9300');
+  assert(summaryOct2.daysRemainingInMonth === 30, 'TC-396-A Remaining days in October from Oct 2 inclusive is 30');
+  // 9300 / 30 = 310
+  assert(summaryOct2.dailySafeSpendLimit === 310, 'TC-396-A Expected daily spending is 9300 / 30 = 310 TL/day');
+
+  // B. Negative balance: remaining budget = -1000 => 0 daily spending
+  const txsNegative = [
+    { id: 'tx-1', title: 'Gelir', amount: 2000, type: 'income', date: '2026-10-01' },
+    { id: 'tx-2', title: 'Kira', amount: 3000, type: 'expense', date: '2026-10-02' }
+  ];
+  const summaryNeg = calculateSummary(txsNegative, refOct2, '2026-10');
+  assert(summaryNeg.balance === -1000, 'TC-396-B Net balance is -1000');
+  assert(summaryNeg.dailySafeSpendLimit === 0, 'TC-396-B Expected daily spending for negative balance is 0');
+
+  // C. Zero balance => 0 daily spending
+  const txsZero = [
+    { id: 'tx-1', title: 'Gelir', amount: 1500, type: 'income', date: '2026-10-01' },
+    { id: 'tx-2', title: 'Gider', amount: 1500, type: 'expense', date: '2026-10-02' }
+  ];
+  const summaryZero = calculateSummary(txsZero, refOct2, '2026-10');
+  assert(summaryZero.balance === 0, 'TC-396-C Net balance is 0');
+  assert(summaryZero.dailySafeSpendLimit === 0, 'TC-396-C Expected daily spending for zero balance is 0');
+
+  // D. Month rollover: Sep 30 vs Oct 1 local calendar time
+  // Sep 30: September has 30 days => 30 - 30 + 1 = 1 day remaining
+  const refSep30 = new Date('2026-09-30T14:00:00');
+  const daysSep30 = getDaysRemainingInMonth(refSep30, '2026-09');
+  assert(daysSep30 === 1, 'TC-396-D Sep 30 has 1 day remaining in September');
+  // Oct 1: October has 31 days => 31 - 1 + 1 = 31 days remaining
+  const refOct1 = new Date('2026-10-01T09:00:00');
+  const daysOct1 = getDaysRemainingInMonth(refOct1, '2026-10');
+  assert(daysOct1 === 31, 'TC-396-D Oct 1 has 31 days remaining in October');
+
+  // E. Metric isolation: Changing planned_cashflows must NOT alter Aylık Günlük Harcama
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem('student_budget_outbox');
+  SafeStorage.removeItem('student_budget_planned_outbox');
+  const storeIso = new BudgetStore();
+  storeIso.addTransaction({ id: 'tx-1', title: 'Maaş', amount: 9300, type: 'income', categoryId: 'inc_salary', date: '2026-10-01' });
+  const summaryBefore = calculateSummary(storeIso.getTransactions(), refOct2, '2026-10');
+  assert(summaryBefore.dailySafeSpendLimit === 310, 'TC-396-E Initial monthly daily limit is 310');
+
+  // Add multiple planned cashflows
+  storeIso.addPlannedCashflow({
+    name: 'Gelecek Burs',
+    amount: 5000,
+    type: 'income',
+    recurrence: 'monthly',
+    dayOfMonth: 15
+  });
+  storeIso.addPlannedCashflow({
+    name: 'Gelecek Fatura',
+    amount: 1500,
+    type: 'expense',
+    recurrence: 'once',
+    date: '2026-10-20'
+  });
+  const summaryAfter = calculateSummary(storeIso.getTransactions(), refOct2, '2026-10');
+  assert(summaryAfter.dailySafeSpendLimit === 310, 'TC-396-E Adding planned cashflows does NOT alter monthly daily spending');
+  assert(summaryAfter.balance === 9300, 'TC-396-E Adding planned cashflows does NOT alter remaining balance');
+
+  // F. Safe Daily Spending isolation:
+  // Financial Outlook safe daily spend (next-income based) vs Monthly daily spend (month-end based)
+  const outlookVM = getFinancialOutlookViewModel({
+    store: storeIso,
+    selectedMonth: '2026-10',
+    now: refOct2
+  });
+  assert(outlookVM.safeDailySpend !== null, 'TC-396-F Outlook computes next-income safe daily spend');
+  assert(summaryAfter.dailySafeSpendLimit === 310, 'TC-396-F Monthly daily spend strictly answers until month end (310 TL/day)');
+
+  // G. Historical and Future month non-actionable state
+  const originalDoc = globalThis.document;
+  const mockElements = {
+    'metric-net-balance': { textContent: '' },
+    'badge-carried-balance': { textContent: '' },
+    'metric-spent-percent': { textContent: '' },
+    'badge-health-status': { className: '', textContent: '' },
+    'metric-total-income': { textContent: '' },
+    'metric-income-count': { textContent: '' },
+    'metric-total-expense': { textContent: '' },
+    'metric-expense-count': { textContent: '' },
+    'metric-monthly-daily-spending': { textContent: '' },
+    'badge-monthly-days-left': { textContent: '' },
+    'metric-monthly-daily-sub': { textContent: '' },
+    'metric-monthly-per-day-unit': {
+      _classes: new Set(),
+      classList: {
+        add(c) { this._classes.add(c); },
+        remove(c) { this._classes.delete(c); },
+        contains(c) { return this._classes.has(c); },
+        _classes: new Set()
+      }
+    }
+  };
+  globalThis.document = {
+    getElementById: (id) => mockElements[id] || null,
+    querySelectorAll: () => [],
+    createElement: () => ({ classList: { add() {}, remove() {}, contains() { return false; } }, dataset: {}, addEventListener: () => {} }),
+    documentElement: { classList: { add() {}, remove() {}, contains() { return false; } } },
+    body: { classList: { add() {}, remove() {}, contains() { return false; } } },
+    addEventListener: () => {},
+    removeEventListener: () => {}
+  };
+
+  const uiTest = new UIManager(storeIso);
+
+  // 1. Current month render (2026-10 with now = 2026-10-02)
+  setLanguage('tr');
+  uiTest.selectedMonth = '2026-10';
+  uiTest.renderDashboardCards(summaryAfter, 'TRY', 'tr', refOct2);
+  assert(mockElements['metric-monthly-daily-spending'].textContent.includes('310,00'), 'TC-396-G Current month displays formatted daily spending 310,00 ₺');
+  assert(mockElements['badge-monthly-days-left'].textContent === '30 Gün Kaldı', 'TC-396-G Current month displays 30 Gün Kaldı');
+  assert(mockElements['metric-monthly-daily-sub'].textContent === 'Ay sonuna kadar', 'TC-396-G Current month displays Ay sonuna kadar');
+  assert(!mockElements['metric-monthly-per-day-unit'].classList.contains('hidden'), 'TC-396-G Current month shows / gün unit');
+
+  // 2. Historical month render (2026-09 with now = 2026-10-02)
+  uiTest.selectedMonth = '2026-09';
+  const summaryHist = calculateSummary(storeIso.getTransactions(), refOct2, '2026-09');
+  uiTest.renderDashboardCards(summaryHist, 'TRY', 'tr', refOct2);
+  assert(mockElements['metric-monthly-daily-spending'].textContent === '—', 'TC-396-G Historical month displays non-actionable —');
+  assert(mockElements['badge-monthly-days-left'].textContent === '—', 'TC-396-G Historical month displays — badge');
+  assert(mockElements['metric-monthly-daily-sub'].textContent === 'Geçmiş ay', 'TC-396-G Historical month displays Geçmiş ay in TR');
+  assert(mockElements['metric-monthly-per-day-unit'].classList.contains('hidden'), 'TC-396-G Historical month hides / gün unit');
+
+  // 3. Future month render (2026-11 with now = 2026-10-02)
+  uiTest.selectedMonth = '2026-11';
+  const summaryFut = calculateSummary(storeIso.getTransactions(), refOct2, '2026-11');
+  uiTest.renderDashboardCards(summaryFut, 'TRY', 'tr', refOct2);
+  assert(mockElements['metric-monthly-daily-spending'].textContent === '—', 'TC-396-G Future month displays non-actionable —');
+  assert(mockElements['badge-monthly-days-left'].textContent === '—', 'TC-396-G Future month displays — badge');
+  assert(mockElements['metric-monthly-daily-sub'].textContent === 'Gelecek ay', 'TC-396-G Future month displays Gelecek ay in TR');
+  assert(mockElements['metric-monthly-per-day-unit'].classList.contains('hidden'), 'TC-396-G Future month hides / gün unit');
+
+  // H. TR / EN Rendering verification
+  assert(tr.cards.dailyLimit === 'Aylık Günlük Harcama', 'TC-396-H TR cards.dailyLimit is Aylık Günlük Harcama');
+  assert(tr.cards.dailyTipNormal === 'Ay sonuna kadar', 'TC-396-H TR cards.dailyTipNormal is Ay sonuna kadar');
+  assert(tr.cards.dailyTipHistorical === 'Geçmiş ay', 'TC-396-H TR cards.dailyTipHistorical is Geçmiş ay');
+  assert(tr.cards.dailyTipFuture === 'Gelecek ay', 'TC-396-H TR cards.dailyTipFuture is Gelecek ay');
+
+  assert(en.cards.dailyLimit === 'Monthly Daily Spending', 'TC-396-H EN cards.dailyLimit is Monthly Daily Spending');
+  assert(en.cards.dailyTipNormal === 'Until month end', 'TC-396-H EN cards.dailyTipNormal is Until month end');
+  assert(en.cards.dailyTipHistorical === 'Historical month', 'TC-396-H EN cards.dailyTipHistorical is Historical month');
+  assert(en.cards.dailyTipFuture === 'Future month', 'TC-396-H EN cards.dailyTipFuture is Future month');
+
+  // English render test
+  setLanguage('en');
+  uiTest.selectedMonth = '2026-10';
+  uiTest.renderDashboardCards(summaryAfter, 'USD', 'en', refOct2);
+  assert(mockElements['badge-monthly-days-left'].textContent === '30 Days Left', 'TC-396-H English displays 30 Days Left');
+  assert(mockElements['metric-monthly-daily-sub'].textContent === 'Until month end', 'TC-396-H English displays Until month end');
+
+  uiTest.selectedMonth = '2026-09';
+  uiTest.renderDashboardCards(summaryHist, 'USD', 'en', refOct2);
+  assert(mockElements['metric-monthly-daily-sub'].textContent === 'Historical month', 'TC-396-H English historical displays Historical month');
+
+  setLanguage('tr');
+
+  // I. Desktop 4-column layout & DOM semantics
+  assert(indexHtml.includes('grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4'), 'TC-396-I Responsive 4-column layout class present');
+  assert(indexHtml.includes('id="metric-monthly-daily-spending"'), 'TC-396-I metric-monthly-daily-spending ID present');
+  assert(indexHtml.includes('id="badge-monthly-days-left"'), 'TC-396-I badge-monthly-days-left ID present');
+  assert(indexHtml.includes('id="metric-monthly-daily-sub"'), 'TC-396-I metric-monthly-daily-sub ID present');
+  assert(indexHtml.includes('id="metric-monthly-per-day-unit"'), 'TC-396-I metric-monthly-per-day-unit ID present');
+  assert(!indexHtml.includes('id="star-card-container"'), 'TC-396-I Old star-card-container absent');
+  assert(!indexHtml.includes('from-indigo-600 via-indigo-700 to-violet-800'), 'TC-396-I Old purple gradient styling absent');
+
+  globalThis.document = originalDoc;
 }
 
 console.log('\n====================================================');
