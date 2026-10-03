@@ -1,0 +1,18 @@
+{
+  "cleanUrls": true,
+  "trailingSlash": false,
+  "rewrites": [
+    {
+      "source": "/hakkinda",
+      "destination": "/hakkinda/index.html"
+    },
+    {
+      "source": "/nasil-calisir",
+      "destination": "/nasil-calisir/index.html"
+    },
+    {
+      "source": "/gizlilik",
+      "destination": "/gizlilik/index.html"
+    }
+  ]
+}

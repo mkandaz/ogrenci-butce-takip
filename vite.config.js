@@ -1,17 +1,46 @@
+import fs from 'fs';
+import { resolve } from 'path';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
+function multiPageCleanUrlsPlugin() {
+  return {
+    name: 'multi-page-clean-urls',
+    closeBundle() {
+      const pages = ['hakkinda', 'nasil-calisir', 'gizlilik'];
+      pages.forEach(p => {
+        const nested = resolve(__dirname, `dist/${p}/index.html`);
+        const flat = resolve(__dirname, `dist/${p}.html`);
+        if (fs.existsSync(nested)) {
+          fs.copyFileSync(nested, flat);
+        }
+      });
+    }
+  };
+}
+
 export default defineConfig({
+  build: {
+    rollupOptions: {
+      input: {
+        main: resolve(__dirname, 'index.html'),
+        hakkinda: resolve(__dirname, 'hakkinda/index.html'),
+        nasilCalisir: resolve(__dirname, 'nasil-calisir/index.html'),
+        gizlilik: resolve(__dirname, 'gizlilik/index.html')
+      }
+    }
+  },
   plugins: [
+    multiPageCleanUrlsPlugin(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'icons/*.png'],
+      includeAssets: ['favicon.svg', 'favicon-32x32.png', 'apple-touch-icon.png', 'icons/*.png', 'brand/*.svg', 'og-image.png'],
       manifest: {
-        name: 'Öğrenci Bütçem - Akıllı & Güvenli Bütçe Takip Sistemi',
-        short_name: 'Öğrenci Bütçem',
-        description: 'Üniversite öğrencileri için günlük güvenli harcama limitli, modern ve çevrimdışı bütçe takip uygulaması.',
-        theme_color: '#4f46e5',
-        background_color: '#0f172a',
+        name: 'Muvazene — Bütçeni Gör, Sonrasını Dengele',
+        short_name: 'Muvazene',
+        description: 'Kişisel Bütçe ve Nakit Akışı Planlama',
+        theme_color: '#356B57',
+        background_color: '#F6F5F1',
         display: 'standalone',
         orientation: 'portrait',
         start_url: '/',
@@ -29,14 +58,22 @@ export default defineConfig({
             type: 'image/png'
           },
           {
-            src: '/icons/icon-512x512.png',
+            src: '/icons/icon-maskable-192x192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'maskable'
+          },
+          {
+            src: '/icons/icon-maskable-512x512.png',
             sizes: '512x512',
             type: 'image/png',
-            purpose: 'any maskable'
+            purpose: 'maskable'
           }
         ]
       },
       workbox: {
+        navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/^\/(hakkinda|nasil-calisir|gizlilik)($|\/)/],
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
         runtimeCaching: [
           {

@@ -1,8 +1,10 @@
 export default {
   brand: {
-    title: 'Öğrenci Bütçem',
+    title: 'Muvazene',
+    browserTitle: 'Muvazene | Kişisel Bütçe Takip ve Nakit Akışı Planlama',
     version: 'v1.1',
-    subtitle: 'Akıllı & Güvenli Bütçe Takip Rehberi'
+    subtitle: 'Bugünü gör. Sonrasını dengele.',
+    slogan: 'Bugünü gör. Sonrasını dengele.'
   },
   nav: {
     prevMonth: 'Önceki Ay',
@@ -40,11 +42,13 @@ export default {
     netBalance: 'Kalan Net Bütçe',
     carriedOver: 'Devreden:',
     spentRatio: 'Harcama:',
-    dailyLimit: 'Günlük Güvenli Limit',
+    dailyLimit: 'Aylık Günlük Harcama',
     daysLeft: '{days} Gün Kaldı',
     perDay: '/ gün',
-    dailyTipNormal: 'Bugün için önerilen harcama limiti',
+    dailyTipNormal: 'Ay sonuna kadar',
     dailyTipDeficit: 'Bütçe tükendi! Harcama sınırı kalmadı',
+    dailyTipHistorical: 'Geçmiş ay',
+    dailyTipFuture: 'Gelecek ay',
     thisMonthIncome: 'Bu Ay Gelir',
     thisMonthExpense: 'Bu Ay Gider',
     txCount: 'İşlem Sayısı:',
@@ -146,11 +150,11 @@ export default {
     resetDesc: 'Tüm mevcut işlemleriniz silinecek ve başlangıç (Onboarding) ekranına dönülecektir. Kişisel bütçenizi yeniden kurabilir veya demo verilerini seçebilirsiniz. Devam etmek istiyor musunuz?'
   },
   onboarding: {
-    title: "Öğrenci Bütçem'e Hoş Geldin!",
-    desc: 'Bütçeni kontrol altına alıp harcamalarını akıllıca yönetmeye hazır mısın? Nasıl başlamak istediğini seç:',
+    title: "Muvazene'ye Hoş Geldin!",
+    desc: 'Bugünü gör. Sonrasını dengele. Bütçeni akıllıca yönetmeye hazır mısın? Nasıl başlamak istediğini seç:',
     demoCardBadge: 'Hızlı Keşif',
     demoCardTitle: 'Demo Verilerle Dene',
-    demoCardDesc: 'KYK bursu, yurt kirası, yemekhane ve market gibi gerçekçi öğrenci verileriyle tüm grafikleri ve günlük limit hesaplamalarını hemen gör.',
+    demoCardDesc: 'KYK bursu, yurt kirası, yemekhane ve market gibi gerçekçi bütçe verileriyle tüm grafikleri ve günlük limit hesaplamalarını hemen gör.',
     demoCardBtn: 'Demo ile Başla',
     customCardBadge: 'Kişisel Başlangıç',
     customCardTitle: 'Kendi Bütçemle Başla',
@@ -161,11 +165,14 @@ export default {
     monthlyIncomePlaceholder: 'Örn: 4000 (KYK/Aile)',
     targetMonthLabel: 'Takip Edilecek Ay',
     customSubmitBtn: 'Kişisel Bütçemi Başlat',
-    privacyNote: 'Tüm verileriniz yalnızca tarayıcınızın yerel hafızasında saklanır. Hesap açma veya giriş gerekmez.'
+    privacyNote: 'Verileriniz yalnızca bu cihazda saklanır. Hesap açma veya giriş gerekmez.'
   },
   footer: {
-    privacy: 'Gizlilik Odaklı: Verileriniz sunucuya gitmez, yalnızca cihazınızda (LocalStorage) saklanır.',
-    copyright: 'Öğrenci Bütçe Takip Sistemi © 2026'
+    privacy: 'Verileriniz yalnızca bu cihazda saklanır.',
+    privacyLocal: 'Verileriniz yalnızca bu cihazda saklanır.',
+    privacyCloud: 'Verileriniz hesabınızla cihazlarınız arasında senkronize edilir.',
+    developedBy: 'Muvazene v1.1 · Mehmet Tunahan Kandaz tarafından geliştirildi',
+    copyright: 'Muvazene v1.1 · Mehmet Tunahan Kandaz tarafından geliştirildi'
   },
   categories: {
     inc_kyk: 'KYK Burs / Kredi',
@@ -191,15 +198,17 @@ export default {
     modalTitle: 'Verilerini nasıl saklamak istersin?',
     modalDesc: 'Verilerini güvenle yedekle veya üyeliksiz bu cihazda tut.',
     googleBtn: 'Google ile devam et',
-    googleSubtext: 'Verilerini güvenle yedekle ve cihazların arasında senkronize et.',
+    googleSubtext: 'Verilerini hesabınla cihazların arasında senkronize et.',
     orDivider: 'veya',
     guestBtn: 'Üyeliksiz devam et',
-    guestSubtext: 'Verilerin yalnızca bu cihazda saklanır.',
-    localModeBadge: 'Yerel mod',
-    localModeTooltip: 'Veriler yalnızca bu cihazda saklanıyor.',
-    localDeviceBadge: 'Yerel mod',
+    guestSubtext: 'Hesap oluşturmadan bu cihazda kullan.',
+    localModeBadge: 'Yerel kullanım',
+    localModeTooltip: 'Veriler yalnızca bu cihazda saklanıyor. Bulut eşitleme için tıklayın.',
+    localDeviceBadge: 'Yerel kullanım',
+    accountGuestPrimary: 'Yerel kullanım',
+    accountGuestSecondary: 'Bu cihazda',
     redirecting: 'Google\'a yönlendiriliyor...',
-    emailLabel: 'Öğrenci / Kişisel E-posta',
+    emailLabel: 'Kişisel E-posta',
     emailPlaceholder: 'ornek@universite.edu.tr',
     sendMagicLink: 'Giriş Bağlantısı Gönder',
     sending: 'Gönderiliyor...',
@@ -235,13 +244,13 @@ export default {
     subtitle: 'Deterministik nakit akışı ve harcama projeksiyonu',
     currentBadge: 'Bugünkü finansal durum — Seçili ay görünümünden bağımsızdır.',
     historicalNotice: 'Geçmiş ay inceleniyor. Aşağıdaki planlı nakit akışı ve sonraki gelir bugünkü gerçek takvimi yansıtır.',
-    manageCashflows: 'Planlı Gelir / Giderleri Yönet',
+    manageCashflows: 'Planları Yönet',
     nextIncomeTitle: 'Bir Sonraki Gelir',
     noNextIncome: 'Planlı gelir yok',
     noNextIncomeSub: 'Plan ekleyerek güvenli limiti hesaplayın',
     daysRemaining: '{days} gün kaldı',
     daysRemainingToday: 'Bugün bekleniyor',
-    safeDailySpendTitle: 'Güvenli Günlük Limit',
+    safeDailySpendTitle: 'Güvenli Günlük Harcama',
     safeDailySpendSub: 'Bir sonraki gelire kadar',
     currentPaceTitle: 'Mevcut Harcama Hızı',
     currentPaceSub: 'Son harcama trendine göre',
@@ -254,7 +263,7 @@ export default {
     noInsights: 'Henüz belirgin bir içgörü bulunmuyor.',
     daysCount: '{days} gün kaldı',
     obligationsReserved: 'Ayrılan yükümlülükler: {amount}',
-    upcomingTimelineTitle: 'Yaklaşan Planlı Akışlar',
+    upcomingTimelineTitle: 'Yaklaşan Akışlar',
     noTimeline: 'Yaklaşan planlı akış bulunmuyor.',
     emptyTitle: 'Nakit Akışınızı Planlayın',
     emptyDesc: 'Bir sonraki burs, kira veya düzenli ödemenizi ekleyerek gelir gününe kadar ne kadar harcama alanınız olduğunu görebilirsiniz.',
@@ -356,7 +365,7 @@ export default {
     decision: {
       sectionTitle: 'Bir Sonraki Gelire Kadar',
       sectionSubtitle: 'Nakit akışı ve planlı ödemelere etkisi',
-      safeDailySpend: 'Güvenli Günlük Limit',
+      safeDailySpend: 'Güvenli Günlük Harcama',
       safeDailySpendSub: 'Bir sonraki gelire kadar harcanabilir tutar',
       coverageStatus: 'Nakit Kaplama Durumu',
       preIncomeBalance: 'Gelir Öncesi Tahmini Bakiye',
@@ -440,5 +449,20 @@ export default {
     },
     reset: 'Yeni Senaryo',
     close: 'Tamam'
+  },
+  seo: {
+    metaDescription: 'Gelir ve giderlerini takip et, planlı ödemelerini yönet, nakit akışını gör ve harcamalarının gelecekteki bütçene etkisini Muvazene ile hesapla.',
+    h1: 'Bütçeni gör. Sonrasını dengele.',
+    supportingCopy: 'Muvazene sadece geçmiş harcamaları listeleyen bir bütçe defteri değildir. Gelir ve gider takibinin ötesine geçerek planlı nakit akışlarını, bir sonraki gelire kadar olan güvenli harcama hızını ve What-If senaryolarıyla harcama kararlarının ay sonu bakiyesine etkisini analiz eden akıllı finansal karar destek sistemidir.',
+    features: {
+      trackingTitle: 'Gelir ve Gider Takibi',
+      trackingDesc: 'Günlük harcamalarınızı ve gelirlerinizi kategorize ederek kaydedin, kalan bütçenizi anlık takip edin.',
+      cashflowTitle: 'Planlı Nakit Akışları',
+      cashflowDesc: 'Kira, fatura, burs veya maaş gibi beklenen nakit akışlarını tanımlayın, ödeme takvimini önceden görün.',
+      forecastTitle: 'Ay sonu harcama tahmini',
+      forecastDesc: 'Mevcut harcama hızınıza göre ay sonu olası bakiyenizi öngörün ve bütçenizi aşmadan önlem alın.',
+      whatifTitle: 'What-If / Harcama Senaryoları',
+      whatifDesc: 'Büyük bir harcama yapmadan önce simülasyon çalıştırın; güvenli limitinizin ve nakit akışınızın nasıl etkilendiğini anında görün.'
+    }
   }
 };

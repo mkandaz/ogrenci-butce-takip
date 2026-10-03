@@ -117,7 +117,9 @@ export class UIManager {
     this.store = store;
     this.authService = options.authService || authService;
     this.syncService = options.syncService || new SyncService(this.store);
-    this.selectedMonth = this.store.state.settings.targetMonth || getCurrentYearMonth();
+    const initialNow = options.now instanceof Date ? options.now : (options.now ? new Date(options.now) : null);
+    const currentLocalMonth = getCurrentYearMonth(initialNow || new Date());
+    this.selectedMonth = options.selectedMonth || currentLocalMonth;
     this.activeFilter = 'all'; // 'all' | 'income' | 'expense'
     this.searchQuery = '';
     this.categoryFilter = '';
@@ -136,6 +138,10 @@ export class UIManager {
       this.initTheme();
       this.bindEvents();
 
+      this.currentUser = (this.authService && typeof this.authService.getUser === 'function')
+        ? this.authService.getUser()
+        : null;
+
       this.authService.onAuthStateChange((user) => {
         this.renderAuthBadge(user);
         if (user) {
@@ -150,16 +156,21 @@ export class UIManager {
 
       this.store.subscribe(() => {
         this.render();
+        this.renderAuthBadge(this.getCurrentUser());
       });
 
       onLanguageChange(() => {
         this.render();
+        this.renderAuthBadge(this.getCurrentUser());
       });
 
       this.render();
-      this.renderAuthBadge(this.authService.getUser());
+      this.renderAuthBadge(this.getCurrentUser());
       this.renderSyncStatus(this.syncService.getStatus());
     } else {
+      this.currentUser = (this.authService && typeof this.authService.getUser === 'function')
+        ? this.authService.getUser()
+        : null;
       this.modalManager = {
         openOnboardingModal: () => {},
         closeOnboardingModal: () => {},
@@ -176,29 +187,22 @@ export class UIManager {
   }
 
   async initBootstrap() {
-    // 1. Eğer yerel veride kullanıcı zaten onboarded ise, onboarding gösterme
-    if (this.store.state.onboarded) {
-      return;
-    }
-
-    // 2. Supabase yapılandırılmışsa, session ve auth durumunu bekle
+    // 1. Supabase yapılandırılmışsa, session ve auth durumunu bekle
     if (this.authService && this.authService.isConfigured()) {
       try {
         const user = await this.authService.waitForAuth();
         if (user) {
+          this.currentUser = user;
           this.renderAuthBadge(user);
           this.renderSyncStatus('syncing', 'Bulut verileri eşitleniyor...');
           await this.syncService.sync(user);
-          if (this.store.state.settings?.targetMonth) {
-            this.selectedMonth = this.store.state.settings.targetMonth;
-          }
         }
       } catch (err) {
         console.warn('[UIManager] Başlangıç auth/sync uyarısı:', err);
       }
     }
 
-    // 3. Karar anı:
+    // 2. Karar anı:
     // Eğer cloud bootstrap veya yerel veriden onboarded true geldiyse onboarding açılmaz!
     if (this.store.state.onboarded) {
       if (typeof this.modalManager?.closeOnboardingModal === 'function') {
@@ -212,6 +216,7 @@ export class UIManager {
     }
 
     this.render();
+    this.renderAuthBadge(this.getCurrentUser());
   }
 
   cacheElements() {
@@ -242,6 +247,7 @@ export class UIManager {
     this.userAvatarImg = document.getElementById('user-avatar-img');
     this.btnSignOut = document.getElementById('btn-sign-out');
     this.btnManualSync = document.getElementById('btn-manual-sync');
+    this.landingOnboardingCta = document.getElementById('landing-onboarding-cta');
 
     // Language & Currency Selector (Header'a eklenecek)
     this.currencySelect = document.getElementById('currency-select');
@@ -259,6 +265,12 @@ export class UIManager {
     this.metricIncomeCount = document.getElementById('metric-income-count');
     this.metricTotalExpense = document.getElementById('metric-total-expense');
     this.metricExpenseCount = document.getElementById('metric-expense-count');
+
+    // FAZ 5.7.4 Monthly Daily Spending (Hero Card 4)
+    this.metricMonthlyDailySpending = document.getElementById('metric-monthly-daily-spending');
+    this.badgeMonthlyDaysLeft = document.getElementById('badge-monthly-days-left');
+    this.metricMonthlyDailySub = document.getElementById('metric-monthly-daily-sub');
+    this.metricMonthlyPerDayUnit = document.getElementById('metric-monthly-per-day-unit');
 
     // Alert Banner
     this.budgetAlertBanner = document.getElementById('budget-alert-banner');
@@ -626,11 +638,11 @@ export class UIManager {
     return `${this.selectedMonth}-01`;
   }
 
-  render() {
+  render(now = new Date()) {
     if (typeof document === 'undefined') return;
     const transactions = this.store.getTransactions();
-    const currentMonth = this.selectedMonth || getCurrentYearMonth();
-    const summary = calculateSummary(transactions, new Date(), currentMonth);
+    const currentMonth = this.selectedMonth || getCurrentYearMonth(now);
+    const summary = calculateSummary(transactions, now, currentMonth);
     const settings = this.store.getSettings();
     const currency = settings.currency || 'TRY';
     const lang = getLanguage();
@@ -643,15 +655,16 @@ export class UIManager {
     }
 
     this.renderHeaderDate(lang);
-    this.renderDashboardCards(summary, currency, lang);
+    this.renderDashboardCards(summary, currency, lang, now);
     this.renderAlertBanner(summary);
-    this.renderFinancialOutlook(currency, lang);
+    this.renderFinancialOutlook(currency, lang, now);
     this.renderQuickPresets(currency, lang);
     this.renderCategoryFilterDropdown(lang);
     this.renderTransactions(currency, lang);
     this.renderCharts(transactions, summary, currency, lang);
     this.updateCurrencySymbols(currency);
     this.updateStaticTranslations();
+    this.renderLandingOnboardingCta();
     this.refreshIcons();
   }
 
@@ -674,7 +687,7 @@ export class UIManager {
     }
   }
 
-  renderDashboardCards(summary, currency, lang) {
+  renderDashboardCards(summary, currency, lang, now = new Date()) {
     // 1. Kalan Net Bütçe
     if (this.metricNetBalance) {
       this.metricNetBalance.textContent = formatCurrency(summary.balance, currency, lang);
@@ -703,20 +716,7 @@ export class UIManager {
       this.badgeHealthStatus.textContent = badgeText;
     }
 
-    // 2. Günlük Güvenli Harcama Limiti
-    if (this.metricDailyLimit) {
-      this.metricDailyLimit.textContent = formatCurrency(summary.dailySafeSpendLimit, currency, lang);
-    }
-    if (this.badgeDaysLeft) {
-      this.badgeDaysLeft.textContent = t('cards.daysLeft', { days: summary.daysRemainingInMonth });
-    }
-    if (this.metricDailyTip) {
-      this.metricDailyTip.textContent = summary.balance <= 0
-        ? t('cards.dailyTipDeficit')
-        : t('cards.dailyTipNormal');
-    }
-
-    // 3. Bu Ay Gelir
+    // 2. Bu Ay Gelir
     if (this.metricTotalIncome) {
       this.metricTotalIncome.textContent = formatCurrency(summary.totalIncome, currency, lang);
     }
@@ -724,12 +724,76 @@ export class UIManager {
       this.metricIncomeCount.textContent = t('cards.itemsCount', { count: summary.incomeCount });
     }
 
-    // 4. Bu Ay Gider
+    // 3. Bu Ay Gider
     if (this.metricTotalExpense) {
       this.metricTotalExpense.textContent = formatCurrency(summary.totalExpense, currency, lang);
     }
     if (this.metricExpenseCount) {
       this.metricExpenseCount.textContent = t('cards.itemsCount', { count: summary.expenseCount });
+    }
+
+    // 4. Aylık Günlük Harcama (Hero Card 4)
+    const currentYM = getCurrentYearMonth(now);
+    const selectedYM = this.selectedMonth || currentYM;
+    const isCurrentMonth = selectedYM === currentYM;
+    const isHistorical = selectedYM < currentYM;
+    const isFuture = selectedYM > currentYM;
+
+    if (this.metricMonthlyDailySpending) {
+      if (isCurrentMonth) {
+        this.metricMonthlyDailySpending.textContent = formatCurrency(summary.dailySafeSpendLimit, currency, lang);
+        if (this.metricMonthlyPerDayUnit) {
+          this.metricMonthlyPerDayUnit.classList.remove('hidden');
+        }
+      } else {
+        this.metricMonthlyDailySpending.textContent = '—';
+        if (this.metricMonthlyPerDayUnit) {
+          this.metricMonthlyPerDayUnit.classList.add('hidden');
+        }
+      }
+    }
+
+    if (this.badgeMonthlyDaysLeft) {
+      if (isCurrentMonth) {
+        this.badgeMonthlyDaysLeft.textContent = t('cards.daysLeft', { days: summary.daysRemainingInMonth });
+      } else {
+        this.badgeMonthlyDaysLeft.textContent = '—';
+      }
+    }
+
+    if (this.metricMonthlyDailySub) {
+      if (isHistorical) {
+        this.metricMonthlyDailySub.textContent = t('cards.dailyTipHistorical');
+      } else if (isFuture) {
+        this.metricMonthlyDailySub.textContent = t('cards.dailyTipFuture');
+      } else {
+        this.metricMonthlyDailySub.textContent = summary.balance <= 0
+          ? t('cards.dailyTipDeficit')
+          : t('cards.dailyTipNormal');
+      }
+    }
+
+    // Legacy fallback (defensive for backward compatibility if old IDs are present)
+    if (this.metricDailyLimit) {
+      this.metricDailyLimit.textContent = isCurrentMonth
+        ? formatCurrency(summary.dailySafeSpendLimit, currency, lang)
+        : '—';
+    }
+    if (this.badgeDaysLeft) {
+      this.badgeDaysLeft.textContent = isCurrentMonth
+        ? t('cards.daysLeft', { days: summary.daysRemainingInMonth })
+        : '—';
+    }
+    if (this.metricDailyTip) {
+      if (isHistorical) {
+        this.metricDailyTip.textContent = t('cards.dailyTipHistorical');
+      } else if (isFuture) {
+        this.metricDailyTip.textContent = t('cards.dailyTipFuture');
+      } else {
+        this.metricDailyTip.textContent = summary.balance <= 0
+          ? t('cards.dailyTipDeficit')
+          : t('cards.dailyTipNormal');
+      }
     }
   }
 
@@ -1212,9 +1276,20 @@ export class UIManager {
     // Statik data-i18n etiketlerini güncelle
     const isConfirmModalOpen = this.modalManager?.confirmModal && !this.modalManager.confirmModal.classList.contains('hidden');
 
+    if (typeof document !== 'undefined') {
+      const browserTitle = t('brand.browserTitle');
+      if (browserTitle && browserTitle !== 'brand.browserTitle') {
+        document.title = browserTitle;
+      }
+    }
+
     document.querySelectorAll('[data-i18n]').forEach(el => {
       // Eğer onay modalı o anda açıksa içindeki dinamik metinleri ezme (flicker/flash önleme)
       if (isConfirmModalOpen && el.closest('#confirm-modal')) {
+        return;
+      }
+      // DİKKAT: footer-privacy-text, auth durum ve dinamik hero kart alt metinleri statik döngü tarafından ezilmemeli!
+      if (el.id === 'footer-privacy-text' || el.id === 'header-auth-label' || el.id === 'header-auth-sub' || el.id === 'metric-monthly-daily-sub' || el.id === 'metric-daily-tip') {
         return;
       }
       const key = el.getAttribute('data-i18n');
@@ -1234,6 +1309,38 @@ export class UIManager {
         el.setAttribute('title', t(key));
       }
     });
+
+    this.updateFooterPrivacyText();
+  }
+
+  getCurrentUser() {
+    if (this.authService && typeof this.authService.getUser === 'function') {
+      return this.authService.getUser();
+    }
+    return this.currentUser || null;
+  }
+
+  isCloudSyncActive() {
+    const user = this.getCurrentUser();
+    if (user) return true;
+    if (this.authService && typeof this.authService.isLoggedIn === 'function' && this.authService.isLoggedIn()) return true;
+    if (this.syncService && typeof this.syncService.getStatus === 'function') {
+      const status = this.syncService.getStatus();
+      if (status === 'synced' || status === 'syncing') return true;
+    }
+    return false;
+  }
+
+  updateFooterPrivacyText() {
+    const footerPrivacyEl = (typeof document !== 'undefined' && typeof document.getElementById === 'function')
+      ? document.getElementById('footer-privacy-text')
+      : null;
+    if (!footerPrivacyEl) return;
+
+    const isCloud = this.isCloudSyncActive();
+    const key = isCloud ? 'footer.privacyCloud' : 'footer.privacyLocal';
+    footerPrivacyEl.textContent = t(key);
+    footerPrivacyEl.setAttribute('data-i18n', key);
   }
 
   exportData() {
@@ -1258,31 +1365,98 @@ export class UIManager {
 
   renderAuthBadge(user) {
     if (typeof document === 'undefined') return;
-    if (user) {
+    if (user !== undefined) {
+      this.currentUser = user;
+    } else if (this.authService && typeof this.authService.getUser === 'function') {
+      this.currentUser = this.authService.getUser();
+    }
+    const headerAuthLabel = (typeof document !== 'undefined' && typeof document.getElementById === 'function')
+      ? document.getElementById('header-auth-label')
+      : null;
+    const headerAuthSub = (typeof document !== 'undefined' && typeof document.getElementById === 'function')
+      ? document.getElementById('header-auth-sub')
+      : null;
+
+    if (this.currentUser) {
+      const activeUser = this.currentUser;
       this.btnOpenAuth?.classList.add('hidden');
       this.userAuthBadge?.classList.remove('hidden');
       if (this.userEmailText) {
-        this.userEmailText.textContent = user.email || 'Kullanıcı';
-        this.userEmailText.title = user.email || '';
+        this.userEmailText.textContent = activeUser.email || 'Kullanıcı';
+        this.userEmailText.title = activeUser.email || '';
       }
-      const avatarUrl = user.user_metadata?.avatar_url || user.user_metadata?.picture;
+      if (headerAuthLabel) {
+        headerAuthLabel.textContent = activeUser.email || 'Kullanıcı';
+        headerAuthLabel.removeAttribute?.('data-i18n');
+      }
+      if (headerAuthSub) {
+        headerAuthSub.textContent = t('auth.statusSynced');
+        headerAuthSub.setAttribute('data-i18n', 'auth.statusSynced');
+      }
+      const avatarUrl = activeUser.user_metadata?.avatar_url || activeUser.user_metadata?.picture;
       if (avatarUrl && this.userAvatarImg) {
         this.userAvatarImg.src = avatarUrl;
         this.userAvatarImg.classList.remove('hidden');
       } else if (this.userAvatarImg) {
         this.userAvatarImg.classList.add('hidden');
       }
-    } else {
+    } else if (this.store?.state?.onboarded) {
+      // User has explicitly chosen guest/local mode, or is a returning guest
       this.btnOpenAuth?.classList.remove('hidden');
       this.userAuthBadge?.classList.add('hidden');
       if (this.userAvatarImg) this.userAvatarImg.classList.add('hidden');
+      if (headerAuthLabel) {
+        headerAuthLabel.textContent = t('auth.accountGuestPrimary');
+        headerAuthLabel.setAttribute('data-i18n', 'auth.accountGuestPrimary');
+      }
+      if (headerAuthSub) {
+        headerAuthSub.textContent = t('auth.accountGuestSecondary');
+        headerAuthSub.setAttribute('data-i18n', 'auth.accountGuestSecondary');
+      }
+    } else {
+      // Fresh visitor session before initial storage-mode choice is resolved:
+      // Hide account/storage badge entirely so we do NOT show a fake "Yerel kullanım / Bu cihazda"
+      this.btnOpenAuth?.classList.add('hidden');
+      this.userAuthBadge?.classList.add('hidden');
+      if (this.userAvatarImg) this.userAvatarImg.classList.add('hidden');
+      if (headerAuthLabel) {
+        headerAuthLabel.textContent = '';
+      }
+      if (headerAuthSub) {
+        headerAuthSub.textContent = '';
+      }
+    }
+    if (typeof this.updateFooterPrivacyText === 'function') {
+      this.updateFooterPrivacyText();
+    }
+    if (typeof this.renderLandingOnboardingCta === 'function') {
+      this.renderLandingOnboardingCta();
     }
     this.refreshIcons();
+  }
+
+  renderLandingOnboardingCta() {
+    if (typeof document === 'undefined') return;
+    const landingCta = this.landingOnboardingCta || (typeof document.getElementById === 'function' ? document.getElementById('landing-onboarding-cta') : null);
+    if (!landingCta) return;
+
+    const user = this.getCurrentUser();
+    const isOnboarded = Boolean(this.store?.state?.onboarded);
+
+    // Fresh unresolved visitor: show onboarding choice section
+    // Explicit guest or Authenticated/cloud user: hide the onboarding choice section
+    if (user || isOnboarded) {
+      landingCta.classList.add('hidden');
+    } else {
+      landingCta.classList.remove('hidden');
+    }
   }
 
   renderSyncStatus(status, message = null) {
     if (typeof document === 'undefined') return;
     if (!this.iconSyncCloud) return;
+
+    const user = (typeof this.getCurrentUser === 'function') ? this.getCurrentUser() : this.currentUser;
 
     if (status === 'syncing') {
       this.iconSyncCloud.className = 'w-4 h-4 text-amber-500 animate-spin';
@@ -1293,6 +1467,12 @@ export class UIManager {
     } else if (status === 'synced') {
       this.iconSyncCloud.className = 'w-4 h-4 text-emerald-500';
       if (this.syncStatusText) this.syncStatusText.textContent = t('auth.statusSynced');
+      const headerAuthSub = (typeof document !== 'undefined' && typeof document.getElementById === 'function')
+        ? document.getElementById('header-auth-sub')
+        : null;
+      if (headerAuthSub && user) {
+        headerAuthSub.textContent = t('auth.statusSynced');
+      }
     } else if (status === 'offline') {
       this.iconSyncCloud.className = 'w-4 h-4 text-slate-400';
       if (this.syncStatusText) this.syncStatusText.textContent = t('auth.statusOffline');
@@ -1302,6 +1482,9 @@ export class UIManager {
     } else {
       this.iconSyncCloud.className = 'w-4 h-4 text-slate-400';
       if (this.syncStatusText) this.syncStatusText.textContent = t('auth.statusOffline');
+    }
+    if (typeof this.updateFooterPrivacyText === 'function') {
+      this.updateFooterPrivacyText();
     }
     this.refreshIcons();
   }

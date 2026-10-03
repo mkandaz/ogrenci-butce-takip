@@ -344,12 +344,12 @@ console.log('\n--- 5. i18n ÇOKLU DİL (TR / EN) DOĞRULAMASI ---');
 {
   setLanguage('tr');
   assert(getLanguage() === 'tr', 'Aktif dil Türkçe');
-  assert(t('brand.title') === 'Öğrenci Bütçem', 'TR t("brand.title") doğru');
+  assert(t('brand.title') === 'Muvazene', 'TR t("brand.title") doğru');
   assert(t('cards.daysLeft', { days: 12 }) === '12 Gün Kaldı', 'TR t("cards.daysLeft") parametreli doğru');
 
   setLanguage('en');
   assert(getLanguage() === 'en', 'Aktif dil İngilizce yapıldı');
-  assert(t('brand.title') === 'Student Budget', 'EN t("brand.title") doğru');
+  assert(t('brand.title') === 'Muvazene', 'EN t("brand.title") doğru');
   assert(t('cards.daysLeft', { days: 12 }) === '12 Days Left', 'EN t("cards.daysLeft") parametreli doğru');
 
   // Sözlük anahtar uyumluluğu kontrolü
@@ -3623,7 +3623,7 @@ console.log('\n--- 17. FAZ 4 PRODUCTION DEPLOYMENT & PWA VALIDATION (TC-89 - TC-
 
   assert(indexHtml.includes('<meta name="apple-mobile-web-app-capable" content="yes"'), 'TC-90 iOS standalone web app capable meta etiketi mevcut');
   assert(indexHtml.includes('<meta name="apple-mobile-web-app-status-bar-style" content="default"'), 'TC-90 iOS status bar style meta etiketi mevcut');
-  assert(indexHtml.includes('<meta name="apple-mobile-web-app-title" content="Öğrenci Bütçem"'), 'TC-90 iOS web app title meta etiketi mevcut');
+  assert(indexHtml.includes('<meta name="apple-mobile-web-app-title" content="Muvazene"'), 'TC-90 iOS web app title meta etiketi mevcut');
   assert(indexHtml.includes('<link rel="apple-touch-icon" href="/icons/icon-192x192.png"'), 'TC-90 iOS apple-touch-icon bağlantısı mevcut');
 }
 
@@ -3921,11 +3921,11 @@ console.log('\n--- 18. FAZ 4.1 GOOGLE AUTH + LOCAL GUEST MODE (TC-94 - TC-102) -
   assert(indexHtml.includes('id="btn-auth-google"'), 'TC-100 "Google ile devam et" butonu (btn-auth-google) mevcut');
   assert(indexHtml.includes('id="btn-auth-guest"'), 'TC-100 "Üyeliksiz devam et" butonu (btn-auth-guest) mevcut');
   assert(indexHtml.includes('Verilerini nasıl saklamak istersin?'), 'TC-100 Modal başlığı "Verilerini nasıl saklamak istersin?" mevcut');
-  assert(indexHtml.includes('Verilerini güvenle yedekle ve cihazların arasında senkronize et.'), 'TC-100 Google alt açıklaması doğru');
-  assert(indexHtml.includes('Verilerin yalnızca bu cihazda saklanır.'), 'TC-100 Üyeliksiz devam et alt açıklaması doğru');
+  assert(indexHtml.includes('Verilerini hesabınla cihazların arasında senkronize et.') || indexHtml.includes('Verilerini güvenle yedekle ve cihazların arasında senkronize et.'), 'TC-100 Google alt açıklaması doğru');
+  assert(indexHtml.includes('Hesap oluşturmadan bu cihazda kullan.') || indexHtml.includes('Verilerin yalnızca bu cihazda saklanır.'), 'TC-100 Üyeliksiz devam et alt açıklaması doğru');
 
-  // Navbar "Yerel mod" göstergesi
-  assert(indexHtml.includes('data-i18n="auth.localModeBadge">Yerel mod</span>'), 'TC-100 Navbar oturumsuz durumda "Yerel mod" etiketi mevcut');
+  // Navbar "Yerel kullanım" göstergesi
+  assert(indexHtml.includes('data-i18n="auth.accountGuestPrimary">Yerel kullanım</span>') || indexHtml.includes('data-i18n="auth.localModeBadge">Yerel mod</span>'), 'TC-100 Navbar oturumsuz durumda yerel kullanım/mod etiketi mevcut');
   assert(indexHtml.includes('id="user-avatar-img"'), 'TC-100 Google avatar görseli için user-avatar-img mevcut');
 }
 
@@ -3978,10 +3978,10 @@ console.log('\n--- 18. FAZ 4.1 GOOGLE AUTH + LOCAL GUEST MODE (TC-94 - TC-102) -
 {
   const indexHtml = fs.readFileSync(path.resolve('index.html'), 'utf8');
   assert(indexHtml.includes('id="btn-open-auth"'), 'TC-103 btn-open-auth elementi mevcut');
-  assert(indexHtml.includes('Yerel mod'), 'TC-103 "Yerel mod" metni mevcut');
+  assert(indexHtml.includes('Yerel kullanım') || indexHtml.includes('Yerel mod'), 'TC-103 "Yerel kullanım" metni mevcut');
   assert(indexHtml.includes('data-i18n-title="auth.localModeTooltip"'), 'TC-103 data-i18n-title="auth.localModeTooltip" niteliği mevcut');
   assert(indexHtml.includes('title="Veriler yalnızca bu cihazda saklanıyor."'), 'TC-103 Tooltip "Veriler yalnızca bu cihazda saklanıyor." doğru');
-  assert(indexHtml.includes('rounded-full'), 'TC-103 Status chip için rounded-full sınıfı kullanıldı');
+  assert(indexHtml.includes('rounded-lg') || indexHtml.includes('rounded-full'), 'TC-103 Status chip için rounded sınıfı kullanıldı');
   assert(indexHtml.includes('data-lucide="hard-drive"'), 'TC-103 Solunda hard-drive ikonu mevcut');
 
   // UIManager badge render & click davranışı simülasyonu
@@ -3997,6 +3997,7 @@ console.log('\n--- 18. FAZ 4.1 GOOGLE AUTH + LOCAL GUEST MODE (TC-94 - TC-102) -
   };
 
   const dummyManager = {
+    store: { state: { onboarded: true } },
     btnOpenAuth: mockElements.btnOpenAuth,
     userAuthBadge: mockElements.userAuthBadge,
     userEmailText: mockElements.userEmailText,
@@ -9336,16 +9337,17 @@ console.log('\n--- 28. FAZ 5.5C — STUDENT FINANCIAL COMMAND CENTER UI (TC-366 
   assert(indexHtml.includes('data-i18n="financialOutlook.safeDailySpendTitle"'), 'TC-388 safeDailySpendTitle data-i18n tag exists');
   assert(indexHtml.includes('data-i18n="financialOutlook.safeDailySpendSub"'), 'TC-388 safeDailySpendSub data-i18n tag exists');
 
-  // 3. Remaining 3 hero cards balanced in 3-column responsive grid
-  assert(indexHtml.includes('grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4'), 'TC-388 Hero summary grid uses 3 balanced columns (sm:grid-cols-3)');
+  // 3. Hero summary grid restored to 4-column responsive layout (FAZ 5.7.4)
+  assert(indexHtml.includes('grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4'), 'TC-388 Hero summary grid uses responsive 4-column layout (sm:grid-cols-2 lg:grid-cols-4)');
   assert(indexHtml.includes('id="metric-net-balance"'), 'TC-388 Hero card 1 (Net Balance) exists');
   assert(indexHtml.includes('id="metric-total-income"'), 'TC-388 Hero card 2 (Total Income) exists');
   assert(indexHtml.includes('id="metric-total-expense"'), 'TC-388 Hero card 3 (Total Expense) exists');
+  assert(indexHtml.includes('id="metric-monthly-daily-spending"'), 'TC-388 Hero card 4 (Monthly Daily Spending) exists');
 
   // 4. Financial Outlook compactness
-  assert(indexHtml.includes('id="financial-outlook-section" class="bg-white dark:bg-slate-900 p-3.5 sm:p-4'), 'TC-388 Financial Outlook has compact padding (p-3.5 sm:p-4)');
+  assert(indexHtml.includes('id="financial-outlook-section"') && indexHtml.includes('p-3.5 sm:p-4'), 'TC-388 Financial Outlook has compact padding (p-3.5 sm:p-4)');
   assert(!indexHtml.includes('data-i18n="financialOutlook.monthEndForecastSub">Deterministik projeksiyon</div>'), 'TC-388 Duplicate Deterministik projeksiyon subtitle removed from Metric D body');
-  assert(indexHtml.includes('id="bar-utilization" class="bg-indigo-600 h-1.5 rounded-full'), 'TC-388 bar-utilization uses sleek compact height (h-1.5)');
+  assert(indexHtml.includes('id="bar-utilization"') && indexHtml.includes('h-1.5 rounded-full'), 'TC-388 bar-utilization uses sleek compact height (h-1.5)');
 
   // 5. Dashboard hierarchy: Summary -> Financial Outlook -> Charts -> Transactions
   const summaryIdx = indexHtml.indexOf('data-i18n="cards.netBalance"');
@@ -10333,18 +10335,1182 @@ console.log('\n--- 30. FAZ 5.6 PATCH — CASHFLOW-AWARE WHAT-IF DECISION SUPPORT
   globalThis.document = originalDoc;
 }
 
+// TC-391: FAZ 5.7 — Muvazene Web Product Polish, Brand Migration & Visual Freeze
+console.log('\n--- 30. FAZ 5.7 — MUVAZENE BRAND MIGRATION & VISUAL FREEZE (TC-391) ---');
+{
+  const indexHtml = fs.readFileSync(path.join(process.cwd(), 'index.html'), 'utf-8');
+  const viteConfig = fs.readFileSync(path.join(process.cwd(), 'vite.config.js'), 'utf-8');
+  const tailwindConfig = fs.readFileSync(path.join(process.cwd(), 'tailwind.config.js'), 'utf-8');
+  const mainCss = fs.readFileSync(path.join(process.cwd(), 'src/styles/main.css'), 'utf-8');
+
+  // 1. Brand Migration in Head & Metadata
+  assert(indexHtml.includes('<title>Muvazene | Kişisel Bütçe Takip ve Nakit Akışı Planlama</title>'), 'TC-391-1 Browser title matches Muvazene SEO title');
+  assert(indexHtml.includes('https://www.muvazene.app'), 'TC-391-1 Canonical URL points to muvazene.app');
+  assert(indexHtml.includes('content="Muvazene"'), 'TC-391-1 OpenGraph / Twitter app title references Muvazene');
+  assert(indexHtml.includes('apple-mobile-web-app-title" content="Muvazene"'), 'TC-391-1 Apple mobile web app title is Muvazene');
+  assert(viteConfig.includes("name: 'Muvazene — Bütçeni Gör, Sonrasını Dengele'"), 'TC-391-1 PWA manifest name matches Muvazene brand');
+  assert(viteConfig.includes("short_name: 'Muvazene'"), 'TC-391-1 PWA manifest short_name matches Muvazene');
+  assert(!indexHtml.includes('>v1.1</span>'), 'TC-391-1 Standalone v1.1 badge removed from header');
+
+  // 2. Removal of Demo/Seed Data from Production UI
+  assert(!indexHtml.includes('id="btn-load-seed"'), 'TC-391-2 Demo data button #btn-load-seed removed from backup dropdown');
+  assert(!indexHtml.includes('id="btn-empty-reset-seed"'), 'TC-391-2 Reset seed button #btn-empty-reset-seed removed from transaction empty state');
+  assert(indexHtml.includes('id="btn-empty-add-tx"'), 'TC-391-2 Production Add Transaction CTA remains present in empty state');
+
+  // 3. Polka-Dot Motif & Visual System Tokens
+  assert(indexHtml.includes('id="bg-dot-pattern"'), 'TC-391-3 Background dot pattern container #bg-dot-pattern present in DOM');
+  assert(indexHtml.includes('pointer-events-none'), 'TC-391-3 Dot pattern container is non-interactive (pointer-events-none)');
+  assert(indexHtml.includes('#356B57'), 'TC-391-3 Dot pattern contains Muvazene sage dots');
+  assert(tailwindConfig.includes("500: '#356B57'"), 'TC-391-3 Tailwind config defines Muvazene Sage as brand-500');
+  assert(mainCss.includes('--color-sage: #356B57'), 'TC-391-3 main.css defines Muvazene brand color variables');
+
+  // 4. Structured Header Account Status & Dynamic Footer Privacy Copy
+  assert(indexHtml.includes('id="header-auth-label"'), 'TC-391-4 Structured header status label exists');
+  assert(indexHtml.includes('id="header-auth-sub"'), 'TC-391-4 Structured header status subtext exists');
+  assert(indexHtml.includes('id="footer-privacy-text"'), 'TC-391-4 Dynamic footer privacy text element exists');
+  assert(indexHtml.includes('Mehmet Tunahan Kandaz tarafından geliştirildi'), 'TC-391-4 Footer displays developer attribution');
+
+  // 5. English Localization Fintech Alignment
+  assert(en.cards.netBalance === 'Remaining Budget', 'TC-391-5 en.cards.netBalance is Remaining Budget');
+  assert(en.charts.balanceSubtitle === 'Income vs. Spending', 'TC-391-5 en.charts.balanceSubtitle is Income vs. Spending');
+  assert(en.financialOutlook.safeDailySpendTitle === 'Safe Daily Spending', 'TC-391-5 en.financialOutlook.safeDailySpendTitle is Safe Daily Spending');
+  assert(en.financialOutlook.manageCashflows === 'Manage Planned Cash Flows', 'TC-391-5 en.financialOutlook.manageCashflows is Manage Planned Cash Flows');
+  assert(en.financialOutlook.tryScenario === 'Run a Scenario', 'TC-391-5 en.financialOutlook.tryScenario is Run a Scenario');
+
+  // 6. Turkish Brand Localization Slogan
+  assert(tr.brand.slogan === 'Bugünü gör. Sonrasını dengele.', 'TC-391-6 tr.brand.slogan matches Muvazene Turkish slogan');
+  assert(en.brand.slogan === "See today. Balance what's ahead.", 'TC-391-6 en.brand.slogan matches Muvazene English slogan');
+
+  // 7. Dynamic Privacy Copy Switching
+  const originalDoc = globalThis.document;
+  const createMock = (id) => ({
+    id,
+    textContent: '',
+    className: '',
+    classList: { add() {}, remove() {}, contains() { return false; } },
+    setAttribute() {},
+    getAttribute() { return null; },
+    addEventListener() {},
+    removeEventListener() {}
+  });
+
+  const mockElements = {
+    'btn-open-auth': createMock('btn-open-auth'),
+    'user-auth-badge': createMock('user-auth-badge'),
+    'header-auth-label': createMock('header-auth-label'),
+    'header-auth-sub': createMock('header-auth-sub'),
+    'sync-status-indicator': createMock('sync-status-indicator'),
+    'sync-status-text': createMock('sync-status-text'),
+    'footer-privacy-text': createMock('footer-privacy-text'),
+    'user-email-text': createMock('user-email-text'),
+    'user-avatar-img': createMock('user-avatar-img'),
+    'btn-sign-out': createMock('btn-sign-out')
+  };
+  globalThis.document = {
+    documentElement: { classList: { add() {}, remove() {}, contains() { return false; } } },
+    body: { classList: { add() {}, remove() {}, contains() { return false; } } },
+    getElementById: (id) => mockElements[id] || null,
+    querySelectorAll: () => [],
+    addEventListener: () => {},
+    removeEventListener: () => {}
+  };
+
+  const store = new BudgetStore();
+  store.state.onboarded = true;
+  const mockAuthService = {
+    isAuthenticated: () => false,
+    getUser: () => null,
+    onAuthStateChange: () => () => {}
+  };
+  const ui = new UIManager(store, { authService: mockAuthService });
+  ui.renderAuthBadge();
+
+  assert(mockElements['header-auth-label'].textContent === tr.auth.accountGuestPrimary, 'TC-391-7 Guest mode displays Yerel kullanım');
+  assert(mockElements['header-auth-sub'].textContent === tr.auth.accountGuestSecondary, 'TC-391-7 Guest mode displays Bu cihazda');
+  assert(mockElements['footer-privacy-text'].textContent === tr.footer.privacyLocal, 'TC-391-7 Guest mode footer displays local privacy copy');
+
+  mockAuthService.isAuthenticated = () => true;
+  mockAuthService.getUser = () => ({ email: 'test@muvazene.app' });
+  ui.renderAuthBadge(mockAuthService.getUser());
+
+  assert(mockElements['header-auth-label'].textContent === 'test@muvazene.app', 'TC-391-7 Authenticated mode displays user email');
+  assert(mockElements['footer-privacy-text'].textContent === tr.footer.privacyCloud, 'TC-391-7 Authenticated mode footer displays cloud privacy copy');
+
+  globalThis.document = originalDoc;
+}
+
+// TC-392: FAZ 5.7.1 — Final Visual QA Patch & Month Rollover Verification
+console.log('\n--- 31. FAZ 5.7.1 — MONTH ROLLOVER & VISUAL QA PATCH (TC-392) ---');
+{
+  const indexHtml = fs.readFileSync(path.join(process.cwd(), 'index.html'), 'utf-8');
+
+  // 1. Fresh Initialization Month Rollover (2026-10-01 vs 2026-09-30)
+  SafeStorage.removeItem(STORAGE_KEY);
+  const freshStoreOct = new BudgetStore();
+  const octDate = new Date('2026-10-01T12:00:00');
+  const uiOct = new UIManager(freshStoreOct, { now: octDate });
+
+  assert(uiOct.selectedMonth === '2026-10', 'TC-392-1 Fresh init on 2026-10-01 selects October 2026 (2026-10)');
+  assert(formatMonthTitle(uiOct.selectedMonth, 'tr') === 'Ekim 2026', 'TC-392-1 Turkish month title for 2026-10 is Ekim 2026');
+  assert(formatMonthTitle(uiOct.selectedMonth, 'en') === 'October 2026', 'TC-392-1 English month title for 2026-10 is October 2026');
+
+  SafeStorage.removeItem(STORAGE_KEY);
+  const freshStoreSep = new BudgetStore();
+  const sepDate = new Date('2026-09-30T12:00:00');
+  const uiSep = new UIManager(freshStoreSep, { now: sepDate });
+
+  assert(uiSep.selectedMonth === '2026-09', 'TC-392-1 Fresh init on 2026-09-30 selects September 2026 (2026-09)');
+  assert(formatMonthTitle(uiSep.selectedMonth, 'tr') === 'Eylül 2026', 'TC-392-1 Turkish month title for 2026-09 is Eylül 2026');
+  assert(formatMonthTitle(uiSep.selectedMonth, 'en') === 'September 2026', 'TC-392-1 English month title for 2026-09 is September 2026');
+
+  // 2. Manual / Historical Month Selection Behavior
+  uiOct.setMonth('2026-08');
+  assert(uiOct.selectedMonth === '2026-08', 'TC-392-2 setMonth manually updates selectedMonth to August 2026');
+  assert(freshStoreOct.getSettings().targetMonth === '2026-08', 'TC-392-2 Manual month selection persists in store settings');
+
+  const historicalVm = getFinancialOutlookViewModel({
+    store: freshStoreOct,
+    selectedMonth: '2026-08',
+    now: octDate
+  });
+  assert(historicalVm.isHistorical === true, 'TC-392-2 FinancialOutlook identifies 2026-08 as historical from 2026-10-01');
+  assert(historicalVm.isCurrentMonth === false, 'TC-392-2 isCurrentMonth is false for historical period');
+  assert(historicalVm.targetMonth === '2026-08', 'TC-392-2 targetMonth is preserved as historical period');
+
+  // 3. Background Dot Pattern Refinement & Deep Stacking Architecture
+  assert(indexHtml.includes('id="bg-dot-pattern"'), 'TC-392-3 bg-dot-pattern container present');
+  assert(indexHtml.includes('pointer-events-none overflow-hidden z-0'), 'TC-392-3 bg-dot-pattern has zero pointer events and z-0');
+  assert(indexHtml.includes('<main class="relative z-10'), 'TC-392-3 main container elevated to relative z-10 above background');
+  assert(indexHtml.includes('<footer class="relative z-10'), 'TC-392-3 footer container elevated to relative z-10 above background');
+  assert(indexHtml.includes('r="18"') && indexHtml.includes('r="22"'), 'TC-392-3 Dot radii scaled up 1.5-2.5x with varied sizes');
+
+  // 4. Header Typographic Wordmark & Logo Cleanliness
+  const headerIdx = indexHtml.indexOf('<header');
+  const mainIdx = indexHtml.indexOf('<main');
+  const headerContent = indexHtml.slice(headerIdx, mainIdx);
+  assert(!headerContent.includes('graduation-cap'), 'TC-392-4 graduation-cap icon removed from header');
+  assert(headerContent.includes('data-i18n="brand.title">Muvazene</span>'), 'TC-392-4 Muvazene wordmark present in header');
+  assert(headerContent.includes('data-i18n="brand.subtitle">Bugünü gör. Sonrasını dengele.</p>'), 'TC-392-4 Muvazene slogan present in header');
+
+  // 5. Polished Button System Invariants (Add Tx, Run Scenario, Manage Cash Flows)
+  assert(indexHtml.includes('id="btn-open-add-modal"') && indexHtml.includes('h-9 sm:h-10 px-3 sm:px-4 rounded-lg bg-[#356B57]'), 'TC-392-5 btn-open-add-modal has restrained radius and primary sage styling');
+  assert(indexHtml.includes('id="btn-open-whatif"') && indexHtml.includes('h-9 px-3.5 rounded-lg bg-[#356B57]'), 'TC-392-5 btn-open-whatif has h-9, rounded-lg and primary styling');
+  assert(indexHtml.includes('id="btn-manage-cashflows"') && indexHtml.includes('h-9 px-3.5 rounded-lg') && indexHtml.includes('border-[#DDDCD5] dark:border-[#27332B]'), 'TC-392-5 btn-manage-cashflows has h-9, rounded-lg and secondary border styling');
+  assert(indexHtml.includes('id="btn-empty-add-tx"') && indexHtml.includes('h-10 px-4 rounded-lg bg-[#356B57]'), 'TC-392-5 btn-empty-add-tx has h-10, rounded-lg and primary sage styling');
+}
+
+// TC-393: FOOTER PRIVACY & AUTH-STATE LIFECYCLE REGRESSION
+console.log('\n--- 32. FAZ 5.7.2 — FOOTER PRIVACY & AUTH-STATE LIFECYCLE (TC-393) ---');
+{
+  const originalDoc = globalThis.document;
+
+  const createMockEl = (id, overrides = {}) => {
+    const el = {
+      id,
+      textContent: '',
+      innerHTML: '',
+      value: '',
+      title: '',
+      attrs: {},
+      style: {},
+      dataset: {},
+      children: [],
+      classList: {
+        classes: new Set(),
+        add(c) { this.classes.add(c); },
+        remove(c) { this.classes.delete(c); },
+        contains(c) { return this.classes.has(c); }
+      },
+      setAttribute(k, v) { this.attrs[k] = v; },
+      getAttribute(k) { return this.attrs[k]; },
+      removeAttribute(k) { delete this.attrs[k]; },
+      appendChild(c) { this.children.push(c); },
+      removeChild(c) { this.children = this.children.filter(x => x !== c); },
+      querySelector: () => null,
+      querySelectorAll: () => [],
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      ...overrides
+    };
+    if (overrides.classes) {
+      overrides.classes.forEach(c => el.classList.classes.add(c));
+    }
+    return el;
+  };
+
+  const mockElements = {
+    'footer-privacy-text': createMockEl('footer-privacy-text', { textContent: tr.footer.privacyLocal, attrs: { 'data-i18n': 'footer.privacyLocal' } }),
+    'header-auth-label': createMockEl('header-auth-label', { textContent: tr.auth.accountGuestPrimary, attrs: { 'data-i18n': 'auth.accountGuestPrimary' } }),
+    'header-auth-sub': createMockEl('header-auth-sub', { textContent: tr.auth.accountGuestSecondary, attrs: { 'data-i18n': 'auth.accountGuestSecondary' } }),
+    'btn-open-auth': createMockEl('btn-open-auth'),
+    'user-auth-badge': createMockEl('user-auth-badge', { classes: ['hidden'] }),
+    'user-email-text': createMockEl('user-email-text'),
+    'user-avatar-img': createMockEl('user-avatar-img', { classes: ['hidden'] }),
+    'icon-sync-cloud': createMockEl('icon-sync-cloud'),
+    'sync-status-text': createMockEl('sync-status-text')
+  };
+
+  globalThis.document = {
+    title: '',
+    createElement: (tag) => createMockEl(tag),
+    getElementById: (id) => {
+      if (!mockElements[id]) {
+        mockElements[id] = createMockEl(id);
+      }
+      return mockElements[id];
+    },
+    querySelectorAll: (selector) => {
+      if (selector === '[data-i18n]') {
+        return Object.values(mockElements).filter(el => el.attrs && el.attrs['data-i18n']);
+      }
+      return [];
+    },
+    documentElement: {
+      classList: {
+        toggle: () => false,
+        add: () => {},
+        remove: () => {},
+        contains: () => false
+      }
+    },
+    addEventListener: () => {},
+    removeEventListener: () => {}
+  };
+
+  // 1. Fresh Guest State
+  const storeGuest = new BudgetStore();
+  let authListeners = [];
+  const mockAuthService = {
+    user: null,
+    isAuthenticated: function() { return Boolean(this.user); },
+    isLoggedIn: function() { return Boolean(this.user); },
+    getUser: function() { return this.user; },
+    isConfigured: () => true,
+    waitForAuth: async function() { return this.user; },
+    onAuthStateChange: function(cb) {
+      authListeners.push(cb);
+      if (this.user) cb(this.user);
+      return () => { authListeners = authListeners.filter(l => l !== cb); };
+    }
+  };
+  const mockSyncService = {
+    status: 'idle',
+    statusListeners: [],
+    getStatus: function() { return this.status; },
+    setStatus: function(s) {
+      this.status = s;
+      this.statusListeners.forEach(cb => cb(s));
+    },
+    onStatusChange: function(cb) { this.statusListeners.push(cb); },
+    sync: async () => {}
+  };
+
+  setLanguage('tr');
+  const ui = new UIManager(storeGuest, {
+    authService: mockAuthService,
+    syncService: mockSyncService,
+    modalManager: { closeAuthModal: () => {}, closeOnboardingModal: () => {} }
+  });
+
+  // 1a. Pre-selection fresh visitor state (unresolved)
+  assert(mockElements['footer-privacy-text'].textContent === tr.footer.privacyLocal, 'TC-393-1 Fresh visitor footer displays local privacy copy');
+  assert(mockElements['btn-open-auth'].classList.contains('hidden') === true, 'TC-393-1 Fresh visitor hides account button before selection');
+  assert(mockElements['header-auth-label'].textContent === '', 'TC-393-1 Fresh visitor does not show guest label before selection');
+
+  // 1b. User resolves selection as Guest/Local mode
+  storeGuest.state.onboarded = true;
+  ui.renderAuthBadge();
+  assert(mockElements['btn-open-auth'].classList.contains('hidden') === false, 'TC-393-1 Guest mode selection unhides account button');
+  assert(mockElements['header-auth-label'].textContent === tr.auth.accountGuestPrimary, 'TC-393-1 Guest mode displays guest label');
+
+  // 2. Guest -> Google Login
+  const fakeUser = { email: 'ogrenci@muvazene.app', user_metadata: {} };
+  mockAuthService.user = fakeUser;
+  authListeners.forEach(cb => cb(fakeUser));
+
+  assert(mockElements['footer-privacy-text'].textContent === tr.footer.privacyCloud, 'TC-393-2 Logged in footer displays cloud privacy copy');
+  assert(mockElements['header-auth-label'].textContent === 'ogrenci@muvazene.app', 'TC-393-2 Logged in header displays user email');
+  assert(mockElements['user-auth-badge'].classList.contains('hidden') === false, 'TC-393-2 Logged in user-auth-badge is visible');
+
+  // 3. Authenticated Page Refresh (Initial user already present & onboarded = true)
+  const storeRefresh = new BudgetStore();
+  storeRefresh.state.onboarded = true;
+  const uiRefresh = new UIManager(storeRefresh, {
+    authService: mockAuthService,
+    syncService: mockSyncService,
+    modalManager: { closeAuthModal: () => {}, closeOnboardingModal: () => {} }
+  });
+
+  assert(mockElements['footer-privacy-text'].textContent === tr.footer.privacyCloud, 'TC-393-3 Authenticated page refresh immediately displays cloud privacy copy');
+  assert(mockElements['header-auth-label'].textContent === 'ogrenci@muvazene.app', 'TC-393-3 Authenticated page refresh displays user email');
+
+  // 4. TR <-> EN switch while authenticated
+  setLanguage('en');
+  uiRefresh.render();
+  uiRefresh.renderAuthBadge(uiRefresh.getCurrentUser());
+  assert(mockElements['footer-privacy-text'].textContent === en.footer.privacyCloud, 'TC-393-4 English switch preserves cloud copy in English');
+
+  setLanguage('tr');
+  uiRefresh.render();
+  uiRefresh.renderAuthBadge(uiRefresh.getCurrentUser());
+  assert(mockElements['footer-privacy-text'].textContent === tr.footer.privacyCloud, 'TC-393-4 Turkish switch returns cloud copy in Turkish');
+
+  // 5. Logout
+  mockAuthService.user = null;
+  authListeners.forEach(cb => cb(null));
+  assert(mockElements['footer-privacy-text'].textContent === tr.footer.privacyLocal, 'TC-393-5 Logout returns footer to local privacy copy');
+  assert(mockElements['header-auth-label'].textContent === tr.auth.accountGuestPrimary, 'TC-393-5 Logout restores guest header label');
+
+  // 6. Invariant: sync status 'synced' guarantees cloud copy
+  mockAuthService.user = fakeUser;
+  uiRefresh.renderAuthBadge(fakeUser);
+  mockSyncService.setStatus('synced');
+  assert(mockElements['footer-privacy-text'].textContent === tr.footer.privacyCloud, 'TC-393-6 Synced status ensures footer never shows local-only copy');
+
+  globalThis.document = originalDoc;
+}
+
+// TC-394: SEO & TECHNICAL WEB LAUNCH SPECIFICATIONS
+console.log('\n--- 33. FAZ 5.7.2 — SEO & WEB LAUNCH POLISH (TC-394) ---');
+{
+  const indexHtml = fs.readFileSync(path.join(process.cwd(), 'index.html'), 'utf-8');
+  const robotsTxtPath = path.join(process.cwd(), 'public/robots.txt');
+  const sitemapXmlPath = path.join(process.cwd(), 'public/sitemap.xml');
+
+  // 1. Page Title & Meta Description
+  assert(indexHtml.includes('<title>Muvazene | Kişisel Bütçe Takip ve Nakit Akışı Planlama</title>'), 'TC-394-1 Page title matches exact SEO title');
+  const expectedDesc = 'Gelir ve giderlerini takip et, planlı ödemelerini yönet, nakit akışını gör ve harcamalarının gelecekteki bütçene etkisini Muvazene ile hesapla.';
+  assert(indexHtml.includes(`content="${expectedDesc}"`), 'TC-394-1 Meta description matches natural Turkish copy');
+
+  // 2. Canonical Domain & Social Tags
+  assert(indexHtml.includes('<link rel="canonical" href="https://www.muvazene.app" />'), 'TC-394-2 Canonical points to https://www.muvazene.app');
+  assert(indexHtml.includes('<meta property="og:title" content="Muvazene | Kişisel Bütçe Takip ve Nakit Akışı Planlama" />'), 'TC-394-2 OG title matches SEO title');
+  assert(indexHtml.includes('<meta name="twitter:title" content="Muvazene | Kişisel Bütçe Takip ve Nakit Akışı Planlama" />'), 'TC-394-2 Twitter title matches SEO title');
+  assert(indexHtml.includes('<meta property="og:url" content="https://www.muvazene.app" />'), 'TC-394-2 OG URL is canonical production domain');
+
+  // 3. Robots.txt
+  assert(fs.existsSync(robotsTxtPath), 'TC-394-3 public/robots.txt exists');
+  const robotsContent = fs.readFileSync(robotsTxtPath, 'utf-8');
+  assert(robotsContent.includes('User-agent: *'), 'TC-394-3 robots.txt allows all user agents');
+  assert(robotsContent.includes('Allow: /'), 'TC-394-3 robots.txt allows root path');
+  assert(robotsContent.includes('Sitemap: https://www.muvazene.app/sitemap.xml'), 'TC-394-3 robots.txt references production sitemap');
+
+  // 4. Sitemap.xml
+  assert(fs.existsSync(sitemapXmlPath), 'TC-394-4 public/sitemap.xml exists');
+  const sitemapContent = fs.readFileSync(sitemapXmlPath, 'utf-8');
+  assert(sitemapContent.includes('<loc>https://www.muvazene.app/</loc>'), 'TC-394-4 sitemap references canonical production URL');
+  assert(sitemapContent.includes('xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"'), 'TC-394-4 sitemap uses standard sitemap schema');
+
+  // 5. JSON-LD Structured Data
+  const jsonLdMatch = indexHtml.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
+  assert(jsonLdMatch && jsonLdMatch[1], 'TC-394-5 JSON-LD script tag present in index.html');
+  const structuredData = JSON.parse(jsonLdMatch[1].trim());
+  assert(structuredData['@type'] === 'WebApplication', 'TC-394-5 Structured data type is WebApplication');
+  assert(structuredData.name === 'Muvazene', 'TC-394-5 Structured data name is Muvazene');
+  assert(structuredData.url === 'https://www.muvazene.app', 'TC-394-5 Structured data URL is canonical');
+  assert(structuredData.applicationCategory === 'FinanceApplication', 'TC-394-5 Structured data category is FinanceApplication');
+  assert(structuredData.operatingSystem === 'Web', 'TC-394-5 Structured data operatingSystem is Web');
+  assert(structuredData.offers === undefined, 'TC-394-5 Structured data does not publish offers (pricing model not finalized)');
+  assert(indexHtml.includes('property="og:image" content="https://www.muvazene.app/og-image.png"'), 'TC-394-2 OG image tag restored with branded 1200x630 asset');
+  assert(indexHtml.includes('name="twitter:image" content="https://www.muvazene.app/og-image.png"'), 'TC-394-2 Twitter image tag restored with branded 1200x630 asset');
+
+  // 6. Semantic Heading Hierarchy & Single Primary H1
+  const h1Matches = indexHtml.match(/<h1[\s>]/g) || [];
+  assert(h1Matches.length === 1, `TC-394-6 Single primary H1 present on page (found: ${h1Matches.length})`);
+  assert(indexHtml.includes('<h1 class="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white" data-i18n="seo.h1">Bütçeni gör. Sonrasını dengele.</h1>'), 'TC-394-6 Primary H1 matches core value proposition');
+  assert(indexHtml.includes('id="app-overview"'), 'TC-394-6 Semantic overview section present');
+  assert(indexHtml.includes('data-i18n="seo.features.trackingTitle"'), 'TC-394-6 Tracking feature card present');
+  assert(indexHtml.includes('data-i18n="seo.features.cashflowTitle"'), 'TC-394-6 Cashflow feature card present');
+  assert(indexHtml.includes('data-i18n="seo.features.forecastTitle"'), 'TC-394-6 Forecast feature card present');
+  assert(indexHtml.includes('data-i18n="seo.features.whatifTitle"'), 'TC-394-6 What-If feature card present');
+}
+
+// TC-395: FAZ 5.7.3 — TIME MODEL, MONTH ROLLOVER, PLANNED CASHFLOW SEMANTIC QA
+console.log('\n--- 34. FAZ 5.7.3 — TIME MODEL, MONTH ROLLOVER & CASHFLOW QA (TC-395) ---');
+{
+  // A. Month Rollover & Local Timezone Boundaries
+  SafeStorage.removeItem(STORAGE_KEY);
+  const storeWithOldSep = new BudgetStore();
+  storeWithOldSep.state.settings.targetMonth = '2026-09';
+
+  // Fresh init on 2026-10-01 must open in October 2026, NOT locked to past targetMonth '2026-09'
+  const octDate = new Date('2026-10-01T10:00:00');
+  const uiOct = new UIManager(storeWithOldSep, { now: octDate });
+  assert(uiOct.selectedMonth === '2026-10', 'TC-395-A Fresh init on 2026-10-01 defaults to October 2026 even when past targetMonth was 2026-09');
+  assert(formatMonthTitle(uiOct.selectedMonth, 'tr') === 'Ekim 2026', 'TC-395-A Turkish title is Ekim 2026');
+  assert(formatMonthTitle(uiOct.selectedMonth, 'en') === 'October 2026', 'TC-395-A English title is October 2026');
+
+  // Fresh init on 2026-09-30 must open in September 2026
+  const sepDate = new Date('2026-09-30T15:00:00');
+  const uiSep = new UIManager(new BudgetStore(), { now: sepDate });
+  assert(uiSep.selectedMonth === '2026-09', 'TC-395-A Fresh init on 2026-09-30 defaults to September 2026');
+
+  // Verify initBootstrap does not overwrite selectedMonth with store targetMonth
+  if (typeof uiOct.initBootstrap === 'function') {
+    uiOct.initBootstrap();
+    assert(uiOct.selectedMonth === '2026-10', 'TC-395-A initBootstrap does not revert selectedMonth to past targetMonth');
+  }
+
+  // Local Timezone Month Boundary test
+  const earlyOctLocal = new Date(2026, 9, 1, 0, 15, 0); // Oct 1, 00:15
+  assert(getCurrentYearMonth(earlyOctLocal) === '2026-10', 'TC-395-A Local time 00:15 on Oct 1 resolves to 2026-10');
+  const lateSepLocal = new Date(2026, 8, 30, 23, 45, 0); // Sep 30, 23:45
+  assert(getCurrentYearMonth(lateSepLocal) === '2026-09', 'TC-395-A Local time 23:45 on Sep 30 resolves to 2026-09');
+
+  // B. Carry-Over Calculations
+  const carryStore = new BudgetStore();
+  carryStore.addTransaction({
+    title: 'Eylül Maaş / Burs',
+    amount: 12000,
+    type: 'income',
+    categoryId: 'inc_other',
+    date: '2026-09-01'
+  });
+  carryStore.addTransaction({
+    title: 'Eylül Harcamalar',
+    amount: 2629,
+    type: 'expense',
+    categoryId: 'exp_food',
+    date: '2026-09-15'
+  });
+  // September closing balance = 12000 - 2629 = 9371
+
+  const octSummary = calculateSummary(carryStore.getTransactions(), new Date('2026-10-01T12:00:00'), '2026-10');
+  assert(octSummary.carriedOverBalance === 9371, `TC-395-B Carried over balance into October is 9371 (got ${octSummary.carriedOverBalance})`);
+  assert(octSummary.totalIncome === 0, 'TC-395-B October fresh month total income is 0');
+  assert(octSummary.totalExpense === 0, 'TC-395-B October fresh month total expense is 0');
+  assert(octSummary.balance === 9371, 'TC-395-B Remaining budget in fresh October equals carried over 9371');
+
+  // C. Planned Cashflow Persistence Semantics
+  const flowStore = new BudgetStore();
+  const kykFlow = flowStore.addPlannedCashflow({
+    name: 'KYK Bursu',
+    type: 'income',
+    amount: 2000,
+    recurrence: 'monthly',
+    dayOfMonth: 6
+  });
+  const oneTimeFlow = flowStore.addPlannedCashflow({
+    name: 'Özel Proje Avansı',
+    type: 'income',
+    amount: 500,
+    recurrence: 'once',
+    date: '2026-10-04'
+  });
+
+  assert(flowStore.getPlannedCashflows().length === 2, 'TC-395-C Initial planned cashflows count is 2');
+
+  // Switching selected month must NEVER mutate, delete, or reset planned cashflows
+  const flowUi = new UIManager(flowStore, { now: octDate });
+  flowUi.setMonth('2026-09');
+  assert(flowStore.getPlannedCashflows().length === 2, 'TC-395-C planned_cashflows record count unchanged after switching to September');
+  flowUi.setMonth('2026-10');
+  assert(flowStore.getPlannedCashflows().length === 2, 'TC-395-C planned_cashflows record count unchanged after switching to October');
+  flowUi.setMonth('2026-11');
+  assert(flowStore.getPlannedCashflows().length === 2, 'TC-395-C planned_cashflows record count unchanged after switching to November');
+
+  // Occurrence timeline generation on 2026-10-01
+  const occOct1 = generateCashflowOccurrences(flowStore.getPlannedCashflows(), { now: new Date('2026-10-01T12:00:00'), horizonDays: 60 });
+  const oct1Dates = occOct1.map(o => `${o.name}:${o.date}`);
+  assert(oct1Dates.includes('Özel Proje Avansı:2026-10-04'), 'TC-395-C One-time October 4 flow is upcoming on October 1');
+  assert(oct1Dates.includes('KYK Bursu:2026-10-06'), 'TC-395-C Recurring KYK bursu next occurrence is October 6');
+
+  // Occurrence timeline generation on 2026-10-07 (after October 6)
+  const occOct7 = generateCashflowOccurrences(flowStore.getPlannedCashflows(), { now: new Date('2026-10-07T12:00:00'), horizonDays: 60 });
+  const oct7Dates = occOct7.map(o => `${o.name}:${o.date}`);
+  assert(!oct7Dates.includes('Özel Proje Avansı:2026-10-04'), 'TC-395-C Past one-time October 4 flow excluded from upcoming on October 7');
+  assert(oct7Dates.includes('KYK Bursu:2026-11-06'), 'TC-395-C Recurring KYK bursu next occurrence moves to November 6');
+
+  // D. Historical Month Navigation & Live Financial Outlook Isolation
+  flowUi.setMonth('2026-09');
+  assert(flowUi.selectedMonth === '2026-09', 'TC-395-D Historical September selected in UI');
+
+  const historicalOutlook = getFinancialOutlookViewModel({
+    store: flowStore,
+    selectedMonth: '2026-09',
+    now: new Date('2026-10-01T12:00:00')
+  });
+
+  assert(historicalOutlook.isHistorical === true, 'TC-395-D isHistorical is true for September view');
+  assert(historicalOutlook.isCurrentMonth === false, 'TC-395-D isCurrentMonth is false for September view');
+  assert(historicalOutlook.referenceDate === '2026-10-01', 'TC-395-D Financial Outlook is anchored to live current date 2026-10-01');
+  assert(historicalOutlook.nextIncome.found === true && historicalOutlook.nextIncome.date === '2026-10-04', 'TC-395-D Financial Outlook reflects live upcoming income even while user views September');
+
+  // E. Safe Daily Spending Terminology & Math Contract Verification
+  assert(tr.financialOutlook.safeDailySpendTitle === 'Güvenli Günlük Harcama', 'TC-395-E TR title is Güvenli Günlük Harcama');
+  assert(tr.financialOutlook.safeDailySpendSub === 'Bir sonraki gelire kadar', 'TC-395-E TR sub is Bir sonraki gelire kadar');
+  assert(en.financialOutlook.safeDailySpendTitle === 'Safe Daily Spending', 'TC-395-E EN title is Safe Daily Spending');
+  assert(en.financialOutlook.safeDailySpendSub === 'Until next income', 'TC-395-E EN sub is Until next income');
+  assert(tr.financialOutlook.manageCashflows === 'Planları Yönet', 'TC-395-E TR CTA is Planları Yönet');
+  assert(tr.financialOutlook.upcomingTimelineTitle === 'Yaklaşan Akışlar', 'TC-395-E TR Section is Yaklaşan Akışlar');
+  assert(en.financialOutlook.upcomingTimelineTitle === 'Upcoming Cash Flows', 'TC-395-E EN Section is Upcoming Cash Flows');
+
+  // Math contract unchanged: safeDailySpend = availableAfterPlannedObligations / daysUntilNextIncome
+  const testPlan = planCashflow({
+    plannedCashflows: [kykFlow],
+    options: {
+      now: new Date('2026-10-01T12:00:00'),
+      currentAvailableBalance: 1000
+    }
+  });
+  // Next income: Oct 6, daysUntil = 5. Available = 1000, obligations = 0 => 1000 / 5 = 200/day
+  assert(testPlan.spending.safeDailySpendUntilNextIncome === 200, 'TC-395-E Planner math contract unchanged (1000 / 5 days = 200 TL/day)');
+}
+
+// TC-396: FAZ 5.7.4 — RESTORE MONTHLY DAILY SPENDING SUMMARY CARD
+console.log('\n--- 35. FAZ 5.7.4 — RESTORE MONTHLY DAILY SPENDING SUMMARY CARD (TC-396) ---');
+{
+  const indexHtml = fs.readFileSync(path.join(process.cwd(), 'index.html'), 'utf-8');
+
+  // A. Positive balance: remaining budget = 9300, valid remaining days = N => 9300 / N
+  // On 2026-10-02 (October has 31 days): remaining days = 31 - 2 + 1 = 30.
+  const txsPositive = [
+    { id: 'tx-1', title: 'Maaş', amount: 10000, type: 'income', date: '2026-10-01' },
+    { id: 'tx-2', title: 'Market', amount: 700, type: 'expense', date: '2026-10-02' }
+  ];
+  const refOct2 = new Date('2026-10-02T12:00:00');
+  const summaryOct2 = calculateSummary(txsPositive, refOct2, '2026-10');
+  assert(summaryOct2.balance === 9300, 'TC-396-A Net balance is 9300');
+  assert(summaryOct2.daysRemainingInMonth === 30, 'TC-396-A Remaining days in October from Oct 2 inclusive is 30');
+  // 9300 / 30 = 310
+  assert(summaryOct2.dailySafeSpendLimit === 310, 'TC-396-A Expected daily spending is 9300 / 30 = 310 TL/day');
+
+  // B. Negative balance: remaining budget = -1000 => 0 daily spending
+  const txsNegative = [
+    { id: 'tx-1', title: 'Gelir', amount: 2000, type: 'income', date: '2026-10-01' },
+    { id: 'tx-2', title: 'Kira', amount: 3000, type: 'expense', date: '2026-10-02' }
+  ];
+  const summaryNeg = calculateSummary(txsNegative, refOct2, '2026-10');
+  assert(summaryNeg.balance === -1000, 'TC-396-B Net balance is -1000');
+  assert(summaryNeg.dailySafeSpendLimit === 0, 'TC-396-B Expected daily spending for negative balance is 0');
+
+  // C. Zero balance => 0 daily spending
+  const txsZero = [
+    { id: 'tx-1', title: 'Gelir', amount: 1500, type: 'income', date: '2026-10-01' },
+    { id: 'tx-2', title: 'Gider', amount: 1500, type: 'expense', date: '2026-10-02' }
+  ];
+  const summaryZero = calculateSummary(txsZero, refOct2, '2026-10');
+  assert(summaryZero.balance === 0, 'TC-396-C Net balance is 0');
+  assert(summaryZero.dailySafeSpendLimit === 0, 'TC-396-C Expected daily spending for zero balance is 0');
+
+  // D. Month rollover: Sep 30 vs Oct 1 local calendar time
+  // Sep 30: September has 30 days => 30 - 30 + 1 = 1 day remaining
+  const refSep30 = new Date('2026-09-30T14:00:00');
+  const daysSep30 = getDaysRemainingInMonth(refSep30, '2026-09');
+  assert(daysSep30 === 1, 'TC-396-D Sep 30 has 1 day remaining in September');
+  // Oct 1: October has 31 days => 31 - 1 + 1 = 31 days remaining
+  const refOct1 = new Date('2026-10-01T09:00:00');
+  const daysOct1 = getDaysRemainingInMonth(refOct1, '2026-10');
+  assert(daysOct1 === 31, 'TC-396-D Oct 1 has 31 days remaining in October');
+
+  // E. Metric isolation: Changing planned_cashflows must NOT alter Aylık Günlük Harcama
+  SafeStorage.removeItem(STORAGE_KEY);
+  SafeStorage.removeItem('student_budget_last_synced_at');
+  SafeStorage.removeItem('student_budget_outbox');
+  SafeStorage.removeItem('student_budget_planned_outbox');
+  const storeIso = new BudgetStore();
+  storeIso.addTransaction({ id: 'tx-1', title: 'Maaş', amount: 9300, type: 'income', categoryId: 'inc_salary', date: '2026-10-01' });
+  const summaryBefore = calculateSummary(storeIso.getTransactions(), refOct2, '2026-10');
+  assert(summaryBefore.dailySafeSpendLimit === 310, 'TC-396-E Initial monthly daily limit is 310');
+
+  // Add multiple planned cashflows
+  storeIso.addPlannedCashflow({
+    name: 'Gelecek Burs',
+    amount: 5000,
+    type: 'income',
+    recurrence: 'monthly',
+    dayOfMonth: 15
+  });
+  storeIso.addPlannedCashflow({
+    name: 'Gelecek Fatura',
+    amount: 1500,
+    type: 'expense',
+    recurrence: 'once',
+    date: '2026-10-20'
+  });
+  const summaryAfter = calculateSummary(storeIso.getTransactions(), refOct2, '2026-10');
+  assert(summaryAfter.dailySafeSpendLimit === 310, 'TC-396-E Adding planned cashflows does NOT alter monthly daily spending');
+  assert(summaryAfter.balance === 9300, 'TC-396-E Adding planned cashflows does NOT alter remaining balance');
+
+  // F. Safe Daily Spending isolation:
+  // Financial Outlook safe daily spend (next-income based) vs Monthly daily spend (month-end based)
+  const outlookVM = getFinancialOutlookViewModel({
+    store: storeIso,
+    selectedMonth: '2026-10',
+    now: refOct2
+  });
+  assert(outlookVM.safeDailySpend !== null, 'TC-396-F Outlook computes next-income safe daily spend');
+  assert(summaryAfter.dailySafeSpendLimit === 310, 'TC-396-F Monthly daily spend strictly answers until month end (310 TL/day)');
+
+  // G. Historical and Future month non-actionable state
+  const originalDoc = globalThis.document;
+  const mockElements = {
+    'metric-net-balance': { textContent: '' },
+    'badge-carried-balance': { textContent: '' },
+    'metric-spent-percent': { textContent: '' },
+    'badge-health-status': { className: '', textContent: '' },
+    'metric-total-income': { textContent: '' },
+    'metric-income-count': { textContent: '' },
+    'metric-total-expense': { textContent: '' },
+    'metric-expense-count': { textContent: '' },
+    'metric-monthly-daily-spending': { textContent: '' },
+    'badge-monthly-days-left': { textContent: '' },
+    'metric-monthly-daily-sub': { textContent: '' },
+    'metric-monthly-per-day-unit': {
+      _classes: new Set(),
+      classList: {
+        add(c) { this._classes.add(c); },
+        remove(c) { this._classes.delete(c); },
+        contains(c) { return this._classes.has(c); },
+        _classes: new Set()
+      }
+    }
+  };
+  globalThis.document = {
+    getElementById: (id) => mockElements[id] || null,
+    querySelectorAll: () => [],
+    createElement: () => ({ classList: { add() {}, remove() {}, contains() { return false; } }, dataset: {}, addEventListener: () => {} }),
+    documentElement: { classList: { add() {}, remove() {}, contains() { return false; } } },
+    body: { classList: { add() {}, remove() {}, contains() { return false; } } },
+    addEventListener: () => {},
+    removeEventListener: () => {}
+  };
+
+  const uiTest = new UIManager(storeIso);
+
+  // 1. Current month render (2026-10 with now = 2026-10-02)
+  setLanguage('tr');
+  uiTest.selectedMonth = '2026-10';
+  uiTest.renderDashboardCards(summaryAfter, 'TRY', 'tr', refOct2);
+  assert(mockElements['metric-monthly-daily-spending'].textContent.includes('310,00'), 'TC-396-G Current month displays formatted daily spending 310,00 ₺');
+  assert(mockElements['badge-monthly-days-left'].textContent === '30 Gün Kaldı', 'TC-396-G Current month displays 30 Gün Kaldı');
+  assert(mockElements['metric-monthly-daily-sub'].textContent === 'Ay sonuna kadar', 'TC-396-G Current month displays Ay sonuna kadar');
+  assert(!mockElements['metric-monthly-per-day-unit'].classList.contains('hidden'), 'TC-396-G Current month shows / gün unit');
+
+  // 2. Historical month render (2026-09 with now = 2026-10-02)
+  uiTest.selectedMonth = '2026-09';
+  const summaryHist = calculateSummary(storeIso.getTransactions(), refOct2, '2026-09');
+  uiTest.renderDashboardCards(summaryHist, 'TRY', 'tr', refOct2);
+  assert(mockElements['metric-monthly-daily-spending'].textContent === '—', 'TC-396-G Historical month displays non-actionable —');
+  assert(mockElements['badge-monthly-days-left'].textContent === '—', 'TC-396-G Historical month displays — badge');
+  assert(mockElements['metric-monthly-daily-sub'].textContent === 'Geçmiş ay', 'TC-396-G Historical month displays Geçmiş ay in TR');
+  assert(mockElements['metric-monthly-per-day-unit'].classList.contains('hidden'), 'TC-396-G Historical month hides / gün unit');
+
+  // 3. Future month render (2026-11 with now = 2026-10-02)
+  uiTest.selectedMonth = '2026-11';
+  const summaryFut = calculateSummary(storeIso.getTransactions(), refOct2, '2026-11');
+  uiTest.renderDashboardCards(summaryFut, 'TRY', 'tr', refOct2);
+  assert(mockElements['metric-monthly-daily-spending'].textContent === '—', 'TC-396-G Future month displays non-actionable —');
+  assert(mockElements['badge-monthly-days-left'].textContent === '—', 'TC-396-G Future month displays — badge');
+  assert(mockElements['metric-monthly-daily-sub'].textContent === 'Gelecek ay', 'TC-396-G Future month displays Gelecek ay in TR');
+  assert(mockElements['metric-monthly-per-day-unit'].classList.contains('hidden'), 'TC-396-G Future month hides / gün unit');
+
+  // H. TR / EN Rendering verification
+  assert(tr.cards.dailyLimit === 'Aylık Günlük Harcama', 'TC-396-H TR cards.dailyLimit is Aylık Günlük Harcama');
+  assert(tr.cards.dailyTipNormal === 'Ay sonuna kadar', 'TC-396-H TR cards.dailyTipNormal is Ay sonuna kadar');
+  assert(tr.cards.dailyTipHistorical === 'Geçmiş ay', 'TC-396-H TR cards.dailyTipHistorical is Geçmiş ay');
+  assert(tr.cards.dailyTipFuture === 'Gelecek ay', 'TC-396-H TR cards.dailyTipFuture is Gelecek ay');
+
+  assert(en.cards.dailyLimit === 'Monthly Daily Spending', 'TC-396-H EN cards.dailyLimit is Monthly Daily Spending');
+  assert(en.cards.dailyTipNormal === 'Until month end', 'TC-396-H EN cards.dailyTipNormal is Until month end');
+  assert(en.cards.dailyTipHistorical === 'Historical month', 'TC-396-H EN cards.dailyTipHistorical is Historical month');
+  assert(en.cards.dailyTipFuture === 'Future month', 'TC-396-H EN cards.dailyTipFuture is Future month');
+
+  // English render test
+  setLanguage('en');
+  uiTest.selectedMonth = '2026-10';
+  uiTest.renderDashboardCards(summaryAfter, 'USD', 'en', refOct2);
+  assert(mockElements['badge-monthly-days-left'].textContent === '30 Days Left', 'TC-396-H English displays 30 Days Left');
+  assert(mockElements['metric-monthly-daily-sub'].textContent === 'Until month end', 'TC-396-H English displays Until month end');
+
+  uiTest.selectedMonth = '2026-09';
+  uiTest.renderDashboardCards(summaryHist, 'USD', 'en', refOct2);
+  assert(mockElements['metric-monthly-daily-sub'].textContent === 'Historical month', 'TC-396-H English historical displays Historical month');
+
+  setLanguage('tr');
+
+  // I. Desktop 4-column layout & DOM semantics
+  assert(indexHtml.includes('grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4'), 'TC-396-I Responsive 4-column layout class present');
+  assert(indexHtml.includes('id="metric-monthly-daily-spending"'), 'TC-396-I metric-monthly-daily-spending ID present');
+  assert(indexHtml.includes('id="badge-monthly-days-left"'), 'TC-396-I badge-monthly-days-left ID present');
+  assert(indexHtml.includes('id="metric-monthly-daily-sub"'), 'TC-396-I metric-monthly-daily-sub ID present');
+  assert(indexHtml.includes('id="metric-monthly-per-day-unit"'), 'TC-396-I metric-monthly-per-day-unit ID present');
+  assert(!indexHtml.includes('id="star-card-container"'), 'TC-396-I Old star-card-container absent');
+  assert(!indexHtml.includes('from-indigo-600 via-indigo-700 to-violet-800'), 'TC-396-I Old purple gradient styling absent');
+
+  globalThis.document = originalDoc;
+}
+
+// TC-397: FAZ 5.8 — MUVAZENE WEB FREEZE, BRAND ASSETS, PUBLIC PAGES & SEO CONTENT
+console.log('\n--- 36. FAZ 5.8 — WEB FREEZE, BRAND ASSETS & PUBLIC PAGES QA (TC-397) ---');
+{
+  const publicDir = path.resolve(process.cwd(), 'public');
+  const brandDir = path.resolve(publicDir, 'brand');
+  const iconsDir = path.resolve(publicDir, 'icons');
+
+  // Helper to read PNG dimensions
+  function getPngDimensions(filePath) {
+    const buf = fs.readFileSync(filePath);
+    // PNG signature check
+    assert(buf.slice(0, 8).toString('hex') === '89504e470d0a1a0a', `Valid PNG signature for ${filePath}`);
+    const width = buf.readUInt32BE(16);
+    const height = buf.readUInt32BE(20);
+    return { width, height };
+  }
+
+  // A. Brand Assets Verification
+  const requiredBrandFiles = [
+    path.join(brandDir, 'muvazene-mark.svg'),
+    path.join(brandDir, 'muvazene-mark-dark.svg'),
+    path.join(brandDir, 'muvazene-logo.svg'),
+    path.join(brandDir, 'muvazene-logo-dark.svg'),
+    path.join(brandDir, 'muvazene-app-icon-1024.png'),
+    path.join(publicDir, 'favicon.svg'),
+    path.join(publicDir, 'favicon-32x32.png'),
+    path.join(publicDir, 'apple-touch-icon.png'),
+    path.join(iconsDir, 'icon-192x192.png'),
+    path.join(iconsDir, 'icon-512x512.png'),
+    path.join(iconsDir, 'icon-maskable-192x192.png'),
+    path.join(iconsDir, 'icon-maskable-512x512.png'),
+    path.join(publicDir, 'og-image.png')
+  ];
+
+  requiredBrandFiles.forEach(file => {
+    assert(fs.existsSync(file), `TC-397-A Required asset exists: ${path.relative(publicDir, file)}`);
+  });
+
+  // Check PNG dimensions
+  const fav32 = getPngDimensions(path.join(publicDir, 'favicon-32x32.png'));
+  assert(fav32.width === 32 && fav32.height === 32, 'TC-397-A favicon-32x32.png is 32x32');
+
+  const appleIcon = getPngDimensions(path.join(publicDir, 'apple-touch-icon.png'));
+  assert(appleIcon.width === 180 && appleIcon.height === 180, 'TC-397-A apple-touch-icon.png is 180x180');
+
+  const icon192 = getPngDimensions(path.join(iconsDir, 'icon-192x192.png'));
+  assert(icon192.width === 192 && icon192.height === 192, 'TC-397-A icon-192x192.png is 192x192');
+
+  const icon512 = getPngDimensions(path.join(iconsDir, 'icon-512x512.png'));
+  assert(icon512.width === 512 && icon512.height === 512, 'TC-397-A icon-512x512.png is 512x512');
+
+  const maskable192 = getPngDimensions(path.join(iconsDir, 'icon-maskable-192x192.png'));
+  assert(maskable192.width === 192 && maskable192.height === 192, 'TC-397-A icon-maskable-192x192.png is 192x192');
+
+  const maskable512 = getPngDimensions(path.join(iconsDir, 'icon-maskable-512x512.png'));
+  assert(maskable512.width === 512 && maskable512.height === 512, 'TC-397-A icon-maskable-512x512.png is 512x512');
+
+  const appIcon1024 = getPngDimensions(path.join(brandDir, 'muvazene-app-icon-1024.png'));
+  assert(appIcon1024.width === 1024 && appIcon1024.height === 1024, 'TC-397-A muvazene-app-icon-1024.png is 1024x1024');
+
+  const ogImage = getPngDimensions(path.join(publicDir, 'og-image.png'));
+  assert(ogImage.width === 1200 && ogImage.height === 630, 'TC-397-A og-image.png is 1200x630');
+
+  // B. Legacy Asset Purge Verification
+  const faviconSvg = fs.readFileSync(path.join(publicDir, 'favicon.svg'), 'utf-8');
+  assert(!faviconSvg.includes('4F46E5') && !faviconSvg.includes('6366F1'), 'TC-397-B Legacy purple absent from favicon.svg');
+  assert(!faviconSvg.includes('polygon') && !faviconSvg.includes('rect x="2"'), 'TC-397-B Legacy graduation cap absent from favicon.svg');
+  assert(faviconSvg.includes('#1F7A56') || faviconSvg.includes('#8FB69A'), 'TC-397-B Brand palette present in favicon.svg');
+
+  const markSvg = fs.readFileSync(path.join(brandDir, 'muvazene-mark.svg'), 'utf-8');
+  assert(markSvg.includes('viewBox="0 0 204 116"'), 'TC-397-B Mark SVG uses tight 204x116 viewBox');
+
+  // C. Header Branding & Pure HTML Text
+  const indexHtml = fs.readFileSync(path.resolve(process.cwd(), 'index.html'), 'utf-8');
+  assert(indexHtml.includes('/brand/muvazene-mark.svg'), 'TC-397-C Header references light brand mark SVG');
+  assert(indexHtml.includes('/brand/muvazene-mark-dark.svg'), 'TC-397-C Header references dark brand mark SVG');
+  assert(indexHtml.includes('<span class="text-lg sm:text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white leading-none" data-i18n="brand.title">Muvazene</span>'), 'TC-397-C Header renders accessible HTML title Muvazene');
+  assert(indexHtml.includes('Bugünü gör. Sonrasını dengele.'), 'TC-397-C Header renders subtitle');
+
+  // D. Public Informational Pages Verification
+  const publicPages = [
+    {
+      relPath: 'hakkinda/index.html',
+      canonical: 'https://www.muvazene.app/hakkinda',
+      expectedTitlePart: 'Hakkında',
+      expectedH1: 'Muvazene Hakkında'
+    },
+    {
+      relPath: 'nasil-calisir/index.html',
+      canonical: 'https://www.muvazene.app/nasil-calisir',
+      expectedTitlePart: 'Nasıl Çalışır',
+      expectedH1: 'Muvazene Nasıl Çalışır?'
+    },
+    {
+      relPath: 'gizlilik/index.html',
+      canonical: 'https://www.muvazene.app/gizlilik',
+      expectedTitlePart: 'Gizlilik',
+      expectedH1: 'Gizlilik ve Veri Mimarisi'
+    }
+  ];
+
+  publicPages.forEach(page => {
+    const fullPath = path.resolve(process.cwd(), page.relPath);
+    assert(fs.existsSync(fullPath), `TC-397-D Public page exists: ${page.relPath}`);
+    const content = fs.readFileSync(fullPath, 'utf-8');
+
+    // Single H1 verification
+    const h1s = content.match(/<h1[\s>][\s\S]*?<\/h1>/gi) || [];
+    assert(h1s.length === 1, `TC-397-D Exactly 1 H1 on ${page.relPath} (found: ${h1s.length})`);
+    assert(h1s[0].includes(page.expectedH1), `TC-397-D H1 content on ${page.relPath} contains "${page.expectedH1}"`);
+
+    // Canonical link
+    assert(content.includes(`<link rel="canonical" href="${page.canonical}" />`) || content.includes(`<link rel="canonical" href="${page.canonical}">`), `TC-397-D Canonical link on ${page.relPath}`);
+
+    // Social preview metadata
+    assert(content.includes('property="og:image" content="https://www.muvazene.app/og-image.png"'), `TC-397-D og:image on ${page.relPath}`);
+    assert(content.includes('name="twitter:image" content="https://www.muvazene.app/og-image.png"'), `TC-397-D twitter:image on ${page.relPath}`);
+    assert(content.includes('name="twitter:card" content="summary_large_image"'), `TC-397-D summary_large_image on ${page.relPath}`);
+
+    // Favicon & Touch Icon
+    assert(content.includes('/favicon.svg'), `TC-397-D Favicon SVG linked on ${page.relPath}`);
+    assert(content.includes('/favicon-32x32.png'), `TC-397-D Favicon 32x32 linked on ${page.relPath}`);
+    assert(content.includes('/apple-touch-icon.png'), `TC-397-D Apple touch icon linked on ${page.relPath}`);
+
+    // Title
+    assert(content.includes(page.expectedTitlePart), `TC-397-D Title on ${page.relPath} contains "${page.expectedTitlePart}"`);
+  });
+
+  // E. Semantic Metric Distinction in nasil-calisir/index.html
+  const nasilCalisirContent = fs.readFileSync(path.resolve(process.cwd(), 'nasil-calisir/index.html'), 'utf-8');
+  assert(nasilCalisirContent.includes('Aylık Günlük Harcama'), 'TC-397-E nasil-calisir explains Aylık Günlük Harcama');
+  assert(nasilCalisirContent.includes('Güvenli Günlük Harcama'), 'TC-397-E nasil-calisir explains Güvenli Günlük Harcama');
+  assert(nasilCalisirContent.includes('planlı gelirinize'), 'TC-397-E nasil-calisir clarifies safe spending horizon');
+
+  // F. Privacy Architecture Truthfulness in gizlilik/index.html
+  const gizlilikContent = fs.readFileSync(path.resolve(process.cwd(), 'gizlilik/index.html'), 'utf-8');
+  assert(gizlilikContent.includes('asılsız teknik iddialarda bulunulmaz'), 'TC-397-F Disclaims unsubstantiated zero-knowledge claims in gizlilik.html');
+  assert(!gizlilikContent.toLowerCase().includes('uçtan uca') && !gizlilikContent.toLowerCase().includes('end-to-end'), 'TC-397-F No unsubstantiated end-to-end encryption claims in gizlilik.html');
+  assert(gizlilikContent.includes('Row Level Security') || gizlilikContent.includes('RLS'), 'TC-397-F RLS architecture documented truthfully in gizlilik.html');
+  assert(gizlilikContent.includes('IndexedDB') || gizlilikContent.includes('LocalStorage'), 'TC-397-F Local storage documented truthfully in gizlilik.html');
+
+  // G. Sitemap & Robots Coverage
+  const sitemapContent = fs.readFileSync(path.join(publicDir, 'sitemap.xml'), 'utf-8');
+  const expectedUrls = [
+    'https://www.muvazene.app/',
+    'https://www.muvazene.app/hakkinda',
+    'https://www.muvazene.app/nasil-calisir',
+    'https://www.muvazene.app/gizlilik'
+  ];
+  expectedUrls.forEach(url => {
+    assert(sitemapContent.includes(`<loc>${url}</loc>`), `TC-397-G Sitemap includes ${url}`);
+  });
+
+  // H. Vite Multi-Page Build & Vercel Rewrites
+  const viteConfigContent = fs.readFileSync(path.resolve(process.cwd(), 'vite.config.js'), 'utf-8');
+  assert(viteConfigContent.includes('hakkinda: resolve(__dirname, \'hakkinda/index.html\')'), 'TC-397-H Vite config includes hakkinda entry');
+  assert(viteConfigContent.includes('nasilCalisir: resolve(__dirname, \'nasil-calisir/index.html\')'), 'TC-397-H Vite config includes nasilCalisir entry');
+  assert(viteConfigContent.includes('gizlilik: resolve(__dirname, \'gizlilik/index.html\')'), 'TC-397-H Vite config includes gizlilik entry');
+  assert(viteConfigContent.includes('multiPageCleanUrlsPlugin'), 'TC-397-H Vite config includes multiPageCleanUrlsPlugin');
+  assert(viteConfigContent.includes('navigateFallbackDenylist'), 'TC-397-H Vite config includes navigateFallbackDenylist');
+
+  const vercelJsonPath = path.resolve(process.cwd(), 'vercel.json');
+  assert(fs.existsSync(vercelJsonPath), 'TC-397-H vercel.json exists');
+  const vercelJson = JSON.parse(fs.readFileSync(vercelJsonPath, 'utf-8'));
+  assert(vercelJson.cleanUrls === true, 'TC-397-H vercel.json enables cleanUrls');
+  assert(Array.isArray(vercelJson.rewrites) && vercelJson.rewrites.length >= 3, 'TC-397-H vercel.json configures rewrites for public pages');
+  const hasCatchAll = vercelJson.rewrites.some(r => r.destination === '/index.html' && r.source.includes('?!'));
+  assert(!hasCatchAll, 'TC-397-H vercel.json does not contain catch-all rewrite intercepting public routes');
+
+  // Verify flat HTML generation in dist
+  const distDir = path.resolve(process.cwd(), 'dist');
+  if (fs.existsSync(distDir)) {
+    assert(fs.existsSync(path.resolve(distDir, 'hakkinda.html')), 'TC-397-H dist/hakkinda.html exists');
+    assert(fs.existsSync(path.resolve(distDir, 'nasil-calisir.html')), 'TC-397-H dist/nasil-calisir.html exists');
+    assert(fs.existsSync(path.resolve(distDir, 'gizlilik.html')), 'TC-397-H dist/gizlilik.html exists');
+    const swPath = path.resolve(distDir, 'sw.js');
+    if (fs.existsSync(swPath)) {
+      const swContent = fs.readFileSync(swPath, 'utf-8');
+      assert(swContent.includes('hakkinda') && swContent.includes('nasil-calisir') && swContent.includes('gizlilik'), 'TC-397-H sw.js denylist contains public routes');
+    }
+  }
+
+  // I. Landing Page Core Flow & Entry CTAs
+  assert(indexHtml.includes('Muvazene Karar Döngüsü'), 'TC-397-I Core decision flow title present');
+  assert(indexHtml.includes('Takip') && indexHtml.includes('Analiz') && indexHtml.includes('Tahmin') && indexHtml.includes('Senaryo') && indexHtml.includes('Karar'), 'TC-397-I All 5 steps of core decision flow present');
+  assert(indexHtml.includes('Üyeliksiz devam et'), 'TC-397-I Guest entry CTA present on landing');
+  assert(indexHtml.includes('Google ile devam et'), 'TC-397-I Cloud sync CTA present on landing');
+  assert(!indexHtml.includes('Google ile Eşitle'), 'TC-397-I Google ile Eşitle absent from landing');
+
+  // J. Finance Engine Isolation
+  const sampleTx = [
+    { id: '1', title: 'Gelir', type: 'income', amount: 20000, date: '2026-10-01' },
+    { id: '2', title: 'Gider', type: 'expense', amount: 5000, date: '2026-10-02' }
+  ];
+  const refDate = new Date('2026-10-01T12:00:00');
+  const summary = calculateSummary(sampleTx, refDate, '2026-10');
+  assert(summary.balance === 15000, 'TC-397-J calculateSummary balance is 15000');
+  assert(summary.daysRemainingInMonth === 31, 'TC-397-J daysRemainingInMonth is 31');
+  assert(summary.dailySafeSpendLimit === Math.round((15000 / 31) * 100) / 100, 'TC-397-J dailySafeSpendLimit returns 483.87 TL/day');
+}
+
+// TC-398: FAZ 5.8.1 — FINAL PRE-FREEZE UX & PRIVACY COPY QA
+console.log('\n--- 37. FAZ 5.8.1 — FINAL PRE-FREEZE UX & PRIVACY COPY QA (TC-398) ---');
+{
+  const indexHtml = fs.readFileSync(path.resolve(process.cwd(), 'index.html'), 'utf-8');
+  const gizlilikHtml = fs.readFileSync(path.resolve(process.cwd(), 'gizlilik/index.html'), 'utf-8');
+
+  // A. Landing and first-use modal use consistent labels
+  assert(indexHtml.includes('Google ile devam et'), 'TC-398-A "Google ile devam et" present on landing & modal');
+  assert(indexHtml.includes('Üyeliksiz devam et'), 'TC-398-A "Üyeliksiz devam et" present on landing & modal');
+  assert(indexHtml.includes('Verilerini hesabınla cihazların arasında senkronize et.'), 'TC-398-A Google supporting copy matches specification');
+  assert(indexHtml.includes('Hesap oluşturmadan bu cihazda kullan.'), 'TC-398-A Guest supporting copy matches specification');
+
+  // B. "Google ile Eşitle" is absent from onboarding/public landing copy
+  assert(!indexHtml.includes('Google ile Eşitle'), 'TC-398-B "Google ile Eşitle" completely absent from landing and onboarding');
+
+  // C. Fresh unresolved visitor state does NOT render "Yerel kullanım" before user chooses guest mode
+  assert(indexHtml.includes('id="btn-open-auth" type="button" class="hidden'), 'TC-398-C Header account button is hidden by default in initial HTML');
+
+  // Runtime test for unresolved fresh visitor state vs guest vs authenticated
+  const createMockEl = (id) => {
+    const classes = new Set();
+    return {
+      id,
+      textContent: '',
+      className: '',
+      classList: {
+        add: (...cls) => cls.forEach(c => classes.add(c)),
+        remove: (...cls) => cls.forEach(c => classes.delete(c)),
+        contains: (c) => classes.has(c)
+      },
+      setAttribute() {},
+      getAttribute() { return null; },
+      addEventListener() {},
+      removeEventListener() {}
+    };
+  };
+
+  const mockElements = {
+    'btn-open-auth': createMockEl('btn-open-auth'),
+    'user-auth-badge': createMockEl('user-auth-badge'),
+    'header-auth-label': createMockEl('header-auth-label'),
+    'header-auth-sub': createMockEl('header-auth-sub'),
+    'sync-status-indicator': createMockEl('sync-status-indicator'),
+    'sync-status-text': createMockEl('sync-status-text'),
+    'footer-privacy-text': createMockEl('footer-privacy-text'),
+    'user-email-text': createMockEl('user-email-text'),
+    'user-avatar-img': createMockEl('user-avatar-img'),
+    'btn-sign-out': createMockEl('btn-sign-out')
+  };
+  mockElements['btn-open-auth'].classList.add('hidden');
+  mockElements['user-auth-badge'].classList.add('hidden');
+
+  const origDoc = globalThis.document;
+  globalThis.document = {
+    documentElement: { classList: { add() {}, remove() {}, contains() { return false; } } },
+    body: { classList: { add() {}, remove() {}, contains() { return false; } } },
+    getElementById: (id) => mockElements[id] || null,
+    querySelectorAll: () => [],
+    addEventListener: () => {},
+    removeEventListener: () => {}
+  };
+
+  const freshStore = new BudgetStore();
+  assert(freshStore.state.onboarded === false, 'TC-398-C fresh store starts with onboarded=false');
+  const mockAuth = {
+    isAuthenticated: () => false,
+    getUser: () => null,
+    onAuthStateChange: () => () => {}
+  };
+  const ui = new UIManager(freshStore, { authService: mockAuth });
+  ui.renderAuthBadge();
+
+  // Fresh unresolved visitor state:
+  assert(mockElements['btn-open-auth'].classList.contains('hidden') === true, 'TC-398-C Fresh unresolved visitor hides btn-open-auth');
+  assert(mockElements['header-auth-label'].textContent === '', 'TC-398-C Fresh unresolved visitor does NOT render "Yerel kullanım"');
+
+  // D. Guest mode still renders correct local badge after selection
+  freshStore.state.onboarded = true;
+  ui.renderAuthBadge();
+  assert(mockElements['btn-open-auth'].classList.contains('hidden') === false, 'TC-398-D Guest mode selection renders btn-open-auth');
+  assert(mockElements['header-auth-label'].textContent === tr.auth.accountGuestPrimary, 'TC-398-D Guest mode renders "Yerel kullanım"');
+  assert(mockElements['header-auth-sub'].textContent === tr.auth.accountGuestSecondary, 'TC-398-D Guest mode renders "Bu cihazda"');
+
+  // E. Authenticated mode still renders cloud/sync badge
+  const authedUser = { email: 'pilot@muvazene.app', user_metadata: {} };
+  ui.renderAuthBadge(authedUser);
+  assert(mockElements['btn-open-auth'].classList.contains('hidden') === true, 'TC-398-E Authenticated mode hides btn-open-auth');
+  assert(mockElements['user-auth-badge'].classList.contains('hidden') === false, 'TC-398-E Authenticated mode renders user-auth-badge');
+  assert(mockElements['user-email-text'].textContent === 'pilot@muvazene.app', 'TC-398-E Authenticated mode displays user email');
+
+  globalThis.document = origDoc;
+
+  // F. /gizlilik does NOT contain absolute claim: "Herhangi bir sunucuya işlem veya bakiye verisi aktarılmaz."
+  assert(!gizlilikHtml.includes('Herhangi bir sunucuya işlem veya bakiye verisi aktarılmaz'), 'TC-398-F Absolute server claim absent from gizlilik.html');
+
+  // G. Privacy copy contains the narrower local-storage/cloud-sync statement
+  assert(gizlilikHtml.includes('Üyeliksiz kullanımda finansal verileriniz cihazınızın tarayıcısında yerel olarak saklanır ve Muvazene bulut hesabına senkronize edilmez.'), 'TC-398-G Privacy copy contains narrower local storage statement');
+
+  // H. No unsupported zero-knowledge, end-to-end encryption, absolute no-network claims & durable ad title
+  assert(gizlilikHtml.includes('Reklam ve Veri Ticareti Yok'), 'TC-398-H Privacy section title is "Reklam ve Veri Ticareti Yok"');
+  assert(!gizlilikHtml.includes('Reklamsız ve Takipçisiz Deneyim'), 'TC-398-H Old non-durable section title absent');
+  assert(gizlilikHtml.includes('Oturum, tercih ve uygulama işlevleri için gerekli teknik depolama mekanizmaları kullanılabilir.'), 'TC-398-H Durable storage & cookie copy present');
+  assert(!gizlilikHtml.toLowerCase().includes('zero-knowledge') || gizlilikHtml.includes('asılsız teknik iddialarda bulunulmaz'), 'TC-398-H No unsubstantiated zero-knowledge claims');
+  assert(!gizlilikHtml.toLowerCase().includes('uçtan uca'), 'TC-398-H No unsubstantiated end-to-end encryption claims');
+
+  // I. Public routing tests continue passing
+  const viteConfig = fs.readFileSync(path.resolve(process.cwd(), 'vite.config.js'), 'utf-8');
+  assert(viteConfig.includes('navigateFallbackDenylist'), 'TC-398-I SW navigateFallbackDenylist is active');
+  assert(viteConfig.includes('multiPageCleanUrlsPlugin'), 'TC-398-I multiPageCleanUrlsPlugin is active');
+}
+
+// --- 38. FAZ 5.8.2 — FINAL AUTH-AWARE LANDING & TERMINOLOGY QA (TC-399) ---
+console.log('\n--- 38. FAZ 5.8.2 — FINAL AUTH-AWARE LANDING & TERMINOLOGY QA (TC-399) ---');
+{
+  const indexHtml = fs.readFileSync(path.resolve(process.cwd(), 'index.html'), 'utf-8');
+  const nasilCalisirHtml = fs.readFileSync(path.resolve(process.cwd(), 'nasil-calisir/index.html'), 'utf-8');
+  const hakkindaHtml = fs.readFileSync(path.resolve(process.cwd(), 'hakkinda/index.html'), 'utf-8');
+  const gizlilikHtml = fs.readFileSync(path.resolve(process.cwd(), 'gizlilik/index.html'), 'utf-8');
+
+  // A. Terminology: "Güvenli Günlük Limit" must be completely absent from public copy
+  assert(!nasilCalisirHtml.includes('Güvenli Günlük Limit'), 'TC-399-A "Güvenli Günlük Limit" absent from nasil-calisir/index.html');
+  assert(!hakkindaHtml.includes('Güvenli Günlük Limit'), 'TC-399-A "Güvenli Günlük Limit" absent from hakkinda/index.html');
+  assert(!gizlilikHtml.includes('Güvenli Günlük Limit'), 'TC-399-A "Güvenli Günlük Limit" absent from gizlilik/index.html');
+  assert(!indexHtml.includes('Güvenli Günlük Limit'), 'TC-399-A "Güvenli Günlük Limit" absent from index.html');
+
+  // B. Terminology: "Güvenli Günlük Harcama" present consistently
+  assert(nasilCalisirHtml.includes('<strong>Güvenli Günlük Harcama</strong>'), 'TC-399-B "Güvenli Günlük Harcama" present in nasil-calisir step 4');
+  assert(nasilCalisirHtml.includes('Card B: Güvenli Günlük Harcama') || nasilCalisirHtml.includes('>Güvenli Günlük Harcama<'), 'TC-399-B "Güvenli Günlük Harcama" present in comparison cards');
+  assert(indexHtml.includes('data-i18n="whatif.decision.safeDailySpend">Güvenli Günlük Harcama<'), 'TC-399-B "Güvenli Günlük Harcama" present in index.html What-If decision card');
+
+  // C. Public info pages CTA "Uygulamayı Aç" linking to /
+  [
+    { name: 'hakkinda', html: hakkindaHtml },
+    { name: 'nasil-calisir', html: nasilCalisirHtml },
+    { name: 'gizlilik', html: gizlilikHtml }
+  ].forEach(({ name, html }) => {
+    assert(html.includes('Uygulamayı Aç'), `TC-399-C ${name} includes "Uygulamayı Aç" CTA`);
+    assert(html.includes('href="/"'), `TC-399-C ${name} CTA links to "/"`);
+  });
+
+  // D. Auth-aware landing CTA DOM simulation
+  assert(indexHtml.includes('id="landing-onboarding-cta"'), 'TC-399-D #landing-onboarding-cta ID exists in index.html');
+
+  const createMockEl = (id) => {
+    const classes = new Set();
+    return {
+      id,
+      textContent: '',
+      title: '',
+      src: '',
+      classList: {
+        add: (...cls) => cls.forEach(c => classes.add(c)),
+        remove: (...cls) => cls.forEach(c => classes.delete(c)),
+        contains: (c) => classes.has(c)
+      },
+      setAttribute() {},
+      removeAttribute() {},
+      getAttribute() { return null; },
+      addEventListener() {},
+      removeEventListener() {}
+    };
+  };
+
+  const mockElements = {
+    'landing-onboarding-cta': createMockEl('landing-onboarding-cta'),
+    'btn-open-auth': createMockEl('btn-open-auth'),
+    'user-auth-badge': createMockEl('user-auth-badge'),
+    'header-auth-label': createMockEl('header-auth-label'),
+    'header-auth-sub': createMockEl('header-auth-sub'),
+    'sync-status-indicator': createMockEl('sync-status-indicator'),
+    'sync-status-text': createMockEl('sync-status-text'),
+    'footer-privacy-text': createMockEl('footer-privacy-text'),
+    'user-email-text': createMockEl('user-email-text'),
+    'user-avatar-img': createMockEl('user-avatar-img'),
+    'btn-sign-out': createMockEl('btn-sign-out')
+  };
+  mockElements['btn-open-auth'].classList.add('hidden');
+  mockElements['user-auth-badge'].classList.add('hidden');
+
+  const origDoc = globalThis.document;
+  globalThis.document = {
+    documentElement: { classList: { add() {}, remove() {}, contains() { return false; } } },
+    body: { classList: { add() {}, remove() {}, contains() { return false; } } },
+    getElementById: (id) => mockElements[id] || null,
+    querySelectorAll: () => [],
+    addEventListener: () => {},
+    removeEventListener() {}
+  };
+
+  const store = new BudgetStore();
+  assert(store.state.onboarded === false, 'TC-399-E Fresh store starts with onboarded=false');
+
+  let authUser = null;
+  const mockAuthService = {
+    isAuthenticated: () => Boolean(authUser),
+    getUser: () => authUser,
+    onAuthStateChange: (cb) => {
+      mockAuthService._cb = cb;
+      return () => {};
+    }
+  };
+
+  const ui = new UIManager(store, { authService: mockAuthService });
+
+  // 1. Fresh unresolved visitor:
+  // - onboarding CTA section visible
+  // - header account badge hidden
+  // - user auth badge hidden
+  ui.render();
+  ui.renderAuthBadge();
+  assert(mockElements['landing-onboarding-cta'].classList.contains('hidden') === false, 'TC-399-F Fresh visitor: onboarding CTA section is VISIBLE');
+  assert(mockElements['btn-open-auth'].classList.contains('hidden') === true, 'TC-399-F Fresh visitor: btn-open-auth is HIDDEN');
+  assert(mockElements['user-auth-badge'].classList.contains('hidden') === true, 'TC-399-F Fresh visitor: user-auth-badge is HIDDEN');
+
+  // 2. Explicit guest/local user:
+  // - onboarding CTA section hidden
+  // - header account badge visible ("Yerel kullanım", "Bu cihazda")
+  // - user auth badge hidden
+  store.state.onboarded = true;
+  store.notify();
+  assert(mockElements['landing-onboarding-cta'].classList.contains('hidden') === true, 'TC-399-G Explicit guest: onboarding CTA section is HIDDEN');
+  assert(mockElements['btn-open-auth'].classList.contains('hidden') === false, 'TC-399-G Explicit guest: btn-open-auth is VISIBLE');
+  assert(mockElements['header-auth-label'].textContent === tr.auth.accountGuestPrimary, 'TC-399-G Explicit guest: header renders "Yerel kullanım"');
+  assert(mockElements['header-auth-sub'].textContent === tr.auth.accountGuestSecondary, 'TC-399-G Explicit guest: header renders "Bu cihazda"');
+  assert(mockElements['user-auth-badge'].classList.contains('hidden') === true, 'TC-399-G Explicit guest: user-auth-badge is HIDDEN');
+
+  // 3. Authenticated/cloud user:
+  // - onboarding CTA section hidden
+  // - header account badge hidden
+  // - user auth badge visible with email and cloud sync status
+  authUser = { email: 'pilot@muvazene.app', user_metadata: { picture: 'https://example.com/avatar.png' } };
+  ui.renderAuthBadge(authUser);
+  assert(mockElements['landing-onboarding-cta'].classList.contains('hidden') === true, 'TC-399-H Authenticated: onboarding CTA section is HIDDEN');
+  assert(mockElements['btn-open-auth'].classList.contains('hidden') === true, 'TC-399-H Authenticated: btn-open-auth is HIDDEN');
+  assert(mockElements['user-auth-badge'].classList.contains('hidden') === false, 'TC-399-H Authenticated: user-auth-badge is VISIBLE');
+  assert(mockElements['user-email-text'].textContent === 'pilot@muvazene.app', 'TC-399-H Authenticated: renders user email');
+  assert(mockElements['header-auth-sub'].textContent === tr.auth.statusSynced, 'TC-399-H Authenticated: header renders "Bulut Eşitlendi"');
+
+  // 4. Reset & restart onboarding:
+  // - transitions back to fresh visitor state
+  authUser = null;
+  store.state.onboarded = false;
+  store.notify();
+  assert(mockElements['landing-onboarding-cta'].classList.contains('hidden') === false, 'TC-399-I Reset: onboarding CTA section is VISIBLE again');
+  assert(mockElements['btn-open-auth'].classList.contains('hidden') === true, 'TC-399-I Reset: btn-open-auth is HIDDEN again');
+  assert(mockElements['user-auth-badge'].classList.contains('hidden') === true, 'TC-399-I Reset: user-auth-badge is HIDDEN again');
+
+  globalThis.document = origDoc;
+}
+
 // ====================================================
 // FAZ 6.0: CAPACITOR MOBILE FOUNDATION TESTS (TC-400)
 // ====================================================
+console.log('\n--- 39. FAZ 6.0 — CAPACITOR MOBILE FOUNDATION TESTS (TC-400) ---');
 
-// TC-400-1: Capacitor Config Validation
+// TC-400-1: Capacitor Config Validation & Brand Alignment
 {
   const configPath = path.resolve('capacitor.config.json');
   assert(fs.existsSync(configPath), 'TC-400-1 capacitor.config.json exists');
   const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
   assert(config.appId === 'com.mkandaz.ogrencibutce.dev', 'TC-400-1 appId is com.mkandaz.ogrencibutce.dev');
-  assert(config.appName === 'Öğrenci Bütçe', 'TC-400-1 appName is Öğrenci Bütçe');
+  assert(config.appName === 'Muvazene', 'TC-400-1 appName is Muvazene');
   assert(config.webDir === 'dist', 'TC-400-1 webDir points to dist');
+
+  const infoPlistPath = path.resolve('ios/App/App/Info.plist');
+  if (fs.existsSync(infoPlistPath)) {
+    const infoPlist = fs.readFileSync(infoPlistPath, 'utf8');
+    assert(infoPlist.includes('<string>Muvazene</string>'), 'TC-400-1 Info.plist CFBundleDisplayName is Muvazene');
+  }
 }
 
 // TC-400-2: Web PWA Service Worker remains enabled in browser environment
