@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="tr" class="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Muvazene Hakkında | Kişisel Bütçe ve Nakit Akışı Planlama</title>
+  <meta name="description" content="Muvazene'nin çıkış amacı, finansal planlama felsefesi ve geçmiş harcamaların ötesine geçen nakit akışı vizyonu." />
+  <meta name="theme-color" content="#356B57" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="canonical" href="https://www.muvazene.app/hakkinda" />
+
+  <!-- OpenGraph Metadata -->
+  <meta property="og:title" content="Muvazene Hakkında | Kişisel Bütçe ve Nakit Akışı Planlama" />
+  <meta property="og:description" content="Muvazene'nin çıkış amacı, finansal planlama felsefesi ve geçmiş harcamaların ötesine geçen nakit akışı vizyonu." />
+  <meta property="og:url" content="https://www.muvazene.app/hakkinda" />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="https://www.muvazene.app/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+
+  <!-- Twitter Metadata -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Muvazene Hakkında | Kişisel Bütçe ve Nakit Akışı Planlama" />
+  <meta name="twitter:description" content="Muvazene'nin çıkış amacı, finansal planlama felsefesi ve geçmiş harcamaların ötesine geçen nakit akışı vizyonu." />
+  <meta name="twitter:image" content="https://www.muvazene.app/og-image.png" />
+
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="/src/styles/main.css" />
+
+  <!-- Inline Theme Script -->
+  <script>
+    (function () {
+      try {
+        const theme = localStorage.getItem('student_budget_theme');
+        if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      } catch (e) {}
+    })();
+  </script>
+</head>
+<body class="bg-[#F6F5F1] dark:bg-[#101511] text-[#172033] dark:text-[#F0F3F1] min-h-screen antialiased flex flex-col transition-colors duration-200">
+
+  <!-- ================= NAVBAR ================= -->
+  <header class="sticky top-0 z-40 bg-white/95 dark:bg-[#171D19]/95 backdrop-blur-md border-b border-[#DDDCD5] dark:border-[#27332B] transition-colors">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+      
+      <!-- Brand Logo + Link to Home -->
+      <a href="/" class="flex items-center gap-3 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#356B57] rounded-lg">
+        <div class="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center shrink-0">
+          <img src="/brand/muvazene-mark.svg" alt="" width="36" height="20" class="block dark:hidden" />
+          <img src="/brand/muvazene-mark-dark.svg" alt="" width="36" height="20" class="hidden dark:block" />
+        </div>
+        <div class="flex flex-col">
+          <span class="text-lg sm:text-xl font-extrabold tracking-tight text-slate-900 dark:text-white leading-tight">Muvazene</span>
+          <span class="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 font-medium">Bugünü gör. Sonrasını dengele.</span>
+        </div>
+      </a>
+
+      <!-- Navigation & Actions -->
+      <div class="flex items-center gap-2 sm:gap-4">
+        <nav class="hidden sm:flex items-center gap-4 text-xs font-semibold text-slate-600 dark:text-slate-300">
+          <a href="/nasil-calisir" class="hover:text-[#356B57] dark:hover:text-[#44856D] transition py-1">Nasıl Çalışır?</a>
+          <a href="/hakkinda" class="text-[#356B57] dark:text-[#44856D] font-bold py-1 border-b-2 border-[#356B57]">Hakkında</a>
+          <a href="/gizlilik" class="hover:text-[#356B57] dark:hover:text-[#44856D] transition py-1">Gizlilik</a>
+        </nav>
+
+        <!-- Theme Toggle -->
+        <button id="btn-theme-toggle" type="button" aria-label="Temayı Değiştir" class="p-2 rounded-xl text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center justify-center cursor-pointer">
+          <svg id="theme-icon-moon" class="w-4 h-4 hidden dark:block" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+          </svg>
+          <svg id="theme-icon-sun" class="w-4 h-4 block dark:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+          </svg>
+        </button>
+
+        <!-- CTA Button -->
+        <a href="/" class="h-9 px-4 rounded-xl text-xs font-bold bg-[#356B57] hover:bg-[#2B5948] text-white transition flex items-center justify-center gap-1.5 shadow-xs">
+          <span>Uygulamayı Aç</span>
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+          </svg>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= MAIN ARTICLE ================= -->
+  <main class="flex-1 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16">
+    <article class="space-y-10">
+      
+      <!-- Page Header -->
+      <header class="space-y-3 border-b border-[#DDDCD5] dark:border-[#27332B] pb-8">
+        <span class="text-xs font-bold text-[#356B57] dark:text-[#44856D] uppercase tracking-wider">Hakkında</span>
+        <h1 class="text-2xl sm:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+          Muvazene Hakkında
+        </h1>
+        <p class="text-base sm:text-lg text-slate-600 dark:text-slate-300 leading-relaxed font-normal">
+          Geçmiş harcamaların ötesine geçen, bugünün kararlarıyla yarının nakit akışını dengeleyen kişisel finans yaklaşımı.
+        </p>
+      </header>
+
+      <!-- Section: Neden Muvazene? -->
+      <section class="space-y-4">
+        <h2 class="text-lg sm:text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
+          <span class="w-2 h-2 rounded-full bg-[#356B57]"></span>
+          Neden Muvazene?
+        </h2>
+        <div class="prose dark:prose-invert text-sm sm:text-base text-slate-600 dark:text-slate-300 space-y-3 leading-relaxed">
+          <p>
+            Geleneksel bütçe uygulamalarının çoğu geriye dönük bir harcama günlüğü gibi çalışır: Dün nereye ne kadar para harcadığınızı kaydeder ve ay sonunda size kabarık grafikler sunar. Ancak bu yaklaşım en kritik soruyu cevapsız bırakır: <em>"Önümüzdeki günlerde kiranızı veya faturalarınızı ödedikten sonra elinizde güvenle harcayabileceğiniz ne kadar para kalacak?"</em>
+          </p>
+          <p>
+            Muvazene, geriye dönük muhasebe yerine <strong>ileri dönük nakit akışı farkındalığını</strong> merkeze alır. Hedefi sadece harcamaları listelemek değil, bir sonraki gelir gününe kadar bütçenizi kontrol altında tutmanızı sağlamaktır.
+          </p>
+        </div>
+      </section>
+
+      <!-- Section: Muvazene Ne Demektir? -->
+      <section class="space-y-4">
+        <h2 class="text-lg sm:text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
+          <span class="w-2 h-2 rounded-full bg-[#356B57]"></span>
+          Denge Felsefesi
+        </h2>
+        <div class="prose dark:prose-invert text-sm sm:text-base text-slate-600 dark:text-slate-300 space-y-3 leading-relaxed">
+          <p>
+            <strong>Muvazene</strong>; kökeni denge, tartı, ölçülülük ve denk tutma kavramlarına dayanan bir sözcüktür. Kişisel finans hayatında da asıl mesele aşırı kısıtlayıcı listeler yapmak değil, harcamalar ile gelirler arasında sürdürülebilir bir denge kurmaktır.
+          </p>
+          <p>
+            Logo tasarımımızdaki birbirini dengeleyen iki yumuşak kavis, bugünün harcamaları ile geleceğin planlı akışlarının kesişim noktasındaki dengeyi sembolize eder.
+          </p>
+        </div>
+      </section>
+
+      <!-- Section: Çekirdek Akış -->
+      <section class="space-y-4">
+        <h2 class="text-lg sm:text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
+          <span class="w-2 h-2 rounded-full bg-[#356B57]"></span>
+          Çekirdek Akış: Takip’ten Karar’a
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-5 gap-3 pt-2">
+          <div class="p-4 rounded-xl bg-white dark:bg-[#171D19] border border-[#DDDCD5] dark:border-[#27332B] space-y-1">
+            <span class="text-xs font-bold text-[#356B57]">01. Takip</span>
+            <p class="text-xs text-slate-600 dark:text-slate-400">Günlük gelir ve harcamalarını kaydet.</p>
+          </div>
+          <div class="p-4 rounded-xl bg-white dark:bg-[#171D19] border border-[#DDDCD5] dark:border-[#27332B] space-y-1">
+            <span class="text-xs font-bold text-[#356B57]">02. Analiz</span>
+            <p class="text-xs text-slate-600 dark:text-slate-400">Kategori dağılımını ve harcama hızını gör.</p>
+          </div>
+          <div class="p-4 rounded-xl bg-white dark:bg-[#171D19] border border-[#DDDCD5] dark:border-[#27332B] space-y-1">
+            <span class="text-xs font-bold text-[#356B57]">03. Tahmin</span>
+            <p class="text-xs text-slate-600 dark:text-slate-400">Davranışsal eğilimle ay sonu bütçeni öngör.</p>
+          </div>
+          <div class="p-4 rounded-xl bg-white dark:bg-[#171D19] border border-[#DDDCD5] dark:border-[#27332B] space-y-1">
+            <span class="text-xs font-bold text-[#7257A8]">04. Senaryo</span>
+            <p class="text-xs text-slate-600 dark:text-slate-400">What-If ile bir kararın etkisini test et.</p>
+          </div>
+          <div class="p-4 rounded-xl bg-white dark:bg-[#171D19] border border-[#DDDCD5] dark:border-[#27332B] space-y-1">
+            <span class="text-xs font-bold text-emerald-600">05. Karar</span>
+            <p class="text-xs text-slate-600 dark:text-slate-400">Finansal kararlarını güvenle ve bilinçle al.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section: Proje ve Geliştirici -->
+      <section class="space-y-4">
+        <h2 class="text-lg sm:text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
+          <span class="w-2 h-2 rounded-full bg-[#356B57]"></span>
+          Proje Hakkında ve Geliştirici
+        </h2>
+        <div class="prose dark:prose-invert text-sm sm:text-base text-slate-600 dark:text-slate-300 space-y-3 leading-relaxed">
+          <p>
+            Muvazene, bağımsız bir yazılım projesi olarak <strong>Mehmet Tunahan Kandaz</strong> tarafından tasarlanmış ve geliştirilmiştir. Kişisel bütçesini kontrol altına almak isteyen herkesin sade, reklamsız ve hızlı bir deneyimle finansal kararlarını yönetebilmesi amacıyla inşa edilmiştir.
+          </p>
+          <p>
+            Projede yapay pazarlama iddiaları, gizli reklam ağları veya şişirilmiş yatırım hikayeleri bulunmaz. Kod kalitesi, deterministik matematiksel hesaplama ve kullanıcı gizliliği odak noktamızdır.
+          </p>
+        </div>
+      </section>
+
+      <!-- Bottom Navigation Links -->
+      <nav class="pt-8 border-t border-[#DDDCD5] dark:border-[#27332B] flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center gap-4 text-xs font-semibold">
+          <a href="/nasil-calisir" class="text-[#356B57] dark:text-[#44856D] hover:underline flex items-center gap-1">
+            <span>Muvazene Nasıl Çalışır?</span>
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+            </svg>
+          </a>
+          <a href="/gizlilik" class="text-slate-600 dark:text-slate-400 hover:underline">Gizlilik Yaklaşımı</a>
+        </div>
+        <a href="/" class="text-xs font-bold px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 transition">
+          ← Bütçeme Dön
+        </a>
+      </nav>
+
+    </article>
+  </main>
+
+  <!-- ================= FOOTER ================= -->
+  <footer class="mt-auto border-t border-[#DDDCD5] dark:border-[#27332B] bg-white/70 dark:bg-[#171D19]/70 backdrop-blur-xs py-6 text-xs text-slate-500 dark:text-slate-400">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
+      <div class="flex items-center gap-4 flex-wrap justify-center sm:justify-start">
+        <a href="/" class="hover:text-slate-700 dark:hover:text-slate-300">Ana Sayfa</a>
+        <a href="/nasil-calisir" class="hover:text-slate-700 dark:hover:text-slate-300">Nasıl Çalışır?</a>
+        <a href="/hakkinda" class="text-[#356B57] font-semibold">Hakkında</a>
+        <a href="/gizlilik" class="hover:text-slate-700 dark:hover:text-slate-300">Gizlilik</a>
+      </div>
+      <div>
+        <span>Muvazene · Mehmet Tunahan Kandaz</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Theme toggle listener -->
+  <script>
+    document.getElementById('btn-theme-toggle')?.addEventListener('click', () => {
+      const isDark = document.documentElement.classList.toggle('dark');
+      try {
+        localStorage.setItem('student_budget_theme', isDark ? 'dark' : 'light');
+      } catch (e) {}
+    });
+  </script>
+</body>
+</html>

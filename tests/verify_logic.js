@@ -3920,8 +3920,8 @@ console.log('\n--- 18. FAZ 4.1 GOOGLE AUTH + LOCAL GUEST MODE (TC-94 - TC-102) -
   assert(indexHtml.includes('id="btn-auth-google"'), 'TC-100 "Google ile devam et" butonu (btn-auth-google) mevcut');
   assert(indexHtml.includes('id="btn-auth-guest"'), 'TC-100 "Üyeliksiz devam et" butonu (btn-auth-guest) mevcut');
   assert(indexHtml.includes('Verilerini nasıl saklamak istersin?'), 'TC-100 Modal başlığı "Verilerini nasıl saklamak istersin?" mevcut');
-  assert(indexHtml.includes('Verilerini güvenle yedekle ve cihazların arasında senkronize et.'), 'TC-100 Google alt açıklaması doğru');
-  assert(indexHtml.includes('Verilerin yalnızca bu cihazda saklanır.'), 'TC-100 Üyeliksiz devam et alt açıklaması doğru');
+  assert(indexHtml.includes('Verilerini hesabınla cihazların arasında senkronize et.') || indexHtml.includes('Verilerini güvenle yedekle ve cihazların arasında senkronize et.'), 'TC-100 Google alt açıklaması doğru');
+  assert(indexHtml.includes('Hesap oluşturmadan bu cihazda kullan.') || indexHtml.includes('Verilerin yalnızca bu cihazda saklanır.'), 'TC-100 Üyeliksiz devam et alt açıklaması doğru');
 
   // Navbar "Yerel kullanım" göstergesi
   assert(indexHtml.includes('data-i18n="auth.accountGuestPrimary">Yerel kullanım</span>') || indexHtml.includes('data-i18n="auth.localModeBadge">Yerel mod</span>'), 'TC-100 Navbar oturumsuz durumda yerel kullanım/mod etiketi mevcut');
@@ -3996,6 +3996,7 @@ console.log('\n--- 18. FAZ 4.1 GOOGLE AUTH + LOCAL GUEST MODE (TC-94 - TC-102) -
   };
 
   const dummyManager = {
+    store: { state: { onboarded: true } },
     btnOpenAuth: mockElements.btnOpenAuth,
     userAuthBadge: mockElements.userAuthBadge,
     userEmailText: mockElements.userEmailText,
@@ -10414,6 +10415,7 @@ console.log('\n--- 30. FAZ 5.7 — MUVAZENE BRAND MIGRATION & VISUAL FREEZE (TC-
   };
 
   const store = new BudgetStore();
+  store.state.onboarded = true;
   const mockAuthService = {
     isAuthenticated: () => false,
     getUser: () => null,
@@ -10609,8 +10611,16 @@ console.log('\n--- 32. FAZ 5.7.2 — FOOTER PRIVACY & AUTH-STATE LIFECYCLE (TC-3
     modalManager: { closeAuthModal: () => {}, closeOnboardingModal: () => {} }
   });
 
-  assert(mockElements['footer-privacy-text'].textContent === tr.footer.privacyLocal, 'TC-393-1 Fresh guest footer displays local privacy copy');
-  assert(mockElements['header-auth-label'].textContent === tr.auth.accountGuestPrimary, 'TC-393-1 Fresh guest header displays guest label');
+  // 1a. Pre-selection fresh visitor state (unresolved)
+  assert(mockElements['footer-privacy-text'].textContent === tr.footer.privacyLocal, 'TC-393-1 Fresh visitor footer displays local privacy copy');
+  assert(mockElements['btn-open-auth'].classList.contains('hidden') === true, 'TC-393-1 Fresh visitor hides account button before selection');
+  assert(mockElements['header-auth-label'].textContent === '', 'TC-393-1 Fresh visitor does not show guest label before selection');
+
+  // 1b. User resolves selection as Guest/Local mode
+  storeGuest.state.onboarded = true;
+  ui.renderAuthBadge();
+  assert(mockElements['btn-open-auth'].classList.contains('hidden') === false, 'TC-393-1 Guest mode selection unhides account button');
+  assert(mockElements['header-auth-label'].textContent === tr.auth.accountGuestPrimary, 'TC-393-1 Guest mode displays guest label');
 
   // 2. Guest -> Google Login
   const fakeUser = { email: 'ogrenci@muvazene.app', user_metadata: {} };
@@ -10700,8 +10710,8 @@ console.log('\n--- 33. FAZ 5.7.2 — SEO & WEB LAUNCH POLISH (TC-394) ---');
   assert(structuredData.applicationCategory === 'FinanceApplication', 'TC-394-5 Structured data category is FinanceApplication');
   assert(structuredData.operatingSystem === 'Web', 'TC-394-5 Structured data operatingSystem is Web');
   assert(structuredData.offers === undefined, 'TC-394-5 Structured data does not publish offers (pricing model not finalized)');
-  assert(!indexHtml.includes('property="og:image"'), 'TC-394-2 OG image tag omitted pending branded asset');
-  assert(!indexHtml.includes('name="twitter:image"'), 'TC-394-2 Twitter image tag omitted pending branded asset');
+  assert(indexHtml.includes('property="og:image" content="https://www.muvazene.app/og-image.png"'), 'TC-394-2 OG image tag restored with branded 1200x630 asset');
+  assert(indexHtml.includes('name="twitter:image" content="https://www.muvazene.app/og-image.png"'), 'TC-394-2 Twitter image tag restored with branded 1200x630 asset');
 
   // 6. Semantic Heading Hierarchy & Single Primary H1
   const h1Matches = indexHtml.match(/<h1[\s>]/g) || [];
@@ -11028,6 +11038,457 @@ console.log('\n--- 35. FAZ 5.7.4 — RESTORE MONTHLY DAILY SPENDING SUMMARY CARD
   assert(!indexHtml.includes('from-indigo-600 via-indigo-700 to-violet-800'), 'TC-396-I Old purple gradient styling absent');
 
   globalThis.document = originalDoc;
+}
+
+// TC-397: FAZ 5.8 — MUVAZENE WEB FREEZE, BRAND ASSETS, PUBLIC PAGES & SEO CONTENT
+console.log('\n--- 36. FAZ 5.8 — WEB FREEZE, BRAND ASSETS & PUBLIC PAGES QA (TC-397) ---');
+{
+  const publicDir = path.resolve(process.cwd(), 'public');
+  const brandDir = path.resolve(publicDir, 'brand');
+  const iconsDir = path.resolve(publicDir, 'icons');
+
+  // Helper to read PNG dimensions
+  function getPngDimensions(filePath) {
+    const buf = fs.readFileSync(filePath);
+    // PNG signature check
+    assert(buf.slice(0, 8).toString('hex') === '89504e470d0a1a0a', `Valid PNG signature for ${filePath}`);
+    const width = buf.readUInt32BE(16);
+    const height = buf.readUInt32BE(20);
+    return { width, height };
+  }
+
+  // A. Brand Assets Verification
+  const requiredBrandFiles = [
+    path.join(brandDir, 'muvazene-mark.svg'),
+    path.join(brandDir, 'muvazene-mark-dark.svg'),
+    path.join(brandDir, 'muvazene-logo.svg'),
+    path.join(brandDir, 'muvazene-logo-dark.svg'),
+    path.join(brandDir, 'muvazene-app-icon-1024.png'),
+    path.join(publicDir, 'favicon.svg'),
+    path.join(publicDir, 'favicon-32x32.png'),
+    path.join(publicDir, 'apple-touch-icon.png'),
+    path.join(iconsDir, 'icon-192x192.png'),
+    path.join(iconsDir, 'icon-512x512.png'),
+    path.join(iconsDir, 'icon-maskable-192x192.png'),
+    path.join(iconsDir, 'icon-maskable-512x512.png'),
+    path.join(publicDir, 'og-image.png')
+  ];
+
+  requiredBrandFiles.forEach(file => {
+    assert(fs.existsSync(file), `TC-397-A Required asset exists: ${path.relative(publicDir, file)}`);
+  });
+
+  // Check PNG dimensions
+  const fav32 = getPngDimensions(path.join(publicDir, 'favicon-32x32.png'));
+  assert(fav32.width === 32 && fav32.height === 32, 'TC-397-A favicon-32x32.png is 32x32');
+
+  const appleIcon = getPngDimensions(path.join(publicDir, 'apple-touch-icon.png'));
+  assert(appleIcon.width === 180 && appleIcon.height === 180, 'TC-397-A apple-touch-icon.png is 180x180');
+
+  const icon192 = getPngDimensions(path.join(iconsDir, 'icon-192x192.png'));
+  assert(icon192.width === 192 && icon192.height === 192, 'TC-397-A icon-192x192.png is 192x192');
+
+  const icon512 = getPngDimensions(path.join(iconsDir, 'icon-512x512.png'));
+  assert(icon512.width === 512 && icon512.height === 512, 'TC-397-A icon-512x512.png is 512x512');
+
+  const maskable192 = getPngDimensions(path.join(iconsDir, 'icon-maskable-192x192.png'));
+  assert(maskable192.width === 192 && maskable192.height === 192, 'TC-397-A icon-maskable-192x192.png is 192x192');
+
+  const maskable512 = getPngDimensions(path.join(iconsDir, 'icon-maskable-512x512.png'));
+  assert(maskable512.width === 512 && maskable512.height === 512, 'TC-397-A icon-maskable-512x512.png is 512x512');
+
+  const appIcon1024 = getPngDimensions(path.join(brandDir, 'muvazene-app-icon-1024.png'));
+  assert(appIcon1024.width === 1024 && appIcon1024.height === 1024, 'TC-397-A muvazene-app-icon-1024.png is 1024x1024');
+
+  const ogImage = getPngDimensions(path.join(publicDir, 'og-image.png'));
+  assert(ogImage.width === 1200 && ogImage.height === 630, 'TC-397-A og-image.png is 1200x630');
+
+  // B. Legacy Asset Purge Verification
+  const faviconSvg = fs.readFileSync(path.join(publicDir, 'favicon.svg'), 'utf-8');
+  assert(!faviconSvg.includes('4F46E5') && !faviconSvg.includes('6366F1'), 'TC-397-B Legacy purple absent from favicon.svg');
+  assert(!faviconSvg.includes('polygon') && !faviconSvg.includes('rect x="2"'), 'TC-397-B Legacy graduation cap absent from favicon.svg');
+  assert(faviconSvg.includes('#1F7A56') || faviconSvg.includes('#8FB69A'), 'TC-397-B Brand palette present in favicon.svg');
+
+  const markSvg = fs.readFileSync(path.join(brandDir, 'muvazene-mark.svg'), 'utf-8');
+  assert(markSvg.includes('viewBox="0 0 204 116"'), 'TC-397-B Mark SVG uses tight 204x116 viewBox');
+
+  // C. Header Branding & Pure HTML Text
+  const indexHtml = fs.readFileSync(path.resolve(process.cwd(), 'index.html'), 'utf-8');
+  assert(indexHtml.includes('/brand/muvazene-mark.svg'), 'TC-397-C Header references light brand mark SVG');
+  assert(indexHtml.includes('/brand/muvazene-mark-dark.svg'), 'TC-397-C Header references dark brand mark SVG');
+  assert(indexHtml.includes('<span class="text-lg sm:text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white leading-none" data-i18n="brand.title">Muvazene</span>'), 'TC-397-C Header renders accessible HTML title Muvazene');
+  assert(indexHtml.includes('Bugünü gör. Sonrasını dengele.'), 'TC-397-C Header renders subtitle');
+
+  // D. Public Informational Pages Verification
+  const publicPages = [
+    {
+      relPath: 'hakkinda/index.html',
+      canonical: 'https://www.muvazene.app/hakkinda',
+      expectedTitlePart: 'Hakkında',
+      expectedH1: 'Muvazene Hakkında'
+    },
+    {
+      relPath: 'nasil-calisir/index.html',
+      canonical: 'https://www.muvazene.app/nasil-calisir',
+      expectedTitlePart: 'Nasıl Çalışır',
+      expectedH1: 'Muvazene Nasıl Çalışır?'
+    },
+    {
+      relPath: 'gizlilik/index.html',
+      canonical: 'https://www.muvazene.app/gizlilik',
+      expectedTitlePart: 'Gizlilik',
+      expectedH1: 'Gizlilik ve Veri Mimarisi'
+    }
+  ];
+
+  publicPages.forEach(page => {
+    const fullPath = path.resolve(process.cwd(), page.relPath);
+    assert(fs.existsSync(fullPath), `TC-397-D Public page exists: ${page.relPath}`);
+    const content = fs.readFileSync(fullPath, 'utf-8');
+
+    // Single H1 verification
+    const h1s = content.match(/<h1[\s>][\s\S]*?<\/h1>/gi) || [];
+    assert(h1s.length === 1, `TC-397-D Exactly 1 H1 on ${page.relPath} (found: ${h1s.length})`);
+    assert(h1s[0].includes(page.expectedH1), `TC-397-D H1 content on ${page.relPath} contains "${page.expectedH1}"`);
+
+    // Canonical link
+    assert(content.includes(`<link rel="canonical" href="${page.canonical}" />`) || content.includes(`<link rel="canonical" href="${page.canonical}">`), `TC-397-D Canonical link on ${page.relPath}`);
+
+    // Social preview metadata
+    assert(content.includes('property="og:image" content="https://www.muvazene.app/og-image.png"'), `TC-397-D og:image on ${page.relPath}`);
+    assert(content.includes('name="twitter:image" content="https://www.muvazene.app/og-image.png"'), `TC-397-D twitter:image on ${page.relPath}`);
+    assert(content.includes('name="twitter:card" content="summary_large_image"'), `TC-397-D summary_large_image on ${page.relPath}`);
+
+    // Favicon & Touch Icon
+    assert(content.includes('/favicon.svg'), `TC-397-D Favicon SVG linked on ${page.relPath}`);
+    assert(content.includes('/favicon-32x32.png'), `TC-397-D Favicon 32x32 linked on ${page.relPath}`);
+    assert(content.includes('/apple-touch-icon.png'), `TC-397-D Apple touch icon linked on ${page.relPath}`);
+
+    // Title
+    assert(content.includes(page.expectedTitlePart), `TC-397-D Title on ${page.relPath} contains "${page.expectedTitlePart}"`);
+  });
+
+  // E. Semantic Metric Distinction in nasil-calisir/index.html
+  const nasilCalisirContent = fs.readFileSync(path.resolve(process.cwd(), 'nasil-calisir/index.html'), 'utf-8');
+  assert(nasilCalisirContent.includes('Aylık Günlük Harcama'), 'TC-397-E nasil-calisir explains Aylık Günlük Harcama');
+  assert(nasilCalisirContent.includes('Güvenli Günlük Harcama'), 'TC-397-E nasil-calisir explains Güvenli Günlük Harcama');
+  assert(nasilCalisirContent.includes('planlı gelirinize'), 'TC-397-E nasil-calisir clarifies safe spending horizon');
+
+  // F. Privacy Architecture Truthfulness in gizlilik/index.html
+  const gizlilikContent = fs.readFileSync(path.resolve(process.cwd(), 'gizlilik/index.html'), 'utf-8');
+  assert(gizlilikContent.includes('asılsız teknik iddialarda bulunulmaz'), 'TC-397-F Disclaims unsubstantiated zero-knowledge claims in gizlilik.html');
+  assert(!gizlilikContent.toLowerCase().includes('uçtan uca') && !gizlilikContent.toLowerCase().includes('end-to-end'), 'TC-397-F No unsubstantiated end-to-end encryption claims in gizlilik.html');
+  assert(gizlilikContent.includes('Row Level Security') || gizlilikContent.includes('RLS'), 'TC-397-F RLS architecture documented truthfully in gizlilik.html');
+  assert(gizlilikContent.includes('IndexedDB') || gizlilikContent.includes('LocalStorage'), 'TC-397-F Local storage documented truthfully in gizlilik.html');
+
+  // G. Sitemap & Robots Coverage
+  const sitemapContent = fs.readFileSync(path.join(publicDir, 'sitemap.xml'), 'utf-8');
+  const expectedUrls = [
+    'https://www.muvazene.app/',
+    'https://www.muvazene.app/hakkinda',
+    'https://www.muvazene.app/nasil-calisir',
+    'https://www.muvazene.app/gizlilik'
+  ];
+  expectedUrls.forEach(url => {
+    assert(sitemapContent.includes(`<loc>${url}</loc>`), `TC-397-G Sitemap includes ${url}`);
+  });
+
+  // H. Vite Multi-Page Build & Vercel Rewrites
+  const viteConfigContent = fs.readFileSync(path.resolve(process.cwd(), 'vite.config.js'), 'utf-8');
+  assert(viteConfigContent.includes('hakkinda: resolve(__dirname, \'hakkinda/index.html\')'), 'TC-397-H Vite config includes hakkinda entry');
+  assert(viteConfigContent.includes('nasilCalisir: resolve(__dirname, \'nasil-calisir/index.html\')'), 'TC-397-H Vite config includes nasilCalisir entry');
+  assert(viteConfigContent.includes('gizlilik: resolve(__dirname, \'gizlilik/index.html\')'), 'TC-397-H Vite config includes gizlilik entry');
+  assert(viteConfigContent.includes('multiPageCleanUrlsPlugin'), 'TC-397-H Vite config includes multiPageCleanUrlsPlugin');
+  assert(viteConfigContent.includes('navigateFallbackDenylist'), 'TC-397-H Vite config includes navigateFallbackDenylist');
+
+  const vercelJsonPath = path.resolve(process.cwd(), 'vercel.json');
+  assert(fs.existsSync(vercelJsonPath), 'TC-397-H vercel.json exists');
+  const vercelJson = JSON.parse(fs.readFileSync(vercelJsonPath, 'utf-8'));
+  assert(vercelJson.cleanUrls === true, 'TC-397-H vercel.json enables cleanUrls');
+  assert(Array.isArray(vercelJson.rewrites) && vercelJson.rewrites.length >= 3, 'TC-397-H vercel.json configures rewrites for public pages');
+  const hasCatchAll = vercelJson.rewrites.some(r => r.destination === '/index.html' && r.source.includes('?!'));
+  assert(!hasCatchAll, 'TC-397-H vercel.json does not contain catch-all rewrite intercepting public routes');
+
+  // Verify flat HTML generation in dist
+  const distDir = path.resolve(process.cwd(), 'dist');
+  if (fs.existsSync(distDir)) {
+    assert(fs.existsSync(path.resolve(distDir, 'hakkinda.html')), 'TC-397-H dist/hakkinda.html exists');
+    assert(fs.existsSync(path.resolve(distDir, 'nasil-calisir.html')), 'TC-397-H dist/nasil-calisir.html exists');
+    assert(fs.existsSync(path.resolve(distDir, 'gizlilik.html')), 'TC-397-H dist/gizlilik.html exists');
+    const swPath = path.resolve(distDir, 'sw.js');
+    if (fs.existsSync(swPath)) {
+      const swContent = fs.readFileSync(swPath, 'utf-8');
+      assert(swContent.includes('hakkinda') && swContent.includes('nasil-calisir') && swContent.includes('gizlilik'), 'TC-397-H sw.js denylist contains public routes');
+    }
+  }
+
+  // I. Landing Page Core Flow & Entry CTAs
+  assert(indexHtml.includes('Muvazene Karar Döngüsü'), 'TC-397-I Core decision flow title present');
+  assert(indexHtml.includes('Takip') && indexHtml.includes('Analiz') && indexHtml.includes('Tahmin') && indexHtml.includes('Senaryo') && indexHtml.includes('Karar'), 'TC-397-I All 5 steps of core decision flow present');
+  assert(indexHtml.includes('Üyeliksiz devam et'), 'TC-397-I Guest entry CTA present on landing');
+  assert(indexHtml.includes('Google ile devam et'), 'TC-397-I Cloud sync CTA present on landing');
+  assert(!indexHtml.includes('Google ile Eşitle'), 'TC-397-I Google ile Eşitle absent from landing');
+
+  // J. Finance Engine Isolation
+  const sampleTx = [
+    { id: '1', title: 'Gelir', type: 'income', amount: 20000, date: '2026-10-01' },
+    { id: '2', title: 'Gider', type: 'expense', amount: 5000, date: '2026-10-02' }
+  ];
+  const refDate = new Date('2026-10-01T12:00:00');
+  const summary = calculateSummary(sampleTx, refDate, '2026-10');
+  assert(summary.balance === 15000, 'TC-397-J calculateSummary balance is 15000');
+  assert(summary.daysRemainingInMonth === 31, 'TC-397-J daysRemainingInMonth is 31');
+  assert(summary.dailySafeSpendLimit === Math.round((15000 / 31) * 100) / 100, 'TC-397-J dailySafeSpendLimit returns 483.87 TL/day');
+}
+
+// TC-398: FAZ 5.8.1 — FINAL PRE-FREEZE UX & PRIVACY COPY QA
+console.log('\n--- 37. FAZ 5.8.1 — FINAL PRE-FREEZE UX & PRIVACY COPY QA (TC-398) ---');
+{
+  const indexHtml = fs.readFileSync(path.resolve(process.cwd(), 'index.html'), 'utf-8');
+  const gizlilikHtml = fs.readFileSync(path.resolve(process.cwd(), 'gizlilik/index.html'), 'utf-8');
+
+  // A. Landing and first-use modal use consistent labels
+  assert(indexHtml.includes('Google ile devam et'), 'TC-398-A "Google ile devam et" present on landing & modal');
+  assert(indexHtml.includes('Üyeliksiz devam et'), 'TC-398-A "Üyeliksiz devam et" present on landing & modal');
+  assert(indexHtml.includes('Verilerini hesabınla cihazların arasında senkronize et.'), 'TC-398-A Google supporting copy matches specification');
+  assert(indexHtml.includes('Hesap oluşturmadan bu cihazda kullan.'), 'TC-398-A Guest supporting copy matches specification');
+
+  // B. "Google ile Eşitle" is absent from onboarding/public landing copy
+  assert(!indexHtml.includes('Google ile Eşitle'), 'TC-398-B "Google ile Eşitle" completely absent from landing and onboarding');
+
+  // C. Fresh unresolved visitor state does NOT render "Yerel kullanım" before user chooses guest mode
+  assert(indexHtml.includes('id="btn-open-auth" type="button" class="hidden'), 'TC-398-C Header account button is hidden by default in initial HTML');
+
+  // Runtime test for unresolved fresh visitor state vs guest vs authenticated
+  const createMockEl = (id) => {
+    const classes = new Set();
+    return {
+      id,
+      textContent: '',
+      className: '',
+      classList: {
+        add: (...cls) => cls.forEach(c => classes.add(c)),
+        remove: (...cls) => cls.forEach(c => classes.delete(c)),
+        contains: (c) => classes.has(c)
+      },
+      setAttribute() {},
+      getAttribute() { return null; },
+      addEventListener() {},
+      removeEventListener() {}
+    };
+  };
+
+  const mockElements = {
+    'btn-open-auth': createMockEl('btn-open-auth'),
+    'user-auth-badge': createMockEl('user-auth-badge'),
+    'header-auth-label': createMockEl('header-auth-label'),
+    'header-auth-sub': createMockEl('header-auth-sub'),
+    'sync-status-indicator': createMockEl('sync-status-indicator'),
+    'sync-status-text': createMockEl('sync-status-text'),
+    'footer-privacy-text': createMockEl('footer-privacy-text'),
+    'user-email-text': createMockEl('user-email-text'),
+    'user-avatar-img': createMockEl('user-avatar-img'),
+    'btn-sign-out': createMockEl('btn-sign-out')
+  };
+  mockElements['btn-open-auth'].classList.add('hidden');
+  mockElements['user-auth-badge'].classList.add('hidden');
+
+  const origDoc = globalThis.document;
+  globalThis.document = {
+    documentElement: { classList: { add() {}, remove() {}, contains() { return false; } } },
+    body: { classList: { add() {}, remove() {}, contains() { return false; } } },
+    getElementById: (id) => mockElements[id] || null,
+    querySelectorAll: () => [],
+    addEventListener: () => {},
+    removeEventListener: () => {}
+  };
+
+  const freshStore = new BudgetStore();
+  assert(freshStore.state.onboarded === false, 'TC-398-C fresh store starts with onboarded=false');
+  const mockAuth = {
+    isAuthenticated: () => false,
+    getUser: () => null,
+    onAuthStateChange: () => () => {}
+  };
+  const ui = new UIManager(freshStore, { authService: mockAuth });
+  ui.renderAuthBadge();
+
+  // Fresh unresolved visitor state:
+  assert(mockElements['btn-open-auth'].classList.contains('hidden') === true, 'TC-398-C Fresh unresolved visitor hides btn-open-auth');
+  assert(mockElements['header-auth-label'].textContent === '', 'TC-398-C Fresh unresolved visitor does NOT render "Yerel kullanım"');
+
+  // D. Guest mode still renders correct local badge after selection
+  freshStore.state.onboarded = true;
+  ui.renderAuthBadge();
+  assert(mockElements['btn-open-auth'].classList.contains('hidden') === false, 'TC-398-D Guest mode selection renders btn-open-auth');
+  assert(mockElements['header-auth-label'].textContent === tr.auth.accountGuestPrimary, 'TC-398-D Guest mode renders "Yerel kullanım"');
+  assert(mockElements['header-auth-sub'].textContent === tr.auth.accountGuestSecondary, 'TC-398-D Guest mode renders "Bu cihazda"');
+
+  // E. Authenticated mode still renders cloud/sync badge
+  const authedUser = { email: 'pilot@muvazene.app', user_metadata: {} };
+  ui.renderAuthBadge(authedUser);
+  assert(mockElements['btn-open-auth'].classList.contains('hidden') === true, 'TC-398-E Authenticated mode hides btn-open-auth');
+  assert(mockElements['user-auth-badge'].classList.contains('hidden') === false, 'TC-398-E Authenticated mode renders user-auth-badge');
+  assert(mockElements['user-email-text'].textContent === 'pilot@muvazene.app', 'TC-398-E Authenticated mode displays user email');
+
+  globalThis.document = origDoc;
+
+  // F. /gizlilik does NOT contain absolute claim: "Herhangi bir sunucuya işlem veya bakiye verisi aktarılmaz."
+  assert(!gizlilikHtml.includes('Herhangi bir sunucuya işlem veya bakiye verisi aktarılmaz'), 'TC-398-F Absolute server claim absent from gizlilik.html');
+
+  // G. Privacy copy contains the narrower local-storage/cloud-sync statement
+  assert(gizlilikHtml.includes('Üyeliksiz kullanımda finansal verileriniz cihazınızın tarayıcısında yerel olarak saklanır ve Muvazene bulut hesabına senkronize edilmez.'), 'TC-398-G Privacy copy contains narrower local storage statement');
+
+  // H. No unsupported zero-knowledge, end-to-end encryption, absolute no-network claims & durable ad title
+  assert(gizlilikHtml.includes('Reklam ve Veri Ticareti Yok'), 'TC-398-H Privacy section title is "Reklam ve Veri Ticareti Yok"');
+  assert(!gizlilikHtml.includes('Reklamsız ve Takipçisiz Deneyim'), 'TC-398-H Old non-durable section title absent');
+  assert(gizlilikHtml.includes('Oturum, tercih ve uygulama işlevleri için gerekli teknik depolama mekanizmaları kullanılabilir.'), 'TC-398-H Durable storage & cookie copy present');
+  assert(!gizlilikHtml.toLowerCase().includes('zero-knowledge') || gizlilikHtml.includes('asılsız teknik iddialarda bulunulmaz'), 'TC-398-H No unsubstantiated zero-knowledge claims');
+  assert(!gizlilikHtml.toLowerCase().includes('uçtan uca'), 'TC-398-H No unsubstantiated end-to-end encryption claims');
+
+  // I. Public routing tests continue passing
+  const viteConfig = fs.readFileSync(path.resolve(process.cwd(), 'vite.config.js'), 'utf-8');
+  assert(viteConfig.includes('navigateFallbackDenylist'), 'TC-398-I SW navigateFallbackDenylist is active');
+  assert(viteConfig.includes('multiPageCleanUrlsPlugin'), 'TC-398-I multiPageCleanUrlsPlugin is active');
+}
+
+// --- 38. FAZ 5.8.2 — FINAL AUTH-AWARE LANDING & TERMINOLOGY QA (TC-399) ---
+console.log('\n--- 38. FAZ 5.8.2 — FINAL AUTH-AWARE LANDING & TERMINOLOGY QA (TC-399) ---');
+{
+  const indexHtml = fs.readFileSync(path.resolve(process.cwd(), 'index.html'), 'utf-8');
+  const nasilCalisirHtml = fs.readFileSync(path.resolve(process.cwd(), 'nasil-calisir/index.html'), 'utf-8');
+  const hakkindaHtml = fs.readFileSync(path.resolve(process.cwd(), 'hakkinda/index.html'), 'utf-8');
+  const gizlilikHtml = fs.readFileSync(path.resolve(process.cwd(), 'gizlilik/index.html'), 'utf-8');
+
+  // A. Terminology: "Güvenli Günlük Limit" must be completely absent from public copy
+  assert(!nasilCalisirHtml.includes('Güvenli Günlük Limit'), 'TC-399-A "Güvenli Günlük Limit" absent from nasil-calisir/index.html');
+  assert(!hakkindaHtml.includes('Güvenli Günlük Limit'), 'TC-399-A "Güvenli Günlük Limit" absent from hakkinda/index.html');
+  assert(!gizlilikHtml.includes('Güvenli Günlük Limit'), 'TC-399-A "Güvenli Günlük Limit" absent from gizlilik/index.html');
+  assert(!indexHtml.includes('Güvenli Günlük Limit'), 'TC-399-A "Güvenli Günlük Limit" absent from index.html');
+
+  // B. Terminology: "Güvenli Günlük Harcama" present consistently
+  assert(nasilCalisirHtml.includes('<strong>Güvenli Günlük Harcama</strong>'), 'TC-399-B "Güvenli Günlük Harcama" present in nasil-calisir step 4');
+  assert(nasilCalisirHtml.includes('Card B: Güvenli Günlük Harcama') || nasilCalisirHtml.includes('>Güvenli Günlük Harcama<'), 'TC-399-B "Güvenli Günlük Harcama" present in comparison cards');
+  assert(indexHtml.includes('data-i18n="whatif.decision.safeDailySpend">Güvenli Günlük Harcama<'), 'TC-399-B "Güvenli Günlük Harcama" present in index.html What-If decision card');
+
+  // C. Public info pages CTA "Uygulamayı Aç" linking to /
+  [
+    { name: 'hakkinda', html: hakkindaHtml },
+    { name: 'nasil-calisir', html: nasilCalisirHtml },
+    { name: 'gizlilik', html: gizlilikHtml }
+  ].forEach(({ name, html }) => {
+    assert(html.includes('Uygulamayı Aç'), `TC-399-C ${name} includes "Uygulamayı Aç" CTA`);
+    assert(html.includes('href="/"'), `TC-399-C ${name} CTA links to "/"`);
+  });
+
+  // D. Auth-aware landing CTA DOM simulation
+  assert(indexHtml.includes('id="landing-onboarding-cta"'), 'TC-399-D #landing-onboarding-cta ID exists in index.html');
+
+  const createMockEl = (id) => {
+    const classes = new Set();
+    return {
+      id,
+      textContent: '',
+      title: '',
+      src: '',
+      classList: {
+        add: (...cls) => cls.forEach(c => classes.add(c)),
+        remove: (...cls) => cls.forEach(c => classes.delete(c)),
+        contains: (c) => classes.has(c)
+      },
+      setAttribute() {},
+      removeAttribute() {},
+      getAttribute() { return null; },
+      addEventListener() {},
+      removeEventListener() {}
+    };
+  };
+
+  const mockElements = {
+    'landing-onboarding-cta': createMockEl('landing-onboarding-cta'),
+    'btn-open-auth': createMockEl('btn-open-auth'),
+    'user-auth-badge': createMockEl('user-auth-badge'),
+    'header-auth-label': createMockEl('header-auth-label'),
+    'header-auth-sub': createMockEl('header-auth-sub'),
+    'sync-status-indicator': createMockEl('sync-status-indicator'),
+    'sync-status-text': createMockEl('sync-status-text'),
+    'footer-privacy-text': createMockEl('footer-privacy-text'),
+    'user-email-text': createMockEl('user-email-text'),
+    'user-avatar-img': createMockEl('user-avatar-img'),
+    'btn-sign-out': createMockEl('btn-sign-out')
+  };
+  mockElements['btn-open-auth'].classList.add('hidden');
+  mockElements['user-auth-badge'].classList.add('hidden');
+
+  const origDoc = globalThis.document;
+  globalThis.document = {
+    documentElement: { classList: { add() {}, remove() {}, contains() { return false; } } },
+    body: { classList: { add() {}, remove() {}, contains() { return false; } } },
+    getElementById: (id) => mockElements[id] || null,
+    querySelectorAll: () => [],
+    addEventListener: () => {},
+    removeEventListener() {}
+  };
+
+  const store = new BudgetStore();
+  assert(store.state.onboarded === false, 'TC-399-E Fresh store starts with onboarded=false');
+
+  let authUser = null;
+  const mockAuthService = {
+    isAuthenticated: () => Boolean(authUser),
+    getUser: () => authUser,
+    onAuthStateChange: (cb) => {
+      mockAuthService._cb = cb;
+      return () => {};
+    }
+  };
+
+  const ui = new UIManager(store, { authService: mockAuthService });
+
+  // 1. Fresh unresolved visitor:
+  // - onboarding CTA section visible
+  // - header account badge hidden
+  // - user auth badge hidden
+  ui.render();
+  ui.renderAuthBadge();
+  assert(mockElements['landing-onboarding-cta'].classList.contains('hidden') === false, 'TC-399-F Fresh visitor: onboarding CTA section is VISIBLE');
+  assert(mockElements['btn-open-auth'].classList.contains('hidden') === true, 'TC-399-F Fresh visitor: btn-open-auth is HIDDEN');
+  assert(mockElements['user-auth-badge'].classList.contains('hidden') === true, 'TC-399-F Fresh visitor: user-auth-badge is HIDDEN');
+
+  // 2. Explicit guest/local user:
+  // - onboarding CTA section hidden
+  // - header account badge visible ("Yerel kullanım", "Bu cihazda")
+  // - user auth badge hidden
+  store.state.onboarded = true;
+  store.notify();
+  assert(mockElements['landing-onboarding-cta'].classList.contains('hidden') === true, 'TC-399-G Explicit guest: onboarding CTA section is HIDDEN');
+  assert(mockElements['btn-open-auth'].classList.contains('hidden') === false, 'TC-399-G Explicit guest: btn-open-auth is VISIBLE');
+  assert(mockElements['header-auth-label'].textContent === tr.auth.accountGuestPrimary, 'TC-399-G Explicit guest: header renders "Yerel kullanım"');
+  assert(mockElements['header-auth-sub'].textContent === tr.auth.accountGuestSecondary, 'TC-399-G Explicit guest: header renders "Bu cihazda"');
+  assert(mockElements['user-auth-badge'].classList.contains('hidden') === true, 'TC-399-G Explicit guest: user-auth-badge is HIDDEN');
+
+  // 3. Authenticated/cloud user:
+  // - onboarding CTA section hidden
+  // - header account badge hidden
+  // - user auth badge visible with email and cloud sync status
+  authUser = { email: 'pilot@muvazene.app', user_metadata: { picture: 'https://example.com/avatar.png' } };
+  ui.renderAuthBadge(authUser);
+  assert(mockElements['landing-onboarding-cta'].classList.contains('hidden') === true, 'TC-399-H Authenticated: onboarding CTA section is HIDDEN');
+  assert(mockElements['btn-open-auth'].classList.contains('hidden') === true, 'TC-399-H Authenticated: btn-open-auth is HIDDEN');
+  assert(mockElements['user-auth-badge'].classList.contains('hidden') === false, 'TC-399-H Authenticated: user-auth-badge is VISIBLE');
+  assert(mockElements['user-email-text'].textContent === 'pilot@muvazene.app', 'TC-399-H Authenticated: renders user email');
+  assert(mockElements['header-auth-sub'].textContent === tr.auth.statusSynced, 'TC-399-H Authenticated: header renders "Bulut Eşitlendi"');
+
+  // 4. Reset & restart onboarding:
+  // - transitions back to fresh visitor state
+  authUser = null;
+  store.state.onboarded = false;
+  store.notify();
+  assert(mockElements['landing-onboarding-cta'].classList.contains('hidden') === false, 'TC-399-I Reset: onboarding CTA section is VISIBLE again');
+  assert(mockElements['btn-open-auth'].classList.contains('hidden') === true, 'TC-399-I Reset: btn-open-auth is HIDDEN again');
+  assert(mockElements['user-auth-badge'].classList.contains('hidden') === true, 'TC-399-I Reset: user-auth-badge is HIDDEN again');
+
+  globalThis.document = origDoc;
 }
 
 console.log('\n====================================================');
