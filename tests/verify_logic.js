@@ -3920,8 +3920,8 @@ console.log('\n--- 18. FAZ 4.1 GOOGLE AUTH + LOCAL GUEST MODE (TC-94 - TC-102) -
   assert(indexHtml.includes('id="btn-auth-google"'), 'TC-100 "Google ile devam et" butonu (btn-auth-google) mevcut');
   assert(indexHtml.includes('id="btn-auth-guest"'), 'TC-100 "Üyeliksiz devam et" butonu (btn-auth-guest) mevcut');
   assert(indexHtml.includes('Verilerini nasıl saklamak istersin?'), 'TC-100 Modal başlığı "Verilerini nasıl saklamak istersin?" mevcut');
-  assert(indexHtml.includes('Verilerini güvenle yedekle ve cihazların arasında senkronize et.'), 'TC-100 Google alt açıklaması doğru');
-  assert(indexHtml.includes('Verilerin yalnızca bu cihazda saklanır.'), 'TC-100 Üyeliksiz devam et alt açıklaması doğru');
+  assert(indexHtml.includes('Verilerini hesabınla cihazların arasında senkronize et.') || indexHtml.includes('Verilerini güvenle yedekle ve cihazların arasında senkronize et.'), 'TC-100 Google alt açıklaması doğru');
+  assert(indexHtml.includes('Hesap oluşturmadan bu cihazda kullan.') || indexHtml.includes('Verilerin yalnızca bu cihazda saklanır.'), 'TC-100 Üyeliksiz devam et alt açıklaması doğru');
 
   // Navbar "Yerel kullanım" göstergesi
   assert(indexHtml.includes('data-i18n="auth.accountGuestPrimary">Yerel kullanım</span>') || indexHtml.includes('data-i18n="auth.localModeBadge">Yerel mod</span>'), 'TC-100 Navbar oturumsuz durumda yerel kullanım/mod etiketi mevcut');
@@ -3996,6 +3996,7 @@ console.log('\n--- 18. FAZ 4.1 GOOGLE AUTH + LOCAL GUEST MODE (TC-94 - TC-102) -
   };
 
   const dummyManager = {
+    store: { state: { onboarded: true } },
     btnOpenAuth: mockElements.btnOpenAuth,
     userAuthBadge: mockElements.userAuthBadge,
     userEmailText: mockElements.userEmailText,
@@ -10414,6 +10415,7 @@ console.log('\n--- 30. FAZ 5.7 — MUVAZENE BRAND MIGRATION & VISUAL FREEZE (TC-
   };
 
   const store = new BudgetStore();
+  store.state.onboarded = true;
   const mockAuthService = {
     isAuthenticated: () => false,
     getUser: () => null,
@@ -10609,8 +10611,16 @@ console.log('\n--- 32. FAZ 5.7.2 — FOOTER PRIVACY & AUTH-STATE LIFECYCLE (TC-3
     modalManager: { closeAuthModal: () => {}, closeOnboardingModal: () => {} }
   });
 
-  assert(mockElements['footer-privacy-text'].textContent === tr.footer.privacyLocal, 'TC-393-1 Fresh guest footer displays local privacy copy');
-  assert(mockElements['header-auth-label'].textContent === tr.auth.accountGuestPrimary, 'TC-393-1 Fresh guest header displays guest label');
+  // 1a. Pre-selection fresh visitor state (unresolved)
+  assert(mockElements['footer-privacy-text'].textContent === tr.footer.privacyLocal, 'TC-393-1 Fresh visitor footer displays local privacy copy');
+  assert(mockElements['btn-open-auth'].classList.contains('hidden') === true, 'TC-393-1 Fresh visitor hides account button before selection');
+  assert(mockElements['header-auth-label'].textContent === '', 'TC-393-1 Fresh visitor does not show guest label before selection');
+
+  // 1b. User resolves selection as Guest/Local mode
+  storeGuest.state.onboarded = true;
+  ui.renderAuthBadge();
+  assert(mockElements['btn-open-auth'].classList.contains('hidden') === false, 'TC-393-1 Guest mode selection unhides account button');
+  assert(mockElements['header-auth-label'].textContent === tr.auth.accountGuestPrimary, 'TC-393-1 Guest mode displays guest label');
 
   // 2. Guest -> Google Login
   const fakeUser = { email: 'ogrenci@muvazene.app', user_metadata: {} };
@@ -11215,8 +11225,9 @@ console.log('\n--- 36. FAZ 5.8 — WEB FREEZE, BRAND ASSETS & PUBLIC PAGES QA (T
   // I. Landing Page Core Flow & Entry CTAs
   assert(indexHtml.includes('Muvazene Karar Döngüsü'), 'TC-397-I Core decision flow title present');
   assert(indexHtml.includes('Takip') && indexHtml.includes('Analiz') && indexHtml.includes('Tahmin') && indexHtml.includes('Senaryo') && indexHtml.includes('Karar'), 'TC-397-I All 5 steps of core decision flow present');
-  assert(indexHtml.includes('Üyeliksiz Hemen Kullan'), 'TC-397-I Guest entry CTA present on landing');
-  assert(indexHtml.includes('Google ile Eşitle'), 'TC-397-I Cloud sync CTA present on landing');
+  assert(indexHtml.includes('Üyeliksiz devam et'), 'TC-397-I Guest entry CTA present on landing');
+  assert(indexHtml.includes('Google ile devam et'), 'TC-397-I Cloud sync CTA present on landing');
+  assert(!indexHtml.includes('Google ile Eşitle'), 'TC-397-I Google ile Eşitle absent from landing');
 
   // J. Finance Engine Isolation
   const sampleTx = [
@@ -11228,6 +11239,117 @@ console.log('\n--- 36. FAZ 5.8 — WEB FREEZE, BRAND ASSETS & PUBLIC PAGES QA (T
   assert(summary.balance === 15000, 'TC-397-J calculateSummary balance is 15000');
   assert(summary.daysRemainingInMonth === 31, 'TC-397-J daysRemainingInMonth is 31');
   assert(summary.dailySafeSpendLimit === Math.round((15000 / 31) * 100) / 100, 'TC-397-J dailySafeSpendLimit returns 483.87 TL/day');
+}
+
+// TC-398: FAZ 5.8.1 — FINAL PRE-FREEZE UX & PRIVACY COPY QA
+console.log('\n--- 37. FAZ 5.8.1 — FINAL PRE-FREEZE UX & PRIVACY COPY QA (TC-398) ---');
+{
+  const indexHtml = fs.readFileSync(path.resolve(process.cwd(), 'index.html'), 'utf-8');
+  const gizlilikHtml = fs.readFileSync(path.resolve(process.cwd(), 'gizlilik/index.html'), 'utf-8');
+
+  // A. Landing and first-use modal use consistent labels
+  assert(indexHtml.includes('Google ile devam et'), 'TC-398-A "Google ile devam et" present on landing & modal');
+  assert(indexHtml.includes('Üyeliksiz devam et'), 'TC-398-A "Üyeliksiz devam et" present on landing & modal');
+  assert(indexHtml.includes('Verilerini hesabınla cihazların arasında senkronize et.'), 'TC-398-A Google supporting copy matches specification');
+  assert(indexHtml.includes('Hesap oluşturmadan bu cihazda kullan.'), 'TC-398-A Guest supporting copy matches specification');
+
+  // B. "Google ile Eşitle" is absent from onboarding/public landing copy
+  assert(!indexHtml.includes('Google ile Eşitle'), 'TC-398-B "Google ile Eşitle" completely absent from landing and onboarding');
+
+  // C. Fresh unresolved visitor state does NOT render "Yerel kullanım" before user chooses guest mode
+  assert(indexHtml.includes('id="btn-open-auth" type="button" class="hidden'), 'TC-398-C Header account button is hidden by default in initial HTML');
+
+  // Runtime test for unresolved fresh visitor state vs guest vs authenticated
+  const createMockEl = (id) => {
+    const classes = new Set();
+    return {
+      id,
+      textContent: '',
+      className: '',
+      classList: {
+        add: (...cls) => cls.forEach(c => classes.add(c)),
+        remove: (...cls) => cls.forEach(c => classes.delete(c)),
+        contains: (c) => classes.has(c)
+      },
+      setAttribute() {},
+      getAttribute() { return null; },
+      addEventListener() {},
+      removeEventListener() {}
+    };
+  };
+
+  const mockElements = {
+    'btn-open-auth': createMockEl('btn-open-auth'),
+    'user-auth-badge': createMockEl('user-auth-badge'),
+    'header-auth-label': createMockEl('header-auth-label'),
+    'header-auth-sub': createMockEl('header-auth-sub'),
+    'sync-status-indicator': createMockEl('sync-status-indicator'),
+    'sync-status-text': createMockEl('sync-status-text'),
+    'footer-privacy-text': createMockEl('footer-privacy-text'),
+    'user-email-text': createMockEl('user-email-text'),
+    'user-avatar-img': createMockEl('user-avatar-img'),
+    'btn-sign-out': createMockEl('btn-sign-out')
+  };
+  mockElements['btn-open-auth'].classList.add('hidden');
+  mockElements['user-auth-badge'].classList.add('hidden');
+
+  const origDoc = globalThis.document;
+  globalThis.document = {
+    documentElement: { classList: { add() {}, remove() {}, contains() { return false; } } },
+    body: { classList: { add() {}, remove() {}, contains() { return false; } } },
+    getElementById: (id) => mockElements[id] || null,
+    querySelectorAll: () => [],
+    addEventListener: () => {},
+    removeEventListener: () => {}
+  };
+
+  const freshStore = new BudgetStore();
+  assert(freshStore.state.onboarded === false, 'TC-398-C fresh store starts with onboarded=false');
+  const mockAuth = {
+    isAuthenticated: () => false,
+    getUser: () => null,
+    onAuthStateChange: () => () => {}
+  };
+  const ui = new UIManager(freshStore, { authService: mockAuth });
+  ui.renderAuthBadge();
+
+  // Fresh unresolved visitor state:
+  assert(mockElements['btn-open-auth'].classList.contains('hidden') === true, 'TC-398-C Fresh unresolved visitor hides btn-open-auth');
+  assert(mockElements['header-auth-label'].textContent === '', 'TC-398-C Fresh unresolved visitor does NOT render "Yerel kullanım"');
+
+  // D. Guest mode still renders correct local badge after selection
+  freshStore.state.onboarded = true;
+  ui.renderAuthBadge();
+  assert(mockElements['btn-open-auth'].classList.contains('hidden') === false, 'TC-398-D Guest mode selection renders btn-open-auth');
+  assert(mockElements['header-auth-label'].textContent === tr.auth.accountGuestPrimary, 'TC-398-D Guest mode renders "Yerel kullanım"');
+  assert(mockElements['header-auth-sub'].textContent === tr.auth.accountGuestSecondary, 'TC-398-D Guest mode renders "Bu cihazda"');
+
+  // E. Authenticated mode still renders cloud/sync badge
+  const authedUser = { email: 'pilot@muvazene.app', user_metadata: {} };
+  ui.renderAuthBadge(authedUser);
+  assert(mockElements['btn-open-auth'].classList.contains('hidden') === true, 'TC-398-E Authenticated mode hides btn-open-auth');
+  assert(mockElements['user-auth-badge'].classList.contains('hidden') === false, 'TC-398-E Authenticated mode renders user-auth-badge');
+  assert(mockElements['user-email-text'].textContent === 'pilot@muvazene.app', 'TC-398-E Authenticated mode displays user email');
+
+  globalThis.document = origDoc;
+
+  // F. /gizlilik does NOT contain absolute claim: "Herhangi bir sunucuya işlem veya bakiye verisi aktarılmaz."
+  assert(!gizlilikHtml.includes('Herhangi bir sunucuya işlem veya bakiye verisi aktarılmaz'), 'TC-398-F Absolute server claim absent from gizlilik.html');
+
+  // G. Privacy copy contains the narrower local-storage/cloud-sync statement
+  assert(gizlilikHtml.includes('Üyeliksiz kullanımda finansal verileriniz cihazınızın tarayıcısında yerel olarak saklanır ve Muvazene bulut hesabına senkronize edilmez.'), 'TC-398-G Privacy copy contains narrower local storage statement');
+
+  // H. No unsupported zero-knowledge, end-to-end encryption, absolute no-network claims & durable ad title
+  assert(gizlilikHtml.includes('Reklam ve Veri Ticareti Yok'), 'TC-398-H Privacy section title is "Reklam ve Veri Ticareti Yok"');
+  assert(!gizlilikHtml.includes('Reklamsız ve Takipçisiz Deneyim'), 'TC-398-H Old non-durable section title absent');
+  assert(gizlilikHtml.includes('Oturum, tercih ve uygulama işlevleri için gerekli teknik depolama mekanizmaları kullanılabilir.'), 'TC-398-H Durable storage & cookie copy present');
+  assert(!gizlilikHtml.toLowerCase().includes('zero-knowledge') || gizlilikHtml.includes('asılsız teknik iddialarda bulunulmaz'), 'TC-398-H No unsubstantiated zero-knowledge claims');
+  assert(!gizlilikHtml.toLowerCase().includes('uçtan uca'), 'TC-398-H No unsubstantiated end-to-end encryption claims');
+
+  // I. Public routing tests continue passing
+  const viteConfig = fs.readFileSync(path.resolve(process.cwd(), 'vite.config.js'), 'utf-8');
+  assert(viteConfig.includes('navigateFallbackDenylist'), 'TC-398-I SW navigateFallbackDenylist is active');
+  assert(viteConfig.includes('multiPageCleanUrlsPlugin'), 'TC-398-I multiPageCleanUrlsPlugin is active');
 }
 
 console.log('\n====================================================');

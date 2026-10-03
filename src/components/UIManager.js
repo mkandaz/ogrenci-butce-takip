@@ -1390,7 +1390,8 @@ export class UIManager {
       } else if (this.userAvatarImg) {
         this.userAvatarImg.classList.add('hidden');
       }
-    } else {
+    } else if (this.store?.state?.onboarded) {
+      // User has explicitly chosen guest/local mode, or is a returning guest
       this.btnOpenAuth?.classList.remove('hidden');
       this.userAuthBadge?.classList.add('hidden');
       if (this.userAvatarImg) this.userAvatarImg.classList.add('hidden');
@@ -1401,6 +1402,18 @@ export class UIManager {
       if (headerAuthSub) {
         headerAuthSub.textContent = t('auth.accountGuestSecondary');
         headerAuthSub.setAttribute('data-i18n', 'auth.accountGuestSecondary');
+      }
+    } else {
+      // Fresh visitor session before initial storage-mode choice is resolved:
+      // Hide account/storage badge entirely so we do NOT show a fake "Yerel kullanım / Bu cihazda"
+      this.btnOpenAuth?.classList.add('hidden');
+      this.userAuthBadge?.classList.add('hidden');
+      if (this.userAvatarImg) this.userAvatarImg.classList.add('hidden');
+      if (headerAuthLabel) {
+        headerAuthLabel.textContent = '';
+      }
+      if (headerAuthSub) {
+        headerAuthSub.textContent = '';
       }
     }
     if (typeof this.updateFooterPrivacyText === 'function') {
