@@ -45,7 +45,7 @@ import {
 } from '../src/services/cashflowPlannerEngine.js';
 import { getFinancialOutlookViewModel } from '../src/services/financialOutlookService.js';
 import { getWhatIfDecisionSupport, DECISION_IMPACT_CODES } from '../src/services/whatIfDecisionSupportService.js';
-import { isNativePlatform, shouldRegisterPWA } from '../src/utils/platform.js';
+import { isNativePlatform, shouldRegisterPWA, applyPlatformShellClass } from '../src/utils/platform.js';
 
 console.log('====================================================');
 console.log('🚀 ÖĞRENCİ BÜTÇE TAKİP - ENTEGRE TEST PAKETİ (FAZ 2 & 3)');
@@ -11595,11 +11595,296 @@ console.log('\n--- 39. FAZ 6.0 — CAPACITOR MOBILE FOUNDATION TESTS (TC-400) --
   assert(iosGitignore.includes('DerivedData'), 'TC-400-9 ios/.gitignore excludes DerivedData');
 }
 
+// ====================================================
+// 40. FAZ 6.1 — MOBILE UI SHELL & TOUCH ERGONOMICS (TC-401)
+// ====================================================
+console.log('\n--- 40. FAZ 6.1 — MOBILE UI SHELL & TOUCH ERGONOMICS (TC-401) ---');
+
+// TC-401-1: Platform Detection & Class Scoping Isolation
+{
+  const mockDoc = {
+    body: {
+      classList: {
+        _classes: new Set(),
+        add(c) { this._classes.add(c); },
+        remove(c) { this._classes.delete(c); },
+        contains(c) { return this._classes.has(c); }
+      }
+    },
+    documentElement: {
+      classList: {
+        _classes: new Set(),
+        add(c) { this._classes.add(c); },
+        remove(c) { this._classes.delete(c); },
+        contains(c) { return this._classes.has(c); }
+      }
+    }
+  };
+
+  const oldDoc = globalThis.document;
+  globalThis.document = mockDoc;
+
+  // 1. Browser/default mode: no .platform-native added
+  const isNativeWeb = applyPlatformShellClass({ isNativePlatform: () => false });
+  assert(isNativeWeb === false, 'TC-401-1 Web platform is detected as non-native');
+  assert(!mockDoc.body.classList.contains('platform-native'), 'TC-401-1 Web body does not have platform-native class');
+  assert(!mockDoc.documentElement.classList.contains('platform-native'), 'TC-401-1 Web documentElement does not have platform-native class');
+
+  // 2. Native Capacitor mode: adds .platform-native
+  const isNativeCap = applyPlatformShellClass({ isNativePlatform: () => true });
+  assert(isNativeCap === true, 'TC-401-1 Native platform detected');
+  assert(mockDoc.body.classList.contains('platform-native'), 'TC-401-1 Native body has platform-native class');
+  assert(mockDoc.documentElement.classList.contains('platform-native'), 'TC-401-1 Native documentElement has platform-native class');
+
+  // 3. Web return: cleans up
+  applyPlatformShellClass({ isNativePlatform: () => false });
+  assert(!mockDoc.body.classList.contains('platform-native'), 'TC-401-1 Removing native shell cleans body class');
+
+  // 4. Force override
+  globalThis.window = { __FORCE_NATIVE_SHELL__: true };
+  const isForced = applyPlatformShellClass({ isNativePlatform: () => false });
+  assert(isForced === true, 'TC-401-1 __FORCE_NATIVE_SHELL__ activates native shell');
+  assert(mockDoc.body.classList.contains('platform-native'), 'TC-401-1 Forced native sets body class');
+  delete globalThis.window.__FORCE_NATIVE_SHELL__;
+  applyPlatformShellClass({ isNativePlatform: () => false });
+
+  globalThis.document = oldDoc;
+}
+
+// TC-401-2: CSS Platform Isolation & Safe Areas
+{
+  const css = fs.readFileSync(path.resolve('src/styles/main.css'), 'utf8');
+
+  // Safe area CSS variables
+  assert(css.includes('--sat: env(safe-area-inset-top'), 'TC-401-2 CSS includes safe-area-inset-top variable');
+  assert(css.includes('--sab: env(safe-area-inset-bottom'), 'TC-401-2 CSS includes safe-area-inset-bottom variable');
+  assert(css.includes('--sal: env(safe-area-inset-left'), 'TC-401-2 CSS includes safe-area-inset-left variable');
+  assert(css.includes('--sar: env(safe-area-inset-right'), 'TC-401-2 CSS includes safe-area-inset-right variable');
+
+  // Desktop web hides mobile elements
+  assert(css.includes('#mobile-header') && css.includes('display: none !important;'), 'TC-401-2 Mobile shell elements hidden on desktop web by default');
+
+  // Native shell rules
+  assert(css.includes('body.platform-native #desktop-header'), 'TC-401-2 Desktop header hidden on native platform');
+  assert(css.includes('body.platform-native #mobile-header'), 'TC-401-2 Mobile header shown on native platform');
+  assert(css.includes('body.platform-native #mobile-bottom-nav'), 'TC-401-2 Mobile bottom nav shown on native platform');
+  assert(css.includes('body.platform-native #mobile-fab-add'), 'TC-401-2 Mobile FAB shown on native platform');
+
+  // 2x2 summary grid
+  assert(css.includes('grid-template-columns: repeat(2, minmax(0, 1fr))'), 'TC-401-2 Mobile summary cards use 2x2 grid layout');
+
+  // Minimum 44x44pt touch target rule
+  assert(css.includes('min-height: 44px') && css.includes('min-width: 44px'), 'TC-401-2 Minimum 44x44pt touch target rules enforced');
+
+  // Modal open hides FAB
+  assert(css.includes('body.platform-native.modal-open #mobile-fab-add'), 'TC-401-2 Modal open state hides floating action button');
+}
+
+// TC-401-3: HTML Native Shell Elements Integrity
+{
+  const html = fs.readFileSync(path.resolve('index.html'), 'utf8');
+
+  // Headers
+  assert(html.includes('id="desktop-header"'), 'TC-401-3 #desktop-header exists');
+  assert(html.includes('id="mobile-header"'), 'TC-401-3 #mobile-header exists');
+  assert(html.includes('id="mobile-month-navigator"'), 'TC-401-3 #mobile-month-navigator exists');
+  assert(html.includes('id="btn-mobile-settings"'), 'TC-401-3 #btn-mobile-settings exists');
+
+  // 4 Bottom Nav Tab Buttons
+  assert(html.includes('id="mobile-bottom-nav"'), 'TC-401-3 #mobile-bottom-nav exists');
+  assert(html.includes('data-tab="summary"'), 'TC-401-3 Tab 1 (summary) button exists');
+  assert(html.includes('data-tab="analysis"'), 'TC-401-3 Tab 2 (analysis) button exists');
+  assert(html.includes('data-tab="scenarios"'), 'TC-401-3 Tab 3 (scenarios) button exists');
+  assert(html.includes('data-tab="transactions"'), 'TC-401-3 Tab 4 (transactions) button exists');
+
+  // 4 Tab Panels
+  assert(html.includes('id="tab-panel-summary"'), 'TC-401-3 #tab-panel-summary exists');
+  assert(html.includes('id="tab-panel-analysis"'), 'TC-401-3 #tab-panel-analysis exists');
+  assert(html.includes('id="tab-panel-scenarios"'), 'TC-401-3 #tab-panel-scenarios exists');
+  assert(html.includes('id="tab-panel-transactions"'), 'TC-401-3 #tab-panel-transactions exists');
+
+  // FAB
+  assert(html.includes('id="mobile-fab-add"'), 'TC-401-3 #mobile-fab-add exists');
+
+  // Mobile Settings Sheet & Controls
+  assert(html.includes('id="mobile-settings-sheet"'), 'TC-401-3 #mobile-settings-sheet exists');
+  assert(html.includes('id="mobile-settings-guest-box"'), 'TC-401-3 #mobile-settings-guest-box exists');
+  assert(html.includes('id="mobile-settings-auth-box"'), 'TC-401-3 #mobile-settings-auth-box exists');
+  assert(html.includes('id="mobile-currency-select"'), 'TC-401-3 #mobile-currency-select exists');
+  assert(html.includes('id="mobile-lang-select"'), 'TC-401-3 #mobile-lang-select exists');
+  assert(html.includes('id="btn-mobile-theme-toggle"'), 'TC-401-3 #btn-mobile-theme-toggle exists');
+  assert(html.includes('id="btn-mobile-edit-initial-budget"'), 'TC-401-3 #btn-mobile-edit-initial-budget exists');
+  assert(html.includes('id="btn-mobile-manage-cashflows"'), 'TC-401-3 #btn-mobile-manage-cashflows exists');
+  assert(html.includes('id="btn-mobile-export-json"'), 'TC-401-3 #btn-mobile-export-json exists');
+  assert(html.includes('id="btn-mobile-open-import"'), 'TC-401-3 #btn-mobile-open-import exists');
+  assert(html.includes('id="btn-mobile-reset-data"'), 'TC-401-3 #btn-mobile-reset-data exists');
+
+  // Modals have grab bar and native bottom sheet class
+  assert(html.includes('native-bottom-sheet'), 'TC-401-3 Modals configured with native-bottom-sheet');
+}
+
+// TC-401-4: 4-Tab Switching & Interaction Logic
+{
+  const createMockClassList = (initial = []) => {
+    const set = new Set(initial);
+    return {
+      _classes: set,
+      add(c) { set.add(c); },
+      remove(c) { set.delete(c); },
+      contains(c) { return set.has(c); },
+      toggle(c) { if (set.has(c)) { set.delete(c); return false; } else { set.add(c); return true; } }
+    };
+  };
+
+  const panels = {
+    summary: { classList: createMockClassList(['active']) },
+    analysis: { classList: createMockClassList() },
+    scenarios: { classList: createMockClassList() },
+    transactions: { classList: createMockClassList() }
+  };
+
+  const tabButtons = ['summary', 'analysis', 'scenarios', 'transactions'].map(t => ({
+    dataset: { tab: t },
+    attributes: { 'aria-selected': t === 'summary' ? 'true' : 'false' },
+    setAttribute(k, v) { this.attributes[k] = v; },
+    getAttribute(k) { return this.attributes[k]; },
+    className: ''
+  }));
+
+  let chartRenderCalled = false;
+  const mockChartManager = {
+    render() { chartRenderCalled = true; }
+  };
+
+  const mockStore = {
+    getTransactions: () => [],
+    getSettings: () => ({ currency: 'TRY' }),
+    getCategories: () => []
+  };
+
+  const manager = {
+    tabPanels: panels,
+    mobileTabBtns: tabButtons,
+    chartManager: mockChartManager,
+    store: mockStore,
+    selectedMonth: '2026-09',
+    activeMobileTab: 'summary',
+    refreshIcons() {},
+    setMobileTab: UIManager.prototype.setMobileTab
+  };
+
+  // 1. Initial tab is summary
+  assert(panels.summary.classList.contains('active'), 'TC-401-4 Initial summary tab is active');
+  assert(!panels.analysis.classList.contains('active'), 'TC-401-4 Initial analysis tab is inactive');
+
+  // 2. Switch to analysis tab
+  manager.setMobileTab('analysis');
+  assert(!panels.summary.classList.contains('active'), 'TC-401-4 Summary panel inactive after switch');
+  assert(panels.analysis.classList.contains('active'), 'TC-401-4 Analysis panel active after switch');
+  assert(tabButtons[1].getAttribute('aria-selected') === 'true', 'TC-401-4 Analysis button aria-selected=true');
+  assert(tabButtons[0].getAttribute('aria-selected') === 'false', 'TC-401-4 Summary button aria-selected=false');
+  assert(chartRenderCalled === true, 'TC-401-4 ChartManager.render called on switching to analysis tab');
+
+  // 3. Switch to scenarios tab
+  manager.setMobileTab('scenarios');
+  assert(panels.scenarios.classList.contains('active'), 'TC-401-4 Scenarios panel active');
+  assert(!panels.analysis.classList.contains('active'), 'TC-401-4 Analysis panel inactive');
+
+  // 4. Switch to transactions tab
+  manager.setMobileTab('transactions');
+  assert(panels.transactions.classList.contains('active'), 'TC-401-4 Transactions panel active');
+  assert(!panels.scenarios.classList.contains('active'), 'TC-401-4 Scenarios panel inactive');
+
+  // 5. Invalid tab name falls back to summary
+  manager.setMobileTab('invalid_name');
+  assert(panels.summary.classList.contains('active'), 'TC-401-4 Invalid tab name gracefully falls back to summary');
+}
+
+// TC-401-5: Financial Logic & Outlook Preservation Parity
+{
+  const txs = [
+    { id: 'tx-1', title: 'Burs', amount: 5000, type: 'income', categoryId: 'cat-income', date: '2026-09-01' },
+    { id: 'tx-2', title: 'Kira', amount: 2000, type: 'expense', categoryId: 'cat-rent', date: '2026-09-05' },
+    { id: 'tx-3', title: 'Market', amount: 300, type: 'expense', categoryId: 'cat-food', date: '2026-09-10' }
+  ];
+
+  const now = new Date('2026-09-15T12:00:00Z');
+  const summary = calculateSummary(txs, now, '2026-09');
+
+  assert(summary.balance === 2700, 'TC-401-5 Financial calculation balance unaltered (2700 TL)');
+  assert(summary.totalIncome === 5000, 'TC-401-5 Total income unaltered (5000 TL)');
+  assert(summary.totalExpense === 2300, 'TC-401-5 Total expense unaltered (2300 TL)');
+  assert(summary.daysRemainingInMonth === 16, 'TC-401-5 Days remaining calculation unaltered (16 days)');
+  assert(Math.round(summary.dailySafeSpendLimit) === Math.round(2700 / 16), 'TC-401-5 Daily safe spend calculation unaltered (168.75 TL)');
+}
+
+// TC-401-6: Mobile Settings Sheet & Auth State Toggle
+{
+  const guestBox = { classList: { _c: new Set(), add(c){ this._c.add(c); }, remove(c){ this._c.delete(c); }, contains(c){ return this._c.has(c); } } };
+  const authBox = { classList: { _c: new Set(['hidden']), add(c){ this._c.add(c); }, remove(c){ this._c.delete(c); }, contains(c){ return this._c.has(c); } } };
+  const userEmail = { textContent: '' };
+  const sheet = { classList: { _c: new Set(['hidden']), add(c){ this._c.add(c); }, remove(c){ this._c.delete(c); }, contains(c){ return this._c.has(c); } } };
+  const mockBody = { classList: { _c: new Set(), add(c){ this._c.add(c); }, remove(c){ this._c.delete(c); }, contains(c){ return this._c.has(c); } } };
+
+  let activeUser = null;
+  const sheetManager = {
+    mobileSettingsSheet: sheet,
+    mobileSettingsGuestBox: guestBox,
+    mobileSettingsAuthBox: authBox,
+    mobileUserEmail: userEmail,
+    store: { getSettings: () => ({ currency: 'TRY' }) },
+    getCurrentUser: () => activeUser,
+    refreshIcons() {},
+    openMobileSettingsSheet: UIManager.prototype.openMobileSettingsSheet,
+    closeMobileSettingsSheet: UIManager.prototype.closeMobileSettingsSheet,
+    updateMobileSettingsContent: UIManager.prototype.updateMobileSettingsContent,
+    updateMobileThemeButton() {}
+  };
+
+  const oldDoc = globalThis.document;
+  globalThis.document = { body: mockBody, querySelector: () => null };
+
+  // 1. Guest state
+  sheetManager.openMobileSettingsSheet();
+  assert(!sheet.classList.contains('hidden'), 'TC-401-6 Settings sheet opens (removes hidden)');
+  assert(mockBody.classList.contains('modal-open'), 'TC-401-6 Body gets modal-open class');
+  assert(!guestBox.classList.contains('hidden'), 'TC-401-6 Guest box is visible');
+  assert(authBox.classList.contains('hidden'), 'TC-401-6 Auth box is hidden for guest');
+
+  // 2. Authenticated state
+  activeUser = { email: 'student@example.com' };
+  sheetManager.updateMobileSettingsContent();
+  assert(guestBox.classList.contains('hidden'), 'TC-401-6 Guest box is hidden when user signed in');
+  assert(!authBox.classList.contains('hidden'), 'TC-401-6 Auth box is visible when user signed in');
+  assert(userEmail.textContent === 'student@example.com', 'TC-401-6 User email displayed correctly');
+
+  // 3. Close sheet
+  sheetManager.closeMobileSettingsSheet();
+  assert(sheet.classList.contains('hidden'), 'TC-401-6 Settings sheet closes (adds hidden)');
+  assert(!mockBody.classList.contains('modal-open'), 'TC-401-6 Body removes modal-open class');
+
+  globalThis.document = oldDoc;
+}
+
+// TC-401-7: Public Routes Isolation
+{
+  const publicRoutes = ['hakkinda', 'nasil-calisir', 'gizlilik'];
+  for (const route of publicRoutes) {
+    const routeHtmlPath = path.resolve(`${route}/index.html`);
+    if (fs.existsSync(routeHtmlPath)) {
+      const content = fs.readFileSync(routeHtmlPath, 'utf8');
+      assert(!content.includes('id="mobile-bottom-nav"'), `TC-401-7 Public page ${route} does not include mobile bottom nav`);
+      assert(!content.includes('platform-native'), `TC-401-7 Public page ${route} has no hardcoded platform-native class`);
+    }
+  }
+}
+
 console.log('\n====================================================');
 console.log(`🏁 ENTEGRE TEST SONUCU: ${passed} PASSED, ${failed} FAILED`);
 console.log('====================================================');
 
 process.exit(failed > 0 ? 1 : 0);
+
 
 
 

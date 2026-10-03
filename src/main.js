@@ -2,7 +2,10 @@ import './styles/main.css';
 import { registerSW } from 'virtual:pwa-register';
 import { BudgetStore } from './store/BudgetStore.js';
 import { UIManager } from './components/UIManager.js';
-import { shouldRegisterPWA } from './utils/platform.js';
+import { shouldRegisterPWA, applyPlatformShellClass } from './utils/platform.js';
+
+// Native Mobile Shell sınıfını derhal uygula (FOUC önleme)
+applyPlatformShellClass();
 
 // PWA Service Worker Kaydı: Web tarayıcısında aktif, Capacitor yerel iOS ortamında kapalı
 let updateSW = null;
@@ -32,6 +35,7 @@ if (shouldRegisterPWA()) {
 
 // Uygulamayı Başlat
 document.addEventListener('DOMContentLoaded', () => {
+  applyPlatformShellClass();
   const store = new BudgetStore();
   window.app = new UIManager(store);
 });

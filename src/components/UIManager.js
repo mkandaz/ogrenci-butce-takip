@@ -46,7 +46,8 @@ import {
   CalendarPlus,
   TrendingDown,
   ChevronDown,
-  HelpCircle
+  HelpCircle,
+  HardDrive
 } from 'lucide';
 
 const appIcons = {
@@ -96,7 +97,8 @@ const appIcons = {
   CalendarPlus,
   TrendingDown,
   ChevronDown,
-  HelpCircle
+  HelpCircle,
+  HardDrive
 };
 import { calculateSummary } from '../store/calculations.js';
 import { formatCurrency, formatNumber, formatDate, formatTime, formatMonthTitle, getCurrencySymbol } from '../utils/formatters.js';
@@ -124,6 +126,7 @@ export class UIManager {
     this.searchQuery = '';
     this.categoryFilter = '';
     this.sortOption = 'date-desc';
+    this.activeMobileTab = 'summary';
 
     if (typeof document !== 'undefined') {
       this.cacheElements();
@@ -137,6 +140,7 @@ export class UIManager {
 
       this.initTheme();
       this.bindEvents();
+      this.setMobileTab('summary');
 
       this.currentUser = (this.authService && typeof this.authService.getUser === 'function')
         ? this.authService.getUser()
@@ -330,6 +334,52 @@ export class UIManager {
     this.outlookDetailsGrid = document.getElementById('outlook-details-grid');
     this.outlookInsightsContainer = document.getElementById('outlook-insights-container');
     this.outlookTimelineContainer = document.getElementById('outlook-timeline-container');
+
+    // FAZ 6.1 Native Mobile Shell & Navigation
+    this.mobileHeader = document.getElementById('mobile-header');
+    this.mobileHeaderDateText = document.getElementById('mobile-header-date-text');
+    this.mobileHeaderMonthPicker = document.getElementById('mobile-header-month-picker');
+    this.mobileBtnPrevMonth = document.getElementById('mobile-btn-prev-month');
+    this.mobileBtnNextMonth = document.getElementById('mobile-btn-next-month');
+    this.mobileBottomNav = document.getElementById('mobile-bottom-nav');
+    this.mobileTabBtns = document.querySelectorAll('.mobile-tab-btn');
+    this.mobileFabAdd = document.getElementById('mobile-fab-add');
+    this.tabPanels = {
+      summary: document.getElementById('tab-panel-summary'),
+      analysis: document.getElementById('tab-panel-analysis'),
+      scenarios: document.getElementById('tab-panel-scenarios'),
+      transactions: document.getElementById('tab-panel-transactions')
+    };
+    this.mobileAnalysisInsightsContainer = document.getElementById('mobile-analysis-insights-container');
+
+    // Mobile Settings Sheet
+    this.btnMobileSettings = document.getElementById('btn-mobile-settings');
+    this.mobileSettingsSheet = document.getElementById('mobile-settings-sheet');
+    this.btnCloseMobileSettings = document.getElementById('btn-close-mobile-settings');
+    this.mobileSettingsGuestBox = document.getElementById('mobile-settings-guest-box');
+    this.btnMobileOpenAuth = document.getElementById('btn-mobile-open-auth');
+    this.mobileSettingsAuthBox = document.getElementById('mobile-settings-auth-box');
+    this.mobileSyncDot = document.getElementById('mobile-sync-dot');
+    this.mobileUserEmail = document.getElementById('mobile-user-email');
+    this.btnMobileSyncNow = document.getElementById('btn-mobile-sync-now');
+    this.btnMobileSignOut = document.getElementById('btn-mobile-sign-out');
+    this.mobileCurrencySelect = document.getElementById('mobile-currency-select');
+    this.mobileLangSelect = document.getElementById('mobile-lang-select');
+    this.btnMobileThemeToggle = document.getElementById('btn-mobile-theme-toggle');
+    this.mobileThemeText = document.getElementById('mobile-theme-text');
+    this.btnMobileEditInitialBudget = document.getElementById('btn-mobile-edit-initial-budget');
+    this.btnMobileManageCashflows = document.getElementById('btn-mobile-manage-cashflows');
+    this.btnMobileExportJson = document.getElementById('btn-mobile-export-json');
+    this.btnMobileOpenImport = document.getElementById('btn-mobile-open-import');
+    this.btnMobileResetData = document.getElementById('btn-mobile-reset-data');
+
+    // Mobile Shortcuts
+    this.btnScenariosTabOpenWhatIf = document.getElementById('btn-scenarios-tab-open-whatif');
+    this.btnMobileManageCashflowsFromTx = document.getElementById('btn-mobile-manage-cashflows-from-tx');
+    this.btnQuickScenarioExpense = document.getElementById('btn-quick-scenario-expense');
+    this.btnQuickScenarioIncome = document.getElementById('btn-quick-scenario-income');
+    this.btnQuickScenarioBuffer = document.getElementById('btn-quick-scenario-buffer');
+    this.btnQuickScenarioTight = document.getElementById('btn-quick-scenario-tight');
   }
 
   initTheme() {
@@ -616,6 +666,152 @@ export class UIManager {
         this.modalManager?.openCashflowModal?.('add');
       });
     }
+
+    // FAZ 6.1 Native Mobile Month Navigator
+    if (this.mobileBtnPrevMonth) {
+      this.mobileBtnPrevMonth.addEventListener('click', () => this.navigateMonth(-1));
+    }
+    if (this.mobileBtnNextMonth) {
+      this.mobileBtnNextMonth.addEventListener('click', () => this.navigateMonth(1));
+    }
+    if (this.mobileHeaderMonthPicker) {
+      this.mobileHeaderMonthPicker.addEventListener('change', (e) => {
+        if (e.target.value) this.setMonth(e.target.value);
+      });
+    }
+
+    // FAZ 6.1 Native Mobile Tab Navigation
+    if (this.mobileTabBtns) {
+      this.mobileTabBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          const tab = btn.dataset.tab;
+          if (tab) this.setMobileTab(tab);
+        });
+      });
+    }
+
+    // FAZ 6.1 Native Mobile FAB Add Button
+    if (this.mobileFabAdd) {
+      this.mobileFabAdd.addEventListener('click', () => {
+        this.modalManager.openTransactionModal('add', { date: this.getDefaultTransactionDate() });
+      });
+    }
+
+    // FAZ 6.1 Native Mobile Settings Sheet Events
+    if (this.btnMobileSettings) {
+      this.btnMobileSettings.addEventListener('click', () => this.openMobileSettingsSheet());
+    }
+    if (this.btnCloseMobileSettings) {
+      this.btnCloseMobileSettings.addEventListener('click', () => this.closeMobileSettingsSheet());
+    }
+    if (this.mobileSettingsSheet) {
+      this.mobileSettingsSheet.addEventListener('click', (e) => {
+        if (e.target === this.mobileSettingsSheet) {
+          this.closeMobileSettingsSheet();
+        }
+      });
+    }
+    if (this.btnMobileOpenAuth) {
+      this.btnMobileOpenAuth.addEventListener('click', () => {
+        this.closeMobileSettingsSheet();
+        this.modalManager.openAuthModal();
+      });
+    }
+    if (this.btnMobileSyncNow) {
+      this.btnMobileSyncNow.addEventListener('click', async () => {
+        if (!authService.isLoggedIn()) {
+          this.closeMobileSettingsSheet();
+          this.modalManager.openAuthModal();
+        } else {
+          showToast('Bulut senkronizasyonu başlatılıyor...', 'info');
+          const res = await this.syncService.sync();
+          if (res.success) {
+            showToast('Verileriniz bulut ile başarıyla eşitlendi.', 'success');
+          } else {
+            showToast(res.error?.message || 'Senkronizasyon hatası.', 'error');
+          }
+        }
+      });
+    }
+    if (this.btnMobileSignOut) {
+      this.btnMobileSignOut.addEventListener('click', () => {
+        this.closeMobileSettingsSheet();
+        this.btnSignOut?.click();
+      });
+    }
+    if (this.mobileCurrencySelect) {
+      this.mobileCurrencySelect.addEventListener('change', (e) => {
+        const newCurr = e.target.value;
+        this.store.updateSettings({ currency: newCurr });
+        showToast(`Para birimi ${newCurr} olarak güncellendi.`, 'info');
+      });
+    }
+    if (this.mobileLangSelect) {
+      this.mobileLangSelect.addEventListener('change', (e) => {
+        const newLang = e.target.value;
+        setLanguage(newLang);
+        this.store.updateSettings({ language: newLang });
+        showToast(newLang === 'tr' ? 'Dil Türkçe olarak ayarlandı.' : 'Language set to English.', 'info');
+      });
+    }
+    if (this.btnMobileThemeToggle) {
+      this.btnMobileThemeToggle.addEventListener('click', () => {
+        this.toggleTheme();
+        this.updateMobileThemeButton();
+      });
+    }
+    if (this.btnMobileEditInitialBudget) {
+      this.btnMobileEditInitialBudget.addEventListener('click', () => {
+        this.closeMobileSettingsSheet();
+        this.modalManager.openInitialBudgetModal();
+      });
+    }
+    if (this.btnMobileManageCashflows) {
+      this.btnMobileManageCashflows.addEventListener('click', () => {
+        this.closeMobileSettingsSheet();
+        this.modalManager?.openCashflowManagerModal?.();
+      });
+    }
+    if (this.btnMobileExportJson) {
+      this.btnMobileExportJson.addEventListener('click', () => {
+        this.closeMobileSettingsSheet();
+        this.exportData();
+      });
+    }
+    if (this.btnMobileOpenImport) {
+      this.btnMobileOpenImport.addEventListener('click', () => {
+        this.closeMobileSettingsSheet();
+        this.modalManager.openImportModal();
+      });
+    }
+    if (this.btnMobileResetData) {
+      this.btnMobileResetData.addEventListener('click', () => {
+        this.closeMobileSettingsSheet();
+        this.btnResetData?.click();
+      });
+    }
+
+    // FAZ 6.1 Native Mobile Shortcuts
+    if (this.btnScenariosTabOpenWhatIf) {
+      this.btnScenariosTabOpenWhatIf.addEventListener('click', () => {
+        this.modalManager?.openWhatIfModal?.();
+      });
+    }
+    if (this.btnMobileManageCashflowsFromTx) {
+      this.btnMobileManageCashflowsFromTx.addEventListener('click', () => {
+        this.modalManager?.openCashflowManagerModal?.();
+      });
+    }
+    const bindQuickScenario = (btn) => {
+      if (!btn) return;
+      btn.addEventListener('click', () => {
+        this.modalManager?.openWhatIfModal?.();
+      });
+    };
+    bindQuickScenario(this.btnQuickScenarioExpense);
+    bindQuickScenario(this.btnQuickScenarioIncome);
+    bindQuickScenario(this.btnQuickScenarioBuffer);
+    bindQuickScenario(this.btnQuickScenarioTight);
   }
 
   navigateMonth(offset) {
@@ -681,6 +877,12 @@ export class UIManager {
     }
     if (this.headerMonthPicker) {
       this.headerMonthPicker.value = this.selectedMonth;
+    }
+    if (this.mobileHeaderDateText) {
+      this.mobileHeaderDateText.textContent = formatMonthTitle(this.selectedMonth, lang);
+    }
+    if (this.mobileHeaderMonthPicker) {
+      this.mobileHeaderMonthPicker.value = this.selectedMonth;
     }
     if (this.txScopeBadge) {
       this.txScopeBadge.textContent = formatMonthTitle(this.selectedMonth, lang);
@@ -1050,6 +1252,10 @@ export class UIManager {
           `;
           this.outlookInsightsContainer.appendChild(itemEl);
         });
+      }
+
+      if (this.mobileAnalysisInsightsContainer) {
+        this.mobileAnalysisInsightsContainer.innerHTML = this.outlookInsightsContainer.innerHTML;
       }
     }
 
@@ -1432,6 +1638,9 @@ export class UIManager {
     if (typeof this.renderLandingOnboardingCta === 'function') {
       this.renderLandingOnboardingCta();
     }
+    if (typeof this.updateMobileSettingsContent === 'function') {
+      this.updateMobileSettingsContent();
+    }
     this.refreshIcons();
   }
 
@@ -1461,12 +1670,15 @@ export class UIManager {
     if (status === 'syncing') {
       this.iconSyncCloud.className = 'w-4 h-4 text-amber-500 animate-spin';
       if (this.syncStatusText) this.syncStatusText.textContent = t('auth.statusSyncing');
+      if (this.mobileSyncDot) this.mobileSyncDot.className = 'w-2 h-2 rounded-full bg-amber-500 animate-pulse';
     } else if (status === 'pending') {
       this.iconSyncCloud.className = 'w-4 h-4 text-amber-500';
       if (this.syncStatusText) this.syncStatusText.textContent = t('auth.statusPending');
+      if (this.mobileSyncDot) this.mobileSyncDot.className = 'w-2 h-2 rounded-full bg-amber-500';
     } else if (status === 'synced') {
       this.iconSyncCloud.className = 'w-4 h-4 text-emerald-500';
       if (this.syncStatusText) this.syncStatusText.textContent = t('auth.statusSynced');
+      if (this.mobileSyncDot) this.mobileSyncDot.className = 'w-2 h-2 rounded-full bg-emerald-500';
       const headerAuthSub = (typeof document !== 'undefined' && typeof document.getElementById === 'function')
         ? document.getElementById('header-auth-sub')
         : null;
@@ -1476,17 +1688,129 @@ export class UIManager {
     } else if (status === 'offline') {
       this.iconSyncCloud.className = 'w-4 h-4 text-slate-400';
       if (this.syncStatusText) this.syncStatusText.textContent = t('auth.statusOffline');
+      if (this.mobileSyncDot) this.mobileSyncDot.className = 'w-2 h-2 rounded-full bg-slate-400';
     } else if (status === 'error') {
       this.iconSyncCloud.className = 'w-4 h-4 text-rose-500';
       if (this.syncStatusText) this.syncStatusText.textContent = t('auth.statusError');
+      if (this.mobileSyncDot) this.mobileSyncDot.className = 'w-2 h-2 rounded-full bg-rose-500';
     } else {
       this.iconSyncCloud.className = 'w-4 h-4 text-slate-400';
       if (this.syncStatusText) this.syncStatusText.textContent = t('auth.statusOffline');
+      if (this.mobileSyncDot) this.mobileSyncDot.className = 'w-2 h-2 rounded-full bg-slate-400';
     }
     if (typeof this.updateFooterPrivacyText === 'function') {
       this.updateFooterPrivacyText();
     }
     this.refreshIcons();
+  }
+
+  // ================= FAZ 6.1 Native Mobile Shell Methods =================
+
+  setMobileTab(tabName = 'summary') {
+    const validTabs = ['summary', 'analysis', 'scenarios', 'transactions'];
+    const activeTab = validTabs.includes(tabName) ? tabName : 'summary';
+    this.activeMobileTab = activeTab;
+
+    // Update tab panels
+    if (this.tabPanels) {
+      Object.keys(this.tabPanels).forEach(key => {
+        const panel = this.tabPanels[key];
+        if (!panel) return;
+        if (key === activeTab) {
+          panel.classList.add('active');
+        } else {
+          panel.classList.remove('active');
+        }
+      });
+    }
+
+    // Update bottom nav tab buttons
+    if (this.mobileTabBtns) {
+      this.mobileTabBtns.forEach(btn => {
+        const isCurrent = btn.dataset.tab === activeTab;
+        btn.setAttribute('aria-selected', isCurrent ? 'true' : 'false');
+        if (isCurrent) {
+          btn.className = 'mobile-tab-btn flex-1 py-1.5 px-2 flex flex-col items-center justify-center gap-1 text-[#356B57] dark:text-[#44856D] font-bold transition min-h-[48px]';
+        } else {
+          btn.className = 'mobile-tab-btn flex-1 py-1.5 px-2 flex flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500 font-medium hover:text-slate-600 dark:hover:text-slate-300 transition min-h-[48px]';
+        }
+      });
+    }
+
+    // When switching to analysis, trigger chart update for newly visible canvas
+    if (activeTab === 'analysis' && this.chartManager) {
+      try {
+        const transactions = this.store.getTransactions();
+        const summary = calculateSummary(transactions, new Date(), this.selectedMonth);
+        const settings = this.store.getSettings();
+        this.chartManager.render(
+          transactions.filter(t => t.date && String(t.date).startsWith(this.selectedMonth)),
+          summary,
+          this.store.getCategories(),
+          settings.currency || 'TRY',
+          getLanguage()
+        );
+      } catch (e) {
+        console.warn('[UIManager] Chart render on tab switch warning:', e);
+      }
+    }
+
+    // Scroll to top of content
+    if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    }
+
+    this.refreshIcons();
+  }
+
+  openMobileSettingsSheet() {
+    if (!this.mobileSettingsSheet) return;
+    this.updateMobileSettingsContent();
+    this.mobileSettingsSheet.classList.remove('hidden');
+    document.body.classList.add('modal-open');
+    this.refreshIcons();
+  }
+
+  closeMobileSettingsSheet() {
+    if (!this.mobileSettingsSheet) return;
+    this.mobileSettingsSheet.classList.add('hidden');
+    const anyModalOpen = document.querySelector('.modal-backdrop:not(.hidden)');
+    if (!anyModalOpen) {
+      document.body.classList.remove('modal-open');
+    }
+  }
+
+  updateMobileSettingsContent() {
+    const user = this.getCurrentUser();
+    const settings = this.store.getSettings();
+    const currency = settings.currency || 'TRY';
+    const lang = getLanguage();
+
+    if (this.mobileCurrencySelect && this.mobileCurrencySelect.value !== currency) {
+      this.mobileCurrencySelect.value = currency;
+    }
+    if (this.mobileLangSelect && this.mobileLangSelect.value !== lang) {
+      this.mobileLangSelect.value = lang;
+    }
+
+    if (user) {
+      this.mobileSettingsGuestBox?.classList.add('hidden');
+      this.mobileSettingsAuthBox?.classList.remove('hidden');
+      if (this.mobileUserEmail) {
+        this.mobileUserEmail.textContent = user.email || 'Kullanıcı';
+      }
+    } else {
+      this.mobileSettingsGuestBox?.classList.remove('hidden');
+      this.mobileSettingsAuthBox?.classList.add('hidden');
+    }
+
+    this.updateMobileThemeButton();
+  }
+
+  updateMobileThemeButton() {
+    if (!this.mobileThemeText) return;
+    const isDark = document.documentElement.classList.contains('dark');
+    this.mobileThemeText.textContent = isDark ? 'Koyu Tema' : 'Açık Tema';
   }
 
   refreshIcons() {

@@ -82,8 +82,8 @@
     </svg>
   </div>
 
-  <!-- ================= NAVBAR ================= -->
-  <header class="sticky top-0 z-40 bg-white/95 dark:bg-[#171D19]/95 backdrop-blur-md border-b border-[#DDDCD5] dark:border-[#27332B] transition-colors relative">
+  <!-- ================= NAVBAR (DESKTOP) ================= -->
+  <header id="desktop-header" class="sticky top-0 z-40 bg-white/95 dark:bg-[#171D19]/95 backdrop-blur-md border-b border-[#DDDCD5] dark:border-[#27332B] transition-colors relative">
     <div class="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-1 sm:gap-3">
       
       <!-- Brand Wordmark & Slogan with SVG Mark -->
@@ -213,8 +213,48 @@
     </div>
   </header>
 
+  <!-- ================= NATIVE MOBILE HEADER ================= -->
+  <header id="mobile-header" class="sticky top-0 z-40 bg-white/95 dark:bg-[#171D19]/95 backdrop-blur-md border-b border-[#DDDCD5] dark:border-[#27332B] px-3.5 py-2.5 items-center justify-between gap-2 transition-colors relative">
+    <!-- Left: Muvazene Mark + Wordmark -->
+    <a href="/" class="flex items-center gap-2 shrink-0 group focus-visible:outline-none">
+      <div class="w-7 h-7 flex items-center justify-center shrink-0">
+        <img src="/brand/muvazene-mark.svg" alt="" width="26" height="15" class="block dark:hidden" />
+        <img src="/brand/muvazene-mark-dark.svg" alt="" width="26" height="15" class="hidden dark:block" />
+      </div>
+      <span class="text-base font-extrabold tracking-tight text-slate-900 dark:text-white leading-none">Muvazene</span>
+    </a>
+
+    <!-- Center: Compact Month Navigator (Min 44x44pt touch targets) -->
+    <div id="mobile-month-navigator" class="flex items-center bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-0.5 shrink-0">
+      <button id="mobile-btn-prev-month" type="button" title="Önceki Ay" aria-label="Önceki Ay" class="w-10 h-10 min-w-[40px] min-h-[40px] rounded-lg text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 active:scale-95 transition flex items-center justify-center">
+        <i data-lucide="chevron-left" class="w-4 h-4"></i>
+      </button>
+      
+      <div class="relative flex items-center">
+        <button id="mobile-btn-month-display" type="button" class="flex items-center space-x-1.5 px-2 py-1.5 rounded-lg text-xs font-bold text-slate-800 dark:text-slate-200 hover:bg-white/80 dark:hover:bg-slate-700/80 transition" title="Ay Değiştir">
+          <i data-lucide="calendar" class="w-3.5 h-3.5 text-[#356B57] dark:text-[#44856D]"></i>
+          <span id="mobile-header-date-text">Eylül 2026</span>
+        </button>
+        <input type="month" id="mobile-header-month-picker" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full" title="Tarih seç" />
+      </div>
+
+      <button id="mobile-btn-next-month" type="button" title="Sonraki Ay" aria-label="Sonraki Ay" class="w-10 h-10 min-w-[40px] min-h-[40px] rounded-lg text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 active:scale-95 transition flex items-center justify-center">
+        <i data-lucide="chevron-right" class="w-4 h-4"></i>
+      </button>
+    </div>
+
+    <!-- Right: Mobile Settings & Profile Sheet Trigger (Min 44x44pt touch target) -->
+    <button id="btn-mobile-settings" type="button" title="Ayarlar ve Profil" aria-label="Ayarlar ve Profil" class="w-11 h-11 min-w-[44px] min-h-[44px] rounded-xl flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 active:scale-95 transition shrink-0">
+      <i data-lucide="settings" class="w-5 h-5"></i>
+    </button>
+  </header>
+
+
   <!-- ================= MAIN CONTENT ================= -->
   <main class="relative z-10 flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6 overflow-x-hidden">
+
+    <!-- ================= TAB PANEL 1: ÖZET (SUMMARY) ================= -->
+    <div id="tab-panel-summary" class="tab-panel active space-y-4 sm:space-y-6">
 
     <!-- CRITICAL BUDGET HEALTH ALERT BANNER -->
     <section id="budget-alert-banner" class="hidden transition-all duration-300 rounded-2xl p-4 border flex items-start sm:items-center justify-between gap-3 shadow-sm" role="region" aria-label="Bütçe Durumu Bildirimi">
@@ -233,7 +273,7 @@
     </section>
 
     <!-- HERO DASHBOARD: 4 SUMMARY METRIC CARDS -->
-    <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+    <section id="summary-cards-section" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
       
       <!-- 1. Kalan Bütçe (Net Balance) -->
       <div class="transition-card bg-white dark:bg-[#171D19] p-4 sm:p-5 rounded-xl border border-[#DDDCD5] dark:border-[#27332B] shadow-xs flex flex-col justify-between overflow-hidden">
@@ -539,140 +579,248 @@
         </div>
       </div>
     </section>
+    </div> <!-- end of tab-panel-summary -->
 
-    <!-- CHARTS & ANALYTICS SECTION -->
-    <section class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- ================= TAB PANEL 2: ANALİZ (ANALYSIS) ================= -->
+    <div id="tab-panel-analysis" class="tab-panel space-y-4 sm:space-y-6">
       
-      <!-- Chart 1: Kategori Bazlı Harcama Dağılımı (Doughnut) -->
-      <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
-        <div class="flex items-center justify-between mb-4">
-          <div>
-            <h2 class="text-sm font-bold tracking-tight text-slate-900 dark:text-white flex items-center space-x-2">
-              <i data-lucide="pie-chart" class="w-4 h-4 text-indigo-500"></i>
-              <span data-i18n="charts.categoryExpense">Kategori Bazlı Gider Dağılımı</span>
-            </h2>
-            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5" data-i18n="charts.categorySubtitle">Paranız en çok nereye gidiyor?</p>
-          </div>
-        </div>
-
-        <div class="chart-container flex items-center justify-center relative">
-          <canvas id="categoryExpenseChart"></canvas>
-          <div id="chart-empty-state" class="hidden absolute inset-0 flex flex-col items-center justify-center text-center p-4">
-            <i data-lucide="inbox" class="w-10 h-10 text-slate-300 dark:text-slate-600 mb-2"></i>
-            <p class="text-xs font-medium text-slate-500 dark:text-slate-400" data-i18n="charts.emptyExpenses">Henüz kaydedilmiş gider bulunmuyor.</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Chart 2: Aylık Gelir vs Gider Akışı -->
-      <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
-        <div class="flex items-center justify-between mb-4">
-          <div>
-            <h2 class="text-sm font-bold tracking-tight text-slate-900 dark:text-white flex items-center space-x-2">
-              <i data-lucide="bar-chart-3" class="w-4 h-4 text-emerald-500"></i>
-              <span data-i18n="charts.budgetBalance">Aylık Bütçe Dengesi</span>
-            </h2>
-            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5" data-i18n="charts.balanceSubtitle">Toplam Gelir ve Harcama Oranınız</p>
-          </div>
-        </div>
-
-        <div class="chart-container flex items-center justify-center relative">
-          <canvas id="flowChart"></canvas>
-          <div id="flow-chart-empty-state" class="hidden absolute inset-0 flex flex-col items-center justify-center text-center p-4">
-            <i data-lucide="bar-chart-3" class="w-10 h-10 text-slate-300 dark:text-slate-600 mb-2"></i>
-            <p class="text-xs font-medium text-slate-500 dark:text-slate-400" data-i18n="charts.emptyFlow">Henüz finansal işlem kaydı bulunmuyor.</p>
-          </div>
-        </div>
-      </div>
-
-    </section>
-
-    <!-- TRANSACTIONS MANAGEMENT SECTION -->
-    <section class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-      
-      <!-- Section Header with Filters -->
-      <div class="p-5 border-b border-slate-200 dark:border-slate-800 space-y-4">
+      <!-- CHARTS & ANALYTICS SECTION -->
+      <section class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div class="flex items-center space-x-2 sm:space-x-3">
-            <h2 class="text-base font-bold text-slate-900 dark:text-white" data-i18n="history.title">İşlem Geçmişi</h2>
-            <span id="tx-count-badge" class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-              0 İşlem
-            </span>
-            <span id="tx-scope-badge" class="hidden sm:inline-flex px-2 py-0.5 rounded-md text-[11px] font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300">
-              Eylül 2026
-            </span>
+        <!-- Chart 1: Kategori Bazlı Harcama Dağılımı (Doughnut) -->
+        <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h2 class="text-sm font-bold tracking-tight text-slate-900 dark:text-white flex items-center space-x-2">
+                <i data-lucide="pie-chart" class="w-4 h-4 text-indigo-500"></i>
+                <span data-i18n="charts.categoryExpense">Kategori Bazlı Gider Dağılımı</span>
+              </h2>
+              <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5" data-i18n="charts.categorySubtitle">Paranız en çok nereye gidiyor?</p>
+            </div>
           </div>
 
-          <!-- Type filter tabs -->
-          <div class="inline-flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 text-xs font-semibold">
-            <button id="filter-type-all" type="button" class="filter-type-btn px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs transition" data-i18n="history.filterAll">
-              Tümü
-            </button>
-            <button id="filter-type-income" type="button" class="filter-type-btn px-3 py-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition" data-i18n="history.filterIncome">
-              Gelirler
-            </button>
-            <button id="filter-type-expense" type="button" class="filter-type-btn px-3 py-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition" data-i18n="history.filterExpense">
-              Giderler
-            </button>
+          <div class="chart-container flex items-center justify-center relative">
+            <canvas id="categoryExpenseChart"></canvas>
+            <div id="chart-empty-state" class="hidden absolute inset-0 flex flex-col items-center justify-center text-center p-4">
+              <i data-lucide="inbox" class="w-10 h-10 text-slate-300 dark:text-slate-600 mb-2"></i>
+              <p class="text-xs font-medium text-slate-500 dark:text-slate-400" data-i18n="charts.emptyExpenses">Henüz kaydedilmiş gider bulunmuyor.</p>
+            </div>
           </div>
         </div>
 
-        <!-- Search, Category & Sort Row -->
-        <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 pt-1">
-          
-          <!-- Search Input -->
-          <div class="sm:col-span-6 relative">
-            <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
-            <input type="text" id="tx-search-input" placeholder="İşlem adı veya not ara..." class="w-full pl-9 pr-10 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition" />
-            <button id="tx-search-clear" type="button" aria-label="Aramayı Temizle" class="hidden absolute right-1 top-1/2 -translate-y-1/2 min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
-              <i data-lucide="x" class="w-3.5 h-3.5"></i>
-            </button>
+        <!-- Chart 2: Aylık Gelir vs Gider Akışı -->
+        <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h2 class="text-sm font-bold tracking-tight text-slate-900 dark:text-white flex items-center space-x-2">
+                <i data-lucide="bar-chart-3" class="w-4 h-4 text-emerald-500"></i>
+                <span data-i18n="charts.budgetBalance">Aylık Bütçe Dengesi</span>
+              </h2>
+              <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5" data-i18n="charts.balanceSubtitle">Toplam Gelir ve Harcama Oranınız</p>
+            </div>
           </div>
 
-          <!-- Category Filter -->
-          <div class="sm:col-span-3">
-            <select id="filter-category-select" aria-label="Kategoriye Göre Filtrele" class="w-full px-3 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition">
-              <option value="">Tüm Kategoriler</option>
-            </select>
+          <div class="chart-container flex items-center justify-center relative">
+            <canvas id="flowChart"></canvas>
+            <div id="flow-chart-empty-state" class="hidden absolute inset-0 flex flex-col items-center justify-center text-center p-4">
+              <i data-lucide="bar-chart-3" class="w-10 h-10 text-slate-300 dark:text-slate-600 mb-2"></i>
+              <p class="text-xs font-medium text-slate-500 dark:text-slate-400" data-i18n="charts.emptyFlow">Henüz finansal işlem kaydı bulunmuyor.</p>
+            </div>
           </div>
-
-          <!-- Sort Filter -->
-          <div class="sm:col-span-3">
-            <select id="sort-select" aria-label="İşlemleri Sırala" class="w-full px-3 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition">
-              <option value="date-desc">Tarih (En Yeni)</option>
-              <option value="date-asc">Tarih (En Eski)</option>
-              <option value="amount-desc">Tutar (En Yüksek)</option>
-              <option value="amount-asc">Tutar (En Düşük)</option>
-            </select>
-          </div>
-
         </div>
 
-      </div>
+      </section>
 
-      <!-- Transactions List Container -->
-      <div id="transactions-container" class="divide-y divide-slate-100 dark:divide-slate-800/60">
-        <!-- Dynamic transaction rows injected here -->
-      </div>
-
-      <!-- Empty State -->
-      <div id="transactions-empty-state" class="hidden py-16 px-4 text-center">
-        <div class="w-12 h-12 mx-auto rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mb-3">
-          <i data-lucide="receipt" class="w-6 h-6"></i>
+      <!-- Analysis Insights Panel (Mobile Analiz Tab) -->
+      <section id="mobile-analysis-insights-card" class="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3" aria-label="Finansal Analiz ve İçgörüler">
+        <div class="flex items-center justify-between border-b border-slate-200/60 dark:border-slate-700/60 pb-2">
+          <h3 class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white flex items-center space-x-2">
+            <i data-lucide="sparkles" class="w-4 h-4 text-amber-500"></i>
+            <span data-i18n="financialOutlook.topInsightsTitle">Finansal İçgörüler ve Analiz</span>
+          </h3>
+          <span class="text-[11px] font-semibold text-slate-400">Öne Çıkanlar</span>
         </div>
-        <h3 id="tx-empty-title" class="text-sm font-bold text-slate-900 dark:text-white" data-i18n="history.emptyTitle">Hiç İşlem Bulunamadı</h3>
-        <p id="tx-empty-desc" class="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto" data-i18n="history.emptyDesc">
-          Arama kriterlerinize uyan bir işlem kaydı yok veya henüz bütçenize işlem eklemediniz.
-        </p>
-        <div class="mt-4 flex flex-wrap items-center justify-center gap-2" id="tx-empty-actions">
-          <button id="btn-empty-add-tx" type="button" class="h-10 px-4 rounded-lg bg-[#356B57] hover:bg-[#2B5948] active:scale-[0.98] text-white text-xs sm:text-sm font-medium shadow-xs transition-all duration-150 inline-flex items-center justify-center gap-1.5 select-none cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#356B57] focus-visible:ring-offset-2" data-i18n="history.newTxBtn">
-            + Yeni İşlem Ekle
+        <div id="mobile-analysis-insights-container" class="space-y-2">
+          <!-- Dynamic insights mirrored here -->
+        </div>
+      </section>
+
+    </div> <!-- end of tab-panel-analysis -->
+
+    <!-- ================= TAB PANEL 3: SENARYOLAR (SCENARIOS) ================= -->
+    <div id="tab-panel-scenarios" class="tab-panel space-y-4 sm:space-y-6">
+      
+      <!-- Scenario Dashboard Hero Card -->
+      <section class="bg-white dark:bg-[#171D19] p-4 sm:p-5 rounded-2xl border border-[#DDDCD5] dark:border-[#27332B] shadow-xs space-y-4" aria-label="What-If Senaryo ve Karar Simülatörü">
+        <div class="flex items-start justify-between gap-3">
+          <div class="flex items-start space-x-3">
+            <div class="w-10 h-10 rounded-xl bg-[#EAF2ED] dark:bg-[#1A3326] text-[#356B57] dark:text-[#44856D] flex items-center justify-center shrink-0 mt-0.5">
+              <i data-lucide="sparkles" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <h2 class="text-base font-bold text-slate-900 dark:text-white" data-i18n="whatif.title">What-If Senaryo Simülatörü</h2>
+              <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed" data-i18n="whatif.subtitle">
+                Büyük bir harcama yapmadan veya yeni bir gelir planlamadan önce bütçene etkisini gör.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Primary Trigger Action -->
+        <button id="btn-scenarios-tab-open-whatif" type="button" class="w-full h-12 min-h-[48px] px-4 rounded-xl bg-[#356B57] hover:bg-[#2B5948] active:scale-[0.98] text-white text-sm font-bold shadow-sm transition-all duration-150 flex items-center justify-center gap-2 cursor-pointer">
+          <i data-lucide="sparkles" class="w-4 h-4"></i>
+          <span>Yeni Senaryo Simülasyonu Başlat</span>
+        </button>
+
+        <!-- 4 Quick Scenario Shortcut Tiles -->
+        <div class="grid grid-cols-2 gap-2.5 pt-1">
+          <button id="btn-quick-scenario-expense" type="button" class="p-3 text-left rounded-xl bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 transition flex flex-col justify-between min-h-[72px]">
+            <div class="flex items-center justify-between text-xs font-semibold text-rose-600 dark:text-rose-400">
+              <span class="flex items-center gap-1.5"><i data-lucide="arrow-up-right" class="w-3.5 h-3.5"></i> Tek Seferlik Gider</span>
+            </div>
+            <span class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Telefon, tatil veya büyük harcama</span>
+          </button>
+
+          <button id="btn-quick-scenario-income" type="button" class="p-3 text-left rounded-xl bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 transition flex flex-col justify-between min-h-[72px]">
+            <div class="flex items-center justify-between text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+              <span class="flex items-center gap-1.5"><i data-lucide="arrow-down-left" class="w-3.5 h-3.5"></i> Ek Gelir / Prim</span>
+            </div>
+            <span class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Burs, prim veya serbest çalışma</span>
+          </button>
+
+          <button id="btn-quick-scenario-percent" type="button" class="p-3 text-left rounded-xl bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 transition flex flex-col justify-between min-h-[72px]">
+            <div class="flex items-center justify-between text-xs font-semibold text-indigo-600 dark:text-indigo-400">
+              <span class="flex items-center gap-1.5"><i data-lucide="sliders-horizontal" class="w-3.5 h-3.5"></i> Harcama Hızı %</span>
+            </div>
+            <span class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Harcamayı %10-20 kıs veya artır</span>
+          </button>
+
+          <button id="btn-quick-scenario-daily" type="button" class="p-3 text-left rounded-xl bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 transition flex flex-col justify-between min-h-[72px]">
+            <div class="flex items-center justify-between text-xs font-semibold text-amber-600 dark:text-amber-400">
+              <span class="flex items-center gap-1.5"><i data-lucide="calendar" class="w-3.5 h-3.5"></i> Günlük Limit</span>
+            </div>
+            <span class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Sabit günlük harcama hedefi belirle</span>
           </button>
         </div>
-      </div>
 
-    </section>
+      </section>
+
+      <!-- Methodology Callout Card -->
+      <section class="p-4 rounded-2xl bg-gradient-to-br from-[#F6F5F1] to-[#EAF2ED]/60 dark:from-[#171D19] dark:to-[#121714] border border-[#DDDCD5] dark:border-[#27332B] text-slate-700 dark:text-slate-300 space-y-2">
+        <h3 class="text-xs font-bold uppercase tracking-wider text-[#356B57] dark:text-[#44856D] flex items-center gap-1.5">
+          <i data-lucide="info" class="w-3.5 h-3.5"></i>
+          <span>Karar Destek Metodolojisi</span>
+        </h3>
+        <p class="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+          Muvazene senaryoları deterministiktir. Tahmin edilen nakit açığı veya ek harcama kapasitesi anında hesaplanır; hiçbir işlem siz onaylamadıkça bütçenize kaydedilmez.
+        </p>
+      </section>
+
+    </div> <!-- end of tab-panel-scenarios -->
+
+    <!-- ================= TAB PANEL 4: İŞLEMLER (TRANSACTIONS) ================= -->
+    <div id="tab-panel-transactions" class="tab-panel space-y-4 sm:space-y-6">
+      
+      <!-- Mobile Planned Cashflow Access Button -->
+      <button id="btn-mobile-manage-cashflows-from-tx" type="button" class="w-full h-12 min-h-[48px] px-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-[0.99] transition">
+        <span class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+            <i data-lucide="calendar-clock" class="w-4 h-4"></i>
+          </div>
+          <span>Planlı Nakit Akışlarını Yönet</span>
+        </span>
+        <i data-lucide="chevron-right" class="w-4 h-4 text-slate-400"></i>
+      </button>
+
+      <!-- TRANSACTIONS MANAGEMENT SECTION -->
+      <section class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+        
+        <!-- Section Header with Filters -->
+        <div class="p-5 border-b border-slate-200 dark:border-slate-800 space-y-4">
+          
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div class="flex items-center space-x-2 sm:space-x-3">
+              <h2 class="text-base font-bold text-slate-900 dark:text-white" data-i18n="history.title">İşlem Geçmişi</h2>
+              <span id="tx-count-badge" class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                0 İşlem
+              </span>
+              <span id="tx-scope-badge" class="hidden sm:inline-flex px-2 py-0.5 rounded-md text-[11px] font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300">
+                Eylül 2026
+              </span>
+            </div>
+
+            <!-- Type filter tabs -->
+            <div class="inline-flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 text-xs font-semibold">
+              <button id="filter-type-all" type="button" class="filter-type-btn px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs transition" data-i18n="history.filterAll">
+                Tümü
+              </button>
+              <button id="filter-type-income" type="button" class="filter-type-btn px-3 py-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition" data-i18n="history.filterIncome">
+                Gelirler
+              </button>
+              <button id="filter-type-expense" type="button" class="filter-type-btn px-3 py-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition" data-i18n="history.filterExpense">
+                Giderler
+              </button>
+            </div>
+          </div>
+
+          <!-- Search, Category & Sort Row -->
+          <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 pt-1">
+            
+            <!-- Search Input -->
+            <div class="sm:col-span-6 relative">
+              <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+              <input type="text" id="tx-search-input" placeholder="İşlem adı veya not ara..." class="w-full pl-9 pr-10 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition" />
+              <button id="tx-search-clear" type="button" aria-label="Aramayı Temizle" class="hidden absolute right-1 top-1/2 -translate-y-1/2 min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                <i data-lucide="x" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
+
+            <!-- Category Filter -->
+            <div class="sm:col-span-3">
+              <select id="filter-category-select" aria-label="Kategoriye Göre Filtrele" class="w-full px-3 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition">
+                <option value="">Tüm Kategoriler</option>
+              </select>
+            </div>
+
+            <!-- Sort Filter -->
+            <div class="sm:col-span-3">
+              <select id="sort-select" aria-label="İşlemleri Sırala" class="w-full px-3 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition">
+                <option value="date-desc">Tarih (En Yeni)</option>
+                <option value="date-asc">Tarih (En Eski)</option>
+                <option value="amount-desc">Tutar (En Yüksek)</option>
+                <option value="amount-asc">Tutar (En Düşük)</option>
+              </select>
+            </div>
+
+          </div>
+
+        </div>
+
+        <!-- Transactions List Container -->
+        <div id="transactions-container" class="divide-y divide-slate-100 dark:divide-slate-800/60">
+          <!-- Dynamic transaction rows injected here -->
+        </div>
+
+        <!-- Empty State -->
+        <div id="transactions-empty-state" class="hidden py-16 px-4 text-center">
+          <div class="w-12 h-12 mx-auto rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mb-3">
+            <i data-lucide="receipt" class="w-6 h-6"></i>
+          </div>
+          <h3 id="tx-empty-title" class="text-sm font-bold text-slate-900 dark:text-white" data-i18n="history.emptyTitle">Hiç İşlem Bulunamadı</h3>
+          <p id="tx-empty-desc" class="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto" data-i18n="history.emptyDesc">
+            Arama kriterlerinize uyan bir işlem kaydı yok veya henüz bütçenize işlem eklemediniz.
+          </p>
+          <div class="mt-4 flex flex-wrap items-center justify-center gap-2" id="tx-empty-actions">
+            <button id="btn-empty-add-tx" type="button" class="h-10 px-4 rounded-lg bg-[#356B57] hover:bg-[#2B5948] active:scale-[0.98] text-white text-xs sm:text-sm font-medium shadow-xs transition-all duration-150 inline-flex items-center justify-center gap-1.5 select-none cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#356B57] focus-visible:ring-offset-2" data-i18n="history.newTxBtn">
+              + Yeni İşlem Ekle
+            </button>
+          </div>
+        </div>
+
+      </section>
+
+    </div> <!-- end of tab-panel-transactions -->
+
 
     <!-- ================= PUBLIC OVERVIEW / SEARCH INTENT SECTION ================= -->
     <section id="app-overview" class="mt-8 pt-8 border-t border-[#DDDCD5] dark:border-[#27332B] text-slate-700 dark:text-slate-300" aria-label="Muvazene Özellikleri ve Bütçe Planlama">
@@ -858,10 +1006,185 @@
     </div>
   </footer>
 
+  <!-- ================= MOBILE FLOATING ACTION BUTTON (ADD TRANSACTION) ================= -->
+  <button id="mobile-fab-add" type="button" aria-label="Yeni İşlem Ekle" title="Yeni İşlem Ekle" class="fixed right-4 z-40 w-14 h-14 rounded-full bg-[#356B57] hover:bg-[#2B5948] active:scale-95 text-white shadow-xl shadow-[#356B57]/30 flex items-center justify-center transition-all duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#356B57] focus-visible:ring-offset-2">
+    <i data-lucide="plus" class="w-7 h-7"></i>
+  </button>
+
+  <!-- ================= MOBILE BOTTOM NAVIGATION ================= -->
+  <nav id="mobile-bottom-nav" class="fixed bottom-0 inset-x-0 z-40 bg-white/95 dark:bg-[#171D19]/95 backdrop-blur-md border-t border-[#DDDCD5] dark:border-[#27332B] flex items-center justify-around px-2 py-1 select-none transition-colors" aria-label="Mobil Ana Gezinme">
+    <button type="button" class="mobile-tab-btn flex-1 py-1.5 px-2 flex flex-col items-center justify-center gap-1 text-[#356B57] dark:text-[#44856D] font-bold transition min-h-[48px]" data-tab="summary" aria-selected="true" aria-label="Özet">
+      <i data-lucide="wallet" class="w-5 h-5"></i>
+      <span class="text-[10px] tracking-tight" data-i18n="mobileNav.summary">Özet</span>
+    </button>
+    <button type="button" class="mobile-tab-btn flex-1 py-1.5 px-2 flex flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500 font-medium hover:text-slate-600 dark:hover:text-slate-300 transition min-h-[48px]" data-tab="analysis" aria-selected="false" aria-label="Analiz">
+      <i data-lucide="pie-chart" class="w-5 h-5"></i>
+      <span class="text-[10px] tracking-tight" data-i18n="mobileNav.analysis">Analiz</span>
+    </button>
+    <button type="button" class="mobile-tab-btn flex-1 py-1.5 px-2 flex flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500 font-medium hover:text-slate-600 dark:hover:text-slate-300 transition min-h-[48px]" data-tab="scenarios" aria-selected="false" aria-label="Senaryolar">
+      <i data-lucide="sparkles" class="w-5 h-5"></i>
+      <span class="text-[10px] tracking-tight" data-i18n="mobileNav.scenarios">Senaryolar</span>
+    </button>
+    <button type="button" class="mobile-tab-btn flex-1 py-1.5 px-2 flex flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500 font-medium hover:text-slate-600 dark:hover:text-slate-300 transition min-h-[48px]" data-tab="transactions" aria-selected="false" aria-label="İşlemler">
+      <i data-lucide="receipt" class="w-5 h-5"></i>
+      <span class="text-[10px] tracking-tight" data-i18n="mobileNav.transactions">İşlemler</span>
+    </button>
+  </nav>
+
+  <!-- ================= MOBILE SETTINGS & PROFILE SHEET ================= -->
+  <div id="mobile-settings-sheet" role="dialog" aria-modal="true" aria-labelledby="mobile-settings-title" class="hidden fixed inset-0 z-50 flex items-end justify-center bg-slate-900/60 backdrop-blur-xs transition-opacity duration-200">
+    <div class="bg-white dark:bg-[#171D19] rounded-t-3xl max-w-lg w-full p-5 shadow-2xl border border-slate-100 dark:border-slate-800 space-y-4 max-h-[88vh] overflow-y-auto transform transition-all duration-200 native-bottom-sheet">
+      
+      <!-- Top Grab Bar -->
+      <div class="w-10 h-1 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mb-1" aria-hidden="true"></div>
+
+      <!-- Sheet Header -->
+      <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-[#EAF2ED] dark:bg-[#1A3326] text-[#356B57] dark:text-[#44856D] flex items-center justify-center">
+            <i data-lucide="settings" class="w-4 h-4"></i>
+          </div>
+          <div>
+            <h2 id="mobile-settings-title" class="text-sm font-bold text-slate-900 dark:text-white">Ayarlar ve Tercihler</h2>
+            <p class="text-[11px] text-slate-500 dark:text-slate-400">Hesap, para birimi, dil ve veri yönetimi</p>
+          </div>
+        </div>
+        <button id="btn-close-mobile-settings" type="button" aria-label="Kapat" class="w-10 h-10 min-w-[40px] min-h-[40px] rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Account & Sync Section -->
+      <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 space-y-3">
+        <div class="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 tracking-wider">Hesap ve Depolama</div>
+        
+        <!-- Guest State -->
+        <div id="mobile-settings-guest-box" class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-lg bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-500 dark:text-slate-400 shrink-0">
+              <i data-lucide="hard-drive" class="w-4 h-4"></i>
+            </div>
+            <div>
+              <div class="text-xs font-bold text-slate-800 dark:text-slate-200">Yerel kullanım</div>
+              <div class="text-[10px] text-slate-500 dark:text-slate-400">Veriler yalnızca bu cihazda saklanır</div>
+            </div>
+          </div>
+          <button id="btn-mobile-open-auth" type="button" class="h-9 px-3 min-h-[36px] rounded-lg bg-[#356B57] text-white text-xs font-semibold hover:bg-[#2B5948] transition shrink-0">
+            Google ile Giriş
+          </button>
+        </div>
+
+        <!-- Cloud Authenticated State -->
+        <div id="mobile-settings-auth-box" class="hidden space-y-2.5">
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <div class="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
+                <i data-lucide="cloud" class="w-4 h-4"></i>
+              </div>
+              <div class="min-w-0">
+                <div class="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                  <span>Bulut Eşitlendi</span>
+                  <span id="mobile-sync-dot" class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                </div>
+                <div id="mobile-user-email" class="text-[11px] text-slate-500 dark:text-slate-400 truncate"></div>
+              </div>
+            </div>
+            <button id="btn-mobile-sync-now" type="button" class="h-9 px-3 min-h-[36px] rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-medium hover:bg-slate-200 transition shrink-0 flex items-center gap-1.5">
+              <i data-lucide="refresh-cw" class="w-3.5 h-3.5 text-[#356B57]"></i>
+              <span>Eşitle</span>
+            </button>
+          </div>
+          <button id="btn-mobile-sign-out" type="button" class="w-full h-9 min-h-[36px] rounded-lg text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition flex items-center justify-center gap-1.5">
+            <i data-lucide="log-out" class="w-3.5 h-3.5"></i>
+            <span>Hesaptan Çıkış Yap</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- App Preferences (Currency, Language, Theme) -->
+      <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 space-y-3">
+        <div class="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 tracking-wider">Tercihler</div>
+        
+        <div class="grid grid-cols-2 gap-2.5">
+          <!-- Currency -->
+          <div>
+            <label for="mobile-currency-select" class="block text-[10px] font-semibold text-slate-500 dark:text-slate-400 mb-1">Para Birimi</label>
+            <select id="mobile-currency-select" class="w-full h-11 min-h-[44px] px-2.5 text-xs font-semibold rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 focus:outline-hidden cursor-pointer">
+              <option value="TRY">₺ TRY</option>
+              <option value="USD">$ USD</option>
+              <option value="EUR">€ EUR</option>
+            </select>
+          </div>
+          <!-- Language -->
+          <div>
+            <label for="mobile-lang-select" class="block text-[10px] font-semibold text-slate-500 dark:text-slate-400 mb-1">Dil</label>
+            <select id="mobile-lang-select" class="w-full h-11 min-h-[44px] px-2.5 text-xs font-semibold rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 focus:outline-hidden cursor-pointer">
+              <option value="tr">🇹🇷 Türkçe</option>
+              <option value="en">🇬🇧 English</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Theme Toggle -->
+        <div class="flex items-center justify-between pt-1">
+          <span class="text-xs font-medium text-slate-700 dark:text-slate-300">Görünüm Teması</span>
+          <button id="btn-mobile-theme-toggle" type="button" class="h-11 min-h-[44px] px-3.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2">
+            <i data-lucide="moon" class="w-4 h-4 hidden dark:inline"></i>
+            <i data-lucide="sun" class="w-4 h-4 inline dark:hidden text-amber-500"></i>
+            <span id="mobile-theme-text">Açık Tema</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Data Management Actions -->
+      <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 space-y-2">
+        <div class="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 tracking-wider">Veri Yönetimi</div>
+        
+        <button id="btn-mobile-edit-initial-budget" type="button" class="w-full h-11 min-h-[44px] px-3 text-left rounded-lg bg-white dark:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+          <span class="flex items-center gap-2"><i data-lucide="wallet" class="w-4 h-4 text-[#356B57]"></i> Başlangıç Bütçesini Düzenle</span>
+          <i data-lucide="chevron-right" class="w-4 h-4 text-slate-400"></i>
+        </button>
+
+        <button id="btn-mobile-manage-cashflows" type="button" class="w-full h-11 min-h-[44px] px-3 text-left rounded-lg bg-white dark:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+          <span class="flex items-center gap-2"><i data-lucide="calendar-clock" class="w-4 h-4 text-indigo-500"></i> Planlı Nakit Akışlarını Yönet</span>
+          <i data-lucide="chevron-right" class="w-4 h-4 text-slate-400"></i>
+        </button>
+
+        <div class="grid grid-cols-2 gap-2 pt-1">
+          <button id="btn-mobile-export-json" type="button" class="h-11 min-h-[44px] px-2 rounded-lg bg-white dark:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 flex items-center justify-center gap-1.5">
+            <i data-lucide="download" class="w-3.5 h-3.5 text-emerald-500"></i>
+            <span>Yedek İndir</span>
+          </button>
+          <button id="btn-mobile-open-import" type="button" class="h-11 min-h-[44px] px-2 rounded-lg bg-white dark:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 flex items-center justify-center gap-1.5">
+            <i data-lucide="upload" class="w-3.5 h-3.5 text-[#356B57]"></i>
+            <span>Yedek Yükle</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Danger Zone -->
+      <div class="p-3.5 rounded-xl bg-rose-50/50 dark:bg-rose-950/20 border border-rose-200/60 dark:border-rose-900/40">
+        <button id="btn-mobile-reset-data" type="button" class="w-full h-11 min-h-[44px] px-3 rounded-lg text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-100/60 dark:hover:bg-rose-950/40 transition flex items-center justify-center gap-2">
+          <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+          <span>Verileri Sıfırla / Yeni Başlangıç</span>
+        </button>
+      </div>
+
+      <!-- App Info Footer -->
+      <div class="text-center pt-1 pb-2">
+        <span class="text-[10px] text-slate-400 dark:text-slate-500">Muvazene v1.1.0 • Mobil Sürüm</span>
+      </div>
+
+    </div>
+  </div>
+
   <!-- ================= TRANSACTION MODAL (ADD / EDIT) ================= -->
   <div id="transaction-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title-text" class="hidden fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-slate-900/60 backdrop-blur-xs transition-opacity duration-200">
-    <div class="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-2xl max-w-md w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[100dvh] sm:max-h-[90vh] h-[92dvh] sm:h-auto">
+    <div class="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-2xl max-w-md w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[100dvh] sm:max-h-[90vh] h-[92dvh] sm:h-auto native-bottom-sheet">
       
+      <!-- Top Grab Bar for Mobile Sheet -->
+      <div class="w-10 h-1 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto my-2 sm:hidden shrink-0" aria-hidden="true"></div>
+
       <!-- Sticky Modal Header -->
       <div class="sticky top-0 z-10 bg-white dark:bg-slate-900 p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
         <div class="flex items-center space-x-2.5">
@@ -1353,8 +1676,11 @@
 
   <!-- ================= PLANNED CASHFLOW MANAGER MODAL (FAZ 5.5C) ================= -->
   <div id="cashflow-manager-modal" role="dialog" aria-modal="true" aria-labelledby="cashflow-manager-title" class="hidden fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-slate-900/60 backdrop-blur-xs transition-opacity duration-200">
-    <div class="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-2xl max-w-xl w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[100dvh] sm:max-h-[90vh] h-[92dvh] sm:h-auto">
+    <div class="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-2xl max-w-xl w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[100dvh] sm:max-h-[90vh] h-[92dvh] sm:h-auto native-bottom-sheet">
       
+      <!-- Top Grab Bar for Mobile Sheet -->
+      <div class="w-10 h-1 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto my-2 sm:hidden shrink-0" aria-hidden="true"></div>
+
       <!-- Sticky Modal Header -->
       <div class="sticky top-0 z-10 bg-white dark:bg-slate-900 p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
         <div class="flex items-center space-x-2.5">
@@ -1557,8 +1883,11 @@
 
   <!-- ================= WHAT-IF SCENARIO SIMULATOR MODAL (FAZ 5.6) ================= -->
   <div id="whatif-modal" role="dialog" aria-modal="true" aria-labelledby="whatif-modal-title" class="hidden fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-slate-900/60 backdrop-blur-xs transition-opacity duration-200">
-    <div class="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-2xl max-w-xl w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[100dvh] sm:max-h-[90vh] h-[92dvh] sm:h-auto">
+    <div class="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-2xl max-w-xl w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[100dvh] sm:max-h-[90vh] h-[92dvh] sm:h-auto native-bottom-sheet">
       
+      <!-- Top Grab Bar for Mobile Sheet -->
+      <div class="w-10 h-1 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto my-2 sm:hidden shrink-0" aria-hidden="true"></div>
+
       <!-- Sticky Modal Header -->
       <div class="sticky top-0 z-10 bg-white dark:bg-slate-900 p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
         <div class="flex items-center space-x-2.5">

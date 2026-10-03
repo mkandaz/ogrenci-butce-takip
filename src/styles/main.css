@@ -186,3 +186,111 @@ body {
     min-height: 44px;
   }
 }
+
+/* ==========================================================================
+   FAZ 6.1 — NATIVE MOBILE SHELL & TOUCH ERGONOMICS
+   ========================================================================== */
+
+:root {
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+}
+
+.pt-safe {
+  padding-top: max(env(safe-area-inset-top, 0px), 0.75rem);
+}
+
+.pb-safe {
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 0.5rem);
+}
+
+/* Default web browser mode: hide mobile-specific shell elements */
+#mobile-header {
+  display: none !important;
+}
+
+#mobile-bottom-nav {
+  display: none !important;
+}
+
+#mobile-fab-add {
+  display: none !important;
+}
+
+#mobile-settings-sheet {
+  display: none;
+}
+
+.tab-panel {
+  display: block;
+}
+
+/* Native Mobile Platform Shell (.platform-native) */
+body.platform-native {
+  padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px)) !important;
+  -webkit-touch-callout: none;
+}
+
+body.platform-native #desktop-header {
+  display: none !important;
+}
+
+body.platform-native #mobile-header {
+  display: flex !important;
+  padding-top: max(env(safe-area-inset-top, 0px), 0.5rem);
+}
+
+body.platform-native .tab-panel {
+  display: none !important;
+}
+
+body.platform-native .tab-panel.active {
+  display: block !important;
+}
+
+body.platform-native #mobile-bottom-nav {
+  display: flex !important;
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 0.35rem);
+}
+
+body.platform-native #mobile-fab-add {
+  display: flex !important;
+  bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+/* When a modal is open in native mobile, hide the FAB to prevent overlap */
+body.platform-native.modal-open #mobile-fab-add {
+  display: none !important;
+}
+
+/* Hide marketing/SEO landing and desktop footer on native mobile */
+body.platform-native #app-overview,
+body.platform-native footer {
+  display: none !important;
+}
+
+/* 2x2 grid for hero summary cards on native mobile */
+body.platform-native #summary-cards-section {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 0.625rem !important;
+}
+
+/* Native bottom-sheet styling */
+body.platform-native .native-bottom-sheet {
+  border-top-left-radius: 1.5rem !important;
+  border-top-right-radius: 1.5rem !important;
+  border-bottom-left-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 1.25rem) !important;
+  max-height: 88vh !important;
+}
+
+/* Minimum 44x44pt touch targets on interactive controls */
+body.platform-native button,
+body.platform-native .native-touch-target {
+  min-height: 44px;
+  min-width: 44px;
+}
