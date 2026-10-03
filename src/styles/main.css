@@ -290,7 +290,19 @@ body.platform-native .native-bottom-sheet {
 
 /* Minimum 44x44pt touch targets on interactive controls */
 body.platform-native button,
+body.platform-native select,
+body.platform-native a.native-touch-target,
 body.platform-native .native-touch-target {
   min-height: 44px;
   min-width: 44px;
+}
+
+/* Ensure transaction edit and delete action buttons have >= 44x44 hit areas on native mobile */
+body.platform-native #transactions-container button[data-action="edit"],
+body.platform-native #transactions-container button[data-action="delete"] {
+  min-width: 44px !important;
+  min-height: 44px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
 }

@@ -11879,6 +11879,78 @@ console.log('\n--- 40. FAZ 6.1 — MOBILE UI SHELL & TOUCH ERGONOMICS (TC-401) -
   }
 }
 
+// ====================================================
+// 41. FAZ 6.1.1 — MOBILE TERMINOLOGY & TOUCH TARGET AUDIT (TC-402)
+// ====================================================
+console.log('\n--- 41. FAZ 6.1.1 — MOBILE TERMINOLOGY & TOUCH TARGET AUDIT (TC-402) ---');
+
+// TC-402-1: Mobile Terminology Audit
+{
+  const indexHtml = fs.readFileSync(path.resolve('index.html'), 'utf8');
+  const trContent = fs.readFileSync(path.resolve('src/i18n/tr.js'), 'utf8');
+  const enContent = fs.readFileSync(path.resolve('src/i18n/en.js'), 'utf8');
+
+  // "Günlük Harcama Limiti" must be absent from user-facing copy
+  assert(!indexHtml.includes('Günlük Harcama Limiti'), 'TC-402-1 "Günlük Harcama Limiti" absent from index.html');
+  assert(!trContent.includes('Günlük Harcama Limiti'), 'TC-402-1 "Günlük Harcama Limiti" absent from tr.js');
+  assert(!enContent.includes('Günlük Harcama Limiti'), 'TC-402-1 "Günlük Harcama Limiti" absent from en.js');
+
+  // "Aylık Günlük Harcama" must be present for Hero Card 4
+  assert(trContent.includes("dailyLimit: 'Aylık Günlük Harcama'"), 'TC-402-1 tr.js has cards.dailyLimit: Aylık Günlük Harcama');
+  assert(indexHtml.includes('data-i18n="cards.dailyLimit">Aylık Günlük Harcama<'), 'TC-402-1 index.html has Aylık Günlük Harcama');
+
+  // "Güvenli Günlük Harcama" must remain for Financial Outlook Metric B and What-If
+  assert(trContent.includes("safeDailySpendTitle: 'Güvenli Günlük Harcama'"), 'TC-402-1 tr.js safeDailySpendTitle is Güvenli Günlük Harcama');
+  assert(trContent.includes("safeDailySpend: 'Güvenli Günlük Harcama'"), 'TC-402-1 tr.js whatif safeDailySpend is Güvenli Günlük Harcama');
+  assert(indexHtml.includes('data-i18n="financialOutlook.safeDailySpendTitle">Güvenli Günlük Harcama<'), 'TC-402-1 index.html has Güvenli Günlük Harcama in Financial Outlook');
+  assert(indexHtml.includes('data-i18n="whatif.decision.safeDailySpend">Güvenli Günlük Harcama<'), 'TC-402-1 index.html has Güvenli Günlük Harcama in What-If card');
+
+  // Deterministic insights naming: must be "Finansal İçgörüler"
+  assert(trContent.includes("topInsightsTitle: 'Finansal İçgörüler'"), 'TC-402-1 tr.js topInsightsTitle is Finansal İçgörüler');
+  assert(indexHtml.includes('data-i18n="financialOutlook.topInsightsTitle">Finansal İçgörüler<'), 'TC-402-1 index.html uses Finansal İçgörüler');
+
+  // No AI / Yapay Zeka hype in user-facing UI
+  assert(!indexHtml.includes('Yapay Zeka'), 'TC-402-1 index.html contains no Yapay Zeka');
+  assert(!indexHtml.includes('Artificial Intelligence'), 'TC-402-1 index.html contains no Artificial Intelligence');
+  assert(!/\bAI\b/.test(indexHtml), 'TC-402-1 index.html contains no standalone AI acronym');
+  assert(!trContent.includes('Yapay Zeka'), 'TC-402-1 tr.js contains no Yapay Zeka');
+}
+
+// TC-402-2: Touch Target Audit (Minimum 44x44pt on native mobile)
+{
+  const css = fs.readFileSync(path.resolve('src/styles/main.css'), 'utf8');
+  const indexHtml = fs.readFileSync(path.resolve('index.html'), 'utf8');
+  const uiManagerContent = fs.readFileSync(path.resolve('src/components/UIManager.js'), 'utf8');
+
+  // Transaction row edit/delete controls
+  assert(uiManagerContent.includes('data-action="edit"') && uiManagerContent.includes('min-w-[44px] min-h-[44px]'),
+         'TC-402-2 Transaction edit button has min-w-[44px] min-h-[44px]');
+  assert(uiManagerContent.includes('data-action="delete"') && uiManagerContent.includes('min-w-[44px] min-h-[44px]'),
+         'TC-402-2 Transaction delete button has min-w-[44px] min-h-[44px]');
+  assert(css.includes('#transactions-container button[data-action="edit"]') &&
+         css.includes('min-width: 44px !important;'),
+         'TC-402-2 CSS enforces 44px min-width on transaction edit');
+  assert(css.includes('#transactions-container button[data-action="delete"]') &&
+         css.includes('min-height: 44px !important;'),
+         'TC-402-2 CSS enforces 44px min-height on transaction delete');
+
+  // Mobile month navigator buttons
+  assert(indexHtml.includes('id="mobile-btn-prev-month"') && indexHtml.includes('min-w-[44px] min-h-[44px]'),
+         'TC-402-2 mobile-btn-prev-month has min-w-[44px] min-h-[44px]');
+  assert(indexHtml.includes('id="mobile-btn-next-month"') && indexHtml.includes('min-w-[44px] min-h-[44px]'),
+         'TC-402-2 mobile-btn-next-month has min-w-[44px] min-h-[44px]');
+
+  // Mobile Settings sheet buttons
+  assert(indexHtml.includes('id="btn-close-mobile-settings"') && indexHtml.includes('min-w-[44px] min-h-[44px]'),
+         'TC-402-2 btn-close-mobile-settings has min-w-[44px] min-h-[44px]');
+  assert(indexHtml.includes('id="btn-mobile-open-auth"') && indexHtml.includes('min-h-[44px]'),
+         'TC-402-2 btn-mobile-open-auth has min-h-[44px]');
+  assert(indexHtml.includes('id="btn-mobile-sync-now"') && indexHtml.includes('min-h-[44px]'),
+         'TC-402-2 btn-mobile-sync-now has min-h-[44px]');
+  assert(indexHtml.includes('id="btn-mobile-sign-out"') && indexHtml.includes('min-h-[44px]'),
+         'TC-402-2 btn-mobile-sign-out has min-h-[44px]');
+}
+
 console.log('\n====================================================');
 console.log(`🏁 ENTEGRE TEST SONUCU: ${passed} PASSED, ${failed} FAILED`);
 console.log('====================================================');

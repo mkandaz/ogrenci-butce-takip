@@ -226,19 +226,19 @@
 
     <!-- Center: Compact Month Navigator (Min 44x44pt touch targets) -->
     <div id="mobile-month-navigator" class="flex items-center bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-0.5 shrink-0">
-      <button id="mobile-btn-prev-month" type="button" title="Önceki Ay" aria-label="Önceki Ay" class="w-10 h-10 min-w-[40px] min-h-[40px] rounded-lg text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 active:scale-95 transition flex items-center justify-center">
+      <button id="mobile-btn-prev-month" type="button" title="Önceki Ay" aria-label="Önceki Ay" class="w-11 h-11 min-w-[44px] min-h-[44px] rounded-lg text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 active:scale-95 transition flex items-center justify-center">
         <i data-lucide="chevron-left" class="w-4 h-4"></i>
       </button>
       
       <div class="relative flex items-center">
-        <button id="mobile-btn-month-display" type="button" class="flex items-center space-x-1.5 px-2 py-1.5 rounded-lg text-xs font-bold text-slate-800 dark:text-slate-200 hover:bg-white/80 dark:hover:bg-slate-700/80 transition" title="Ay Değiştir">
+        <button id="mobile-btn-month-display" type="button" class="flex items-center space-x-1.5 px-2.5 py-2 min-h-[44px] rounded-lg text-xs font-bold text-slate-800 dark:text-slate-200 hover:bg-white/80 dark:hover:bg-slate-700/80 transition" title="Ay Değiştir">
           <i data-lucide="calendar" class="w-3.5 h-3.5 text-[#356B57] dark:text-[#44856D]"></i>
           <span id="mobile-header-date-text">Eylül 2026</span>
         </button>
         <input type="month" id="mobile-header-month-picker" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full" title="Tarih seç" />
       </div>
 
-      <button id="mobile-btn-next-month" type="button" title="Sonraki Ay" aria-label="Sonraki Ay" class="w-10 h-10 min-w-[40px] min-h-[40px] rounded-lg text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 active:scale-95 transition flex items-center justify-center">
+      <button id="mobile-btn-next-month" type="button" title="Sonraki Ay" aria-label="Sonraki Ay" class="w-11 h-11 min-w-[44px] min-h-[44px] rounded-lg text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 active:scale-95 transition flex items-center justify-center">
         <i data-lucide="chevron-right" class="w-4 h-4"></i>
       </button>
     </div>
@@ -569,7 +569,7 @@
             <i data-lucide="zap" class="w-4 h-4 text-amber-500"></i>
             <span data-i18n="presets.title">Hızlı Harcamalar:</span>
           </div>
-          <button id="btn-edit-presets" type="button" title="Preset Tutarlarını Düzenle" aria-label="Hızlı Harcama Tutarlarını Düzenle" class="min-h-[36px] px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-[11px] font-semibold transition flex items-center space-x-1.5 border border-slate-200 dark:border-slate-700">
+          <button id="btn-edit-presets" type="button" title="Preset Tutarlarını Düzenle" aria-label="Hızlı Harcama Tutarlarını Düzenle" class="min-h-[44px] px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-semibold transition flex items-center space-x-1.5 border border-slate-200 dark:border-slate-700 active:scale-95">
             <i data-lucide="sliders-horizontal" class="w-3.5 h-3.5 text-indigo-500"></i>
             <span data-i18n="presets.editAmounts">Tutarları Düzenle</span>
           </button>
@@ -632,11 +632,11 @@
       </section>
 
       <!-- Analysis Insights Panel (Mobile Analiz Tab) -->
-      <section id="mobile-analysis-insights-card" class="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3" aria-label="Finansal Analiz ve İçgörüler">
+      <section id="mobile-analysis-insights-card" class="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3" aria-label="Finansal İçgörüler">
         <div class="flex items-center justify-between border-b border-slate-200/60 dark:border-slate-700/60 pb-2">
           <h3 class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white flex items-center space-x-2">
             <i data-lucide="sparkles" class="w-4 h-4 text-amber-500"></i>
-            <span data-i18n="financialOutlook.topInsightsTitle">Finansal İçgörüler ve Analiz</span>
+            <span data-i18n="financialOutlook.topInsightsTitle">Finansal İçgörüler</span>
           </h3>
           <span class="text-[11px] font-semibold text-slate-400">Öne Çıkanlar</span>
         </div>
@@ -770,7 +770,7 @@
             <div class="sm:col-span-6 relative">
               <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
               <input type="text" id="tx-search-input" placeholder="İşlem adı veya not ara..." class="w-full pl-9 pr-10 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition" />
-              <button id="tx-search-clear" type="button" aria-label="Aramayı Temizle" class="hidden absolute right-1 top-1/2 -translate-y-1/2 min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+              <button id="tx-search-clear" type="button" aria-label="Aramayı Temizle" class="hidden absolute right-1 top-1/2 -translate-y-1/2 min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
                 <i data-lucide="x" class="w-3.5 h-3.5"></i>
               </button>
             </div>
@@ -1049,7 +1049,7 @@
             <p class="text-[11px] text-slate-500 dark:text-slate-400">Hesap, para birimi, dil ve veri yönetimi</p>
           </div>
         </div>
-        <button id="btn-close-mobile-settings" type="button" aria-label="Kapat" class="w-10 h-10 min-w-[40px] min-h-[40px] rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+        <button id="btn-close-mobile-settings" type="button" aria-label="Kapat" class="w-11 h-11 min-w-[44px] min-h-[44px] rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition">
           <i data-lucide="x" class="w-5 h-5"></i>
         </button>
       </div>
@@ -1069,7 +1069,7 @@
               <div class="text-[10px] text-slate-500 dark:text-slate-400">Veriler yalnızca bu cihazda saklanır</div>
             </div>
           </div>
-          <button id="btn-mobile-open-auth" type="button" class="h-9 px-3 min-h-[36px] rounded-lg bg-[#356B57] text-white text-xs font-semibold hover:bg-[#2B5948] transition shrink-0">
+          <button id="btn-mobile-open-auth" type="button" class="h-11 px-4 min-h-[44px] rounded-lg bg-[#356B57] text-white text-xs font-semibold hover:bg-[#2B5948] transition shrink-0 flex items-center justify-center">
             Google ile Giriş
           </button>
         </div>
@@ -1089,12 +1089,12 @@
                 <div id="mobile-user-email" class="text-[11px] text-slate-500 dark:text-slate-400 truncate"></div>
               </div>
             </div>
-            <button id="btn-mobile-sync-now" type="button" class="h-9 px-3 min-h-[36px] rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-medium hover:bg-slate-200 transition shrink-0 flex items-center gap-1.5">
+            <button id="btn-mobile-sync-now" type="button" class="h-11 px-3.5 min-h-[44px] rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-medium hover:bg-slate-200 transition shrink-0 flex items-center gap-1.5 justify-center">
               <i data-lucide="refresh-cw" class="w-3.5 h-3.5 text-[#356B57]"></i>
               <span>Eşitle</span>
             </button>
           </div>
-          <button id="btn-mobile-sign-out" type="button" class="w-full h-9 min-h-[36px] rounded-lg text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition flex items-center justify-center gap-1.5">
+          <button id="btn-mobile-sign-out" type="button" class="w-full h-11 min-h-[44px] rounded-lg text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition flex items-center justify-center gap-1.5">
             <i data-lucide="log-out" class="w-3.5 h-3.5"></i>
             <span>Hesaptan Çıkış Yap</span>
           </button>

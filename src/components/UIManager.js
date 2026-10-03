@@ -1392,10 +1392,10 @@ export class UIManager {
           ${isIncome ? '+' : '-'}${formatCurrency(tx.amount, currency, lang)}
         </span>
         <div class="flex items-center space-x-1">
-          <button type="button" data-action="edit" title="${t('history.edit')}" class="min-w-[36px] min-h-[36px] p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-slate-800 transition flex items-center justify-center">
+          <button type="button" data-action="edit" title="${t('history.edit')}" class="w-11 h-11 min-w-[44px] min-h-[44px] p-2 rounded-xl text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-slate-800 transition flex items-center justify-center active:scale-95">
             <i data-lucide="edit-3" class="w-4 h-4"></i>
           </button>
-          <button type="button" data-action="delete" title="${t('history.delete')}" class="min-w-[36px] min-h-[36px] p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-slate-800 transition flex items-center justify-center">
+          <button type="button" data-action="delete" title="${t('history.delete')}" class="w-11 h-11 min-w-[44px] min-h-[44px] p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-slate-800 transition flex items-center justify-center active:scale-95">
             <i data-lucide="trash-2" class="w-4 h-4"></i>
           </button>
         </div>
