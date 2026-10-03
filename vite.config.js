@@ -1,6 +1,23 @@
+import fs from 'fs';
 import { resolve } from 'path';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
+
+function multiPageCleanUrlsPlugin() {
+  return {
+    name: 'multi-page-clean-urls',
+    closeBundle() {
+      const pages = ['hakkinda', 'nasil-calisir', 'gizlilik'];
+      pages.forEach(p => {
+        const nested = resolve(__dirname, `dist/${p}/index.html`);
+        const flat = resolve(__dirname, `dist/${p}.html`);
+        if (fs.existsSync(nested)) {
+          fs.copyFileSync(nested, flat);
+        }
+      });
+    }
+  };
+}
 
 export default defineConfig({
   build: {
@@ -14,6 +31,7 @@ export default defineConfig({
     }
   },
   plugins: [
+    multiPageCleanUrlsPlugin(),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'favicon-32x32.png', 'apple-touch-icon.png', 'icons/*.png', 'brand/*.svg', 'og-image.png'],
@@ -54,6 +72,8 @@ export default defineConfig({
         ]
       },
       workbox: {
+        navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/^\/(hakkinda|nasil-calisir|gizlilik)($|\/)/],
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
         runtimeCaching: [
           {

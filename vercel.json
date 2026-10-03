@@ -13,10 +13,6 @@
     {
       "source": "/gizlilik",
       "destination": "/gizlilik/index.html"
-    },
-    {
-      "source": "/((?!assets/|icons/|brand/|.*\\..*).*)",
-      "destination": "/index.html"
     }
   ]
 }

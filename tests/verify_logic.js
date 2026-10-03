@@ -11188,12 +11188,29 @@ console.log('\n--- 36. FAZ 5.8 — WEB FREEZE, BRAND ASSETS & PUBLIC PAGES QA (T
   assert(viteConfigContent.includes('hakkinda: resolve(__dirname, \'hakkinda/index.html\')'), 'TC-397-H Vite config includes hakkinda entry');
   assert(viteConfigContent.includes('nasilCalisir: resolve(__dirname, \'nasil-calisir/index.html\')'), 'TC-397-H Vite config includes nasilCalisir entry');
   assert(viteConfigContent.includes('gizlilik: resolve(__dirname, \'gizlilik/index.html\')'), 'TC-397-H Vite config includes gizlilik entry');
+  assert(viteConfigContent.includes('multiPageCleanUrlsPlugin'), 'TC-397-H Vite config includes multiPageCleanUrlsPlugin');
+  assert(viteConfigContent.includes('navigateFallbackDenylist'), 'TC-397-H Vite config includes navigateFallbackDenylist');
 
   const vercelJsonPath = path.resolve(process.cwd(), 'vercel.json');
   assert(fs.existsSync(vercelJsonPath), 'TC-397-H vercel.json exists');
   const vercelJson = JSON.parse(fs.readFileSync(vercelJsonPath, 'utf-8'));
   assert(vercelJson.cleanUrls === true, 'TC-397-H vercel.json enables cleanUrls');
   assert(Array.isArray(vercelJson.rewrites) && vercelJson.rewrites.length >= 3, 'TC-397-H vercel.json configures rewrites for public pages');
+  const hasCatchAll = vercelJson.rewrites.some(r => r.destination === '/index.html' && r.source.includes('?!'));
+  assert(!hasCatchAll, 'TC-397-H vercel.json does not contain catch-all rewrite intercepting public routes');
+
+  // Verify flat HTML generation in dist
+  const distDir = path.resolve(process.cwd(), 'dist');
+  if (fs.existsSync(distDir)) {
+    assert(fs.existsSync(path.resolve(distDir, 'hakkinda.html')), 'TC-397-H dist/hakkinda.html exists');
+    assert(fs.existsSync(path.resolve(distDir, 'nasil-calisir.html')), 'TC-397-H dist/nasil-calisir.html exists');
+    assert(fs.existsSync(path.resolve(distDir, 'gizlilik.html')), 'TC-397-H dist/gizlilik.html exists');
+    const swPath = path.resolve(distDir, 'sw.js');
+    if (fs.existsSync(swPath)) {
+      const swContent = fs.readFileSync(swPath, 'utf-8');
+      assert(swContent.includes('hakkinda') && swContent.includes('nasil-calisir') && swContent.includes('gizlilik'), 'TC-397-H sw.js denylist contains public routes');
+    }
+  }
 
   // I. Landing Page Core Flow & Entry CTAs
   assert(indexHtml.includes('Muvazene Karar Döngüsü'), 'TC-397-I Core decision flow title present');
