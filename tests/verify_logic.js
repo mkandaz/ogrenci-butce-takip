@@ -11352,6 +11352,145 @@ console.log('\n--- 37. FAZ 5.8.1 — FINAL PRE-FREEZE UX & PRIVACY COPY QA (TC-3
   assert(viteConfig.includes('multiPageCleanUrlsPlugin'), 'TC-398-I multiPageCleanUrlsPlugin is active');
 }
 
+// --- 38. FAZ 5.8.2 — FINAL AUTH-AWARE LANDING & TERMINOLOGY QA (TC-399) ---
+console.log('\n--- 38. FAZ 5.8.2 — FINAL AUTH-AWARE LANDING & TERMINOLOGY QA (TC-399) ---');
+{
+  const indexHtml = fs.readFileSync(path.resolve(process.cwd(), 'index.html'), 'utf-8');
+  const nasilCalisirHtml = fs.readFileSync(path.resolve(process.cwd(), 'nasil-calisir/index.html'), 'utf-8');
+  const hakkindaHtml = fs.readFileSync(path.resolve(process.cwd(), 'hakkinda/index.html'), 'utf-8');
+  const gizlilikHtml = fs.readFileSync(path.resolve(process.cwd(), 'gizlilik/index.html'), 'utf-8');
+
+  // A. Terminology: "Güvenli Günlük Limit" must be completely absent from public copy
+  assert(!nasilCalisirHtml.includes('Güvenli Günlük Limit'), 'TC-399-A "Güvenli Günlük Limit" absent from nasil-calisir/index.html');
+  assert(!hakkindaHtml.includes('Güvenli Günlük Limit'), 'TC-399-A "Güvenli Günlük Limit" absent from hakkinda/index.html');
+  assert(!gizlilikHtml.includes('Güvenli Günlük Limit'), 'TC-399-A "Güvenli Günlük Limit" absent from gizlilik/index.html');
+  assert(!indexHtml.includes('Güvenli Günlük Limit'), 'TC-399-A "Güvenli Günlük Limit" absent from index.html');
+
+  // B. Terminology: "Güvenli Günlük Harcama" present consistently
+  assert(nasilCalisirHtml.includes('<strong>Güvenli Günlük Harcama</strong>'), 'TC-399-B "Güvenli Günlük Harcama" present in nasil-calisir step 4');
+  assert(nasilCalisirHtml.includes('Card B: Güvenli Günlük Harcama') || nasilCalisirHtml.includes('>Güvenli Günlük Harcama<'), 'TC-399-B "Güvenli Günlük Harcama" present in comparison cards');
+  assert(indexHtml.includes('data-i18n="whatif.decision.safeDailySpend">Güvenli Günlük Harcama<'), 'TC-399-B "Güvenli Günlük Harcama" present in index.html What-If decision card');
+
+  // C. Public info pages CTA "Uygulamayı Aç" linking to /
+  [
+    { name: 'hakkinda', html: hakkindaHtml },
+    { name: 'nasil-calisir', html: nasilCalisirHtml },
+    { name: 'gizlilik', html: gizlilikHtml }
+  ].forEach(({ name, html }) => {
+    assert(html.includes('Uygulamayı Aç'), `TC-399-C ${name} includes "Uygulamayı Aç" CTA`);
+    assert(html.includes('href="/"'), `TC-399-C ${name} CTA links to "/"`);
+  });
+
+  // D. Auth-aware landing CTA DOM simulation
+  assert(indexHtml.includes('id="landing-onboarding-cta"'), 'TC-399-D #landing-onboarding-cta ID exists in index.html');
+
+  const createMockEl = (id) => {
+    const classes = new Set();
+    return {
+      id,
+      textContent: '',
+      title: '',
+      src: '',
+      classList: {
+        add: (...cls) => cls.forEach(c => classes.add(c)),
+        remove: (...cls) => cls.forEach(c => classes.delete(c)),
+        contains: (c) => classes.has(c)
+      },
+      setAttribute() {},
+      removeAttribute() {},
+      getAttribute() { return null; },
+      addEventListener() {},
+      removeEventListener() {}
+    };
+  };
+
+  const mockElements = {
+    'landing-onboarding-cta': createMockEl('landing-onboarding-cta'),
+    'btn-open-auth': createMockEl('btn-open-auth'),
+    'user-auth-badge': createMockEl('user-auth-badge'),
+    'header-auth-label': createMockEl('header-auth-label'),
+    'header-auth-sub': createMockEl('header-auth-sub'),
+    'sync-status-indicator': createMockEl('sync-status-indicator'),
+    'sync-status-text': createMockEl('sync-status-text'),
+    'footer-privacy-text': createMockEl('footer-privacy-text'),
+    'user-email-text': createMockEl('user-email-text'),
+    'user-avatar-img': createMockEl('user-avatar-img'),
+    'btn-sign-out': createMockEl('btn-sign-out')
+  };
+  mockElements['btn-open-auth'].classList.add('hidden');
+  mockElements['user-auth-badge'].classList.add('hidden');
+
+  const origDoc = globalThis.document;
+  globalThis.document = {
+    documentElement: { classList: { add() {}, remove() {}, contains() { return false; } } },
+    body: { classList: { add() {}, remove() {}, contains() { return false; } } },
+    getElementById: (id) => mockElements[id] || null,
+    querySelectorAll: () => [],
+    addEventListener: () => {},
+    removeEventListener() {}
+  };
+
+  const store = new BudgetStore();
+  assert(store.state.onboarded === false, 'TC-399-E Fresh store starts with onboarded=false');
+
+  let authUser = null;
+  const mockAuthService = {
+    isAuthenticated: () => Boolean(authUser),
+    getUser: () => authUser,
+    onAuthStateChange: (cb) => {
+      mockAuthService._cb = cb;
+      return () => {};
+    }
+  };
+
+  const ui = new UIManager(store, { authService: mockAuthService });
+
+  // 1. Fresh unresolved visitor:
+  // - onboarding CTA section visible
+  // - header account badge hidden
+  // - user auth badge hidden
+  ui.render();
+  ui.renderAuthBadge();
+  assert(mockElements['landing-onboarding-cta'].classList.contains('hidden') === false, 'TC-399-F Fresh visitor: onboarding CTA section is VISIBLE');
+  assert(mockElements['btn-open-auth'].classList.contains('hidden') === true, 'TC-399-F Fresh visitor: btn-open-auth is HIDDEN');
+  assert(mockElements['user-auth-badge'].classList.contains('hidden') === true, 'TC-399-F Fresh visitor: user-auth-badge is HIDDEN');
+
+  // 2. Explicit guest/local user:
+  // - onboarding CTA section hidden
+  // - header account badge visible ("Yerel kullanım", "Bu cihazda")
+  // - user auth badge hidden
+  store.state.onboarded = true;
+  store.notify();
+  assert(mockElements['landing-onboarding-cta'].classList.contains('hidden') === true, 'TC-399-G Explicit guest: onboarding CTA section is HIDDEN');
+  assert(mockElements['btn-open-auth'].classList.contains('hidden') === false, 'TC-399-G Explicit guest: btn-open-auth is VISIBLE');
+  assert(mockElements['header-auth-label'].textContent === tr.auth.accountGuestPrimary, 'TC-399-G Explicit guest: header renders "Yerel kullanım"');
+  assert(mockElements['header-auth-sub'].textContent === tr.auth.accountGuestSecondary, 'TC-399-G Explicit guest: header renders "Bu cihazda"');
+  assert(mockElements['user-auth-badge'].classList.contains('hidden') === true, 'TC-399-G Explicit guest: user-auth-badge is HIDDEN');
+
+  // 3. Authenticated/cloud user:
+  // - onboarding CTA section hidden
+  // - header account badge hidden
+  // - user auth badge visible with email and cloud sync status
+  authUser = { email: 'pilot@muvazene.app', user_metadata: { picture: 'https://example.com/avatar.png' } };
+  ui.renderAuthBadge(authUser);
+  assert(mockElements['landing-onboarding-cta'].classList.contains('hidden') === true, 'TC-399-H Authenticated: onboarding CTA section is HIDDEN');
+  assert(mockElements['btn-open-auth'].classList.contains('hidden') === true, 'TC-399-H Authenticated: btn-open-auth is HIDDEN');
+  assert(mockElements['user-auth-badge'].classList.contains('hidden') === false, 'TC-399-H Authenticated: user-auth-badge is VISIBLE');
+  assert(mockElements['user-email-text'].textContent === 'pilot@muvazene.app', 'TC-399-H Authenticated: renders user email');
+  assert(mockElements['header-auth-sub'].textContent === tr.auth.statusSynced, 'TC-399-H Authenticated: header renders "Bulut Eşitlendi"');
+
+  // 4. Reset & restart onboarding:
+  // - transitions back to fresh visitor state
+  authUser = null;
+  store.state.onboarded = false;
+  store.notify();
+  assert(mockElements['landing-onboarding-cta'].classList.contains('hidden') === false, 'TC-399-I Reset: onboarding CTA section is VISIBLE again');
+  assert(mockElements['btn-open-auth'].classList.contains('hidden') === true, 'TC-399-I Reset: btn-open-auth is HIDDEN again');
+  assert(mockElements['user-auth-badge'].classList.contains('hidden') === true, 'TC-399-I Reset: user-auth-badge is HIDDEN again');
+
+  globalThis.document = origDoc;
+}
+
 console.log('\n====================================================');
 console.log(`🏁 ENTEGRE TEST SONUCU: ${passed} PASSED, ${failed} FAILED`);
 console.log('====================================================');

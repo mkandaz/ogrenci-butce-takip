@@ -156,6 +156,7 @@ export class UIManager {
 
       this.store.subscribe(() => {
         this.render();
+        this.renderAuthBadge(this.getCurrentUser());
       });
 
       onLanguageChange(() => {
@@ -246,6 +247,7 @@ export class UIManager {
     this.userAvatarImg = document.getElementById('user-avatar-img');
     this.btnSignOut = document.getElementById('btn-sign-out');
     this.btnManualSync = document.getElementById('btn-manual-sync');
+    this.landingOnboardingCta = document.getElementById('landing-onboarding-cta');
 
     // Language & Currency Selector (Header'a eklenecek)
     this.currencySelect = document.getElementById('currency-select');
@@ -662,6 +664,7 @@ export class UIManager {
     this.renderCharts(transactions, summary, currency, lang);
     this.updateCurrencySymbols(currency);
     this.updateStaticTranslations();
+    this.renderLandingOnboardingCta();
     this.refreshIcons();
   }
 
@@ -1311,7 +1314,10 @@ export class UIManager {
   }
 
   getCurrentUser() {
-    return this.currentUser || (this.authService && typeof this.authService.getUser === 'function' ? this.authService.getUser() : null);
+    if (this.authService && typeof this.authService.getUser === 'function') {
+      return this.authService.getUser();
+    }
+    return this.currentUser || null;
   }
 
   isCloudSyncActive() {
@@ -1359,7 +1365,11 @@ export class UIManager {
 
   renderAuthBadge(user) {
     if (typeof document === 'undefined') return;
-    this.currentUser = user || (this.authService && typeof this.authService.getUser === 'function' ? this.authService.getUser() : null);
+    if (user !== undefined) {
+      this.currentUser = user;
+    } else if (this.authService && typeof this.authService.getUser === 'function') {
+      this.currentUser = this.authService.getUser();
+    }
     const headerAuthLabel = (typeof document !== 'undefined' && typeof document.getElementById === 'function')
       ? document.getElementById('header-auth-label')
       : null;
@@ -1419,7 +1429,27 @@ export class UIManager {
     if (typeof this.updateFooterPrivacyText === 'function') {
       this.updateFooterPrivacyText();
     }
+    if (typeof this.renderLandingOnboardingCta === 'function') {
+      this.renderLandingOnboardingCta();
+    }
     this.refreshIcons();
+  }
+
+  renderLandingOnboardingCta() {
+    if (typeof document === 'undefined') return;
+    const landingCta = this.landingOnboardingCta || (typeof document.getElementById === 'function' ? document.getElementById('landing-onboarding-cta') : null);
+    if (!landingCta) return;
+
+    const user = this.getCurrentUser();
+    const isOnboarded = Boolean(this.store?.state?.onboarded);
+
+    // Fresh unresolved visitor: show onboarding choice section
+    // Explicit guest or Authenticated/cloud user: hide the onboarding choice section
+    if (user || isOnboarded) {
+      landingCta.classList.add('hidden');
+    } else {
+      landingCta.classList.remove('hidden');
+    }
   }
 
   renderSyncStatus(status, message = null) {

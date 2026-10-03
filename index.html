@@ -765,7 +765,7 @@
       </div>
 
       <!-- Visitor Entry CTAs (Consistent Hierarchy: Google Primary, Guest Secondary) -->
-      <div class="mt-6 p-4 sm:p-5 bg-white dark:bg-[#171D19] rounded-2xl border border-[#DDDCD5] dark:border-[#27332B] max-w-2xl mx-auto space-y-4">
+      <div id="landing-onboarding-cta" class="mt-6 p-4 sm:p-5 bg-white dark:bg-[#171D19] rounded-2xl border border-[#DDDCD5] dark:border-[#27332B] max-w-2xl mx-auto space-y-4">
         <div class="text-center space-y-1">
           <h3 class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">Muvazene'ye Başlayın</h3>
           <p class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 leading-normal">
@@ -810,6 +810,30 @@
           </div>
         </div>
       </div>
+      <!-- Pre-hydration check: hide visitor onboarding CTA if user is returning guest or authenticated -->
+      <script>
+        (function() {
+          try {
+            var raw = localStorage.getItem('student_budget_data_v1');
+            if (raw) {
+              var p = JSON.parse(raw);
+              if (p && (p.onboarded || (Array.isArray(p.transactions) && p.transactions.length > 0))) {
+                var el = document.getElementById('landing-onboarding-cta');
+                if (el) el.classList.add('hidden');
+                return;
+              }
+            }
+            for (var i = 0; i < localStorage.length; i++) {
+              var k = localStorage.key(i);
+              if (k && k.indexOf('sb-') === 0 && k.indexOf('-auth-token') !== -1) {
+                var el2 = document.getElementById('landing-onboarding-cta');
+                if (el2) el2.classList.add('hidden');
+                break;
+              }
+            }
+          } catch(e) {}
+        })();
+      </script>
     </section>
 
   </main>
@@ -1705,7 +1729,7 @@
             <!-- Priority Cashflow Decision Metrics (3 cards grid) -->
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               
-              <!-- Metric 1: Güvenli Günlük Limit -->
+              <!-- Metric 1: Güvenli Günlük Harcama -->
               <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/70 flex flex-col justify-between min-w-0">
                 <span class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block truncate" data-i18n="whatif.decision.safeDailySpend">Güvenli Günlük Harcama</span>
                 <div class="mt-1.5 flex items-baseline flex-wrap gap-x-1.5 gap-y-0.5 text-xs min-w-0">
