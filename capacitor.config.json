@@ -1,5 +1,16 @@
 {
   "appId": "com.mkandaz.ogrencibutce.dev",
   "appName": "Muvazene",
-  "webDir": "dist"
+  "webDir": "dist",
+  "plugins": {
+    "Keyboard": {
+      "resize": "body",
+      "style": "dark",
+      "resizeOnFullScreen": true
+    },
+    "StatusBar": {
+      "overlaysWebView": true,
+      "style": "DARK"
+    }
+  }
 }

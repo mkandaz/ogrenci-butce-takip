@@ -229,7 +229,7 @@ body {
 
 /* Native Mobile Platform Shell (.platform-native) */
 body.platform-native {
-  padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px)) !important;
+  padding-bottom: calc(9rem + env(safe-area-inset-bottom, 0px)) !important;
   -webkit-touch-callout: none;
 }
 
@@ -285,7 +285,9 @@ body.platform-native .native-bottom-sheet {
   border-bottom-left-radius: 0 !important;
   border-bottom-right-radius: 0 !important;
   padding-bottom: max(env(safe-area-inset-bottom, 0px), 1.25rem) !important;
-  max-height: 88vh !important;
+  max-height: calc(100% - env(safe-area-inset-top, 0px) - 20px) !important;
+  height: auto !important;
+  width: 100% !important;
 }
 
 /* Minimum 44x44pt touch targets on interactive controls */
@@ -305,4 +307,15 @@ body.platform-native #transactions-container button[data-action="delete"] {
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
+}
+
+/* Fix native mobile touch outlines and highlights */
+body.platform-native * {
+  -webkit-tap-highlight-color: transparent !important;
+  outline: none !important;
+}
+
+body.platform-native .chart-container {
+  min-height: 200px !important;
+  max-height: 240px !important;
 }

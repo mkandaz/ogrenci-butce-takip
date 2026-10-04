@@ -16,6 +16,12 @@ export default {
     currency: 'Currency',
     language: 'Language'
   },
+  mobileNav: {
+    summary: 'Summary',
+    analysis: 'Analysis',
+    scenarios: 'Scenarios',
+    transactions: 'Transactions'
+  },
   menu: {
     dataManagement: 'Data Management',
     exportJson: 'Export Backup (JSON Export)',

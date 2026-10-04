@@ -16,6 +16,12 @@ export default {
     currency: 'Para Birimi',
     language: 'Dil / Language'
   },
+  mobileNav: {
+    summary: 'Özet',
+    analysis: 'Analiz',
+    scenarios: 'Senaryolar',
+    transactions: 'İşlemler'
+  },
   menu: {
     dataManagement: 'Veri Yönetimi',
     exportJson: 'Yedek İndir (JSON Export)',
