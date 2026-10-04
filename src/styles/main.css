@@ -320,3 +320,52 @@ body.platform-native .chart-container {
   max-height: 240px !important;
 }
 
+
+/* Native Mobile overrides for Summary Cards */
+body.platform-native #summary-cards-section {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 0.625rem !important; /* 10px / gap-2.5 */
+}
+@media (min-width: 1024px) {
+  body.platform-native #summary-cards-section {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 1rem !important; /* 16px / gap-4 */
+  }
+}
+body.platform-native #summary-cards-section .transition-card {
+  padding: 0.625rem !important; /* p-2.5 */
+}
+@media (min-width: 640px) {
+  body.platform-native #summary-cards-section .transition-card {
+    padding: 1.25rem !important; /* p-5 */
+  }
+}
+
+/* Native Shell Card Density Fixes */
+body.platform-native #summary-cards-section .transition-card > div > div:first-child {
+  flex-wrap: wrap;
+  gap: 0.25rem !important;
+}
+body.platform-native #summary-cards-section .transition-card > div > div:first-child > span:first-child {
+  font-size: 10px !important;
+}
+body.platform-native #summary-cards-section .transition-card > div > div:first-child > div {
+  width: 1.25rem !important; /* w-5 */
+  height: 1.25rem !important; /* h-5 */
+}
+body.platform-native #summary-cards-section .transition-card > div > div.mt-2 {
+  margin-top: 0.25rem !important; /* mt-1 */
+}
+
+@media (min-width: 640px) {
+  body.platform-native #summary-cards-section .transition-card > div > div:first-child > span:first-child {
+    font-size: 12px !important; /* sm:text-xs */
+  }
+  body.platform-native #summary-cards-section .transition-card > div > div:first-child > div {
+    width: 2rem !important; /* sm:w-8 */
+    height: 2rem !important; /* sm:h-8 */
+  }
+  body.platform-native #summary-cards-section .transition-card > div > div.mt-2 {
+    margin-top: 0.5rem !important; /* sm:mt-2 */
+  }
+}

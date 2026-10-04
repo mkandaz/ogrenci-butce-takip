@@ -9338,7 +9338,7 @@ console.log('\n--- 28. FAZ 5.5C — STUDENT FINANCIAL COMMAND CENTER UI (TC-366 
   assert(indexHtml.includes('data-i18n="financialOutlook.safeDailySpendSub"'), 'TC-388 safeDailySpendSub data-i18n tag exists');
 
   // 3. Hero summary grid restored to 4-column responsive layout (FAZ 5.7.4)
-  assert(indexHtml.includes('grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4'), 'TC-388 Hero summary grid uses responsive 4-column layout (sm:grid-cols-2 lg:grid-cols-4)');
+  assert(indexHtml.includes('grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4'), 'TC-388 Hero summary grid uses responsive 4-column layout (sm:grid-cols-2 lg:grid-cols-4)');
   assert(indexHtml.includes('id="metric-net-balance"'), 'TC-388 Hero card 1 (Net Balance) exists');
   assert(indexHtml.includes('id="metric-total-income"'), 'TC-388 Hero card 2 (Total Income) exists');
   assert(indexHtml.includes('id="metric-total-expense"'), 'TC-388 Hero card 3 (Total Expense) exists');
@@ -11030,7 +11030,7 @@ console.log('\n--- 35. FAZ 5.7.4 — RESTORE MONTHLY DAILY SPENDING SUMMARY CARD
   setLanguage('tr');
 
   // I. Desktop 4-column layout & DOM semantics
-  assert(indexHtml.includes('grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4'), 'TC-396-I Responsive 4-column layout class present');
+  assert(indexHtml.includes('grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4'), 'TC-396-I Responsive 4-column layout class present');
   assert(indexHtml.includes('id="metric-monthly-daily-spending"'), 'TC-396-I metric-monthly-daily-spending ID present');
   assert(indexHtml.includes('id="badge-monthly-days-left"'), 'TC-396-I badge-monthly-days-left ID present');
   assert(indexHtml.includes('id="metric-monthly-daily-sub"'), 'TC-396-I metric-monthly-daily-sub ID present');
