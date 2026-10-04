@@ -10,7 +10,7 @@
     },
     "StatusBar": {
       "overlaysWebView": true,
-      "style": "DARK"
+      "style": "DEFAULT"
     }
   }
 }
